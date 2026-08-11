@@ -9,7 +9,7 @@ import { createAgentSession, SessionManager } from '@earendil-works/pi-coding-ag
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isDev = process.argv.includes('--dev');
-const RENDERER_DEV_URL = 'http://localhost:5173';
+const RENDERER_DEV_URL = 'http://127.0.0.1:5173';
 
 // 初始会话工作目录（项目选择 UI 落地前先用独立工作区，避免 agent 直接操作主目录）
 const WORKSPACE_DIR = path.join('D:', 'zion-workspace');
@@ -24,7 +24,7 @@ function createWindow() {
     backgroundColor: '#000000',
     autoHideMenuBar: true,
     webPreferences: {
-      preload: path.join(__dirname, '../preload/preload.mjs'),
+      preload: path.join(__dirname, '../preload/preload.cjs'),
       contextIsolation: true, // 安全基线：渲染进程不碰 Node/凭据
       nodeIntegration: false,
       sandbox: true,
@@ -32,6 +32,13 @@ function createWindow() {
   });
   if (isDev) win.loadURL(RENDERER_DEV_URL);
   else win.loadFile(path.join(__dirname, '../../dist-renderer/index.html'));
+
+  // 渲染层加载完成后自检（便于 CDP/日志确认桥已注入）
+  win.webContents.on('did-finish-load', () => {
+    win.webContents.executeJavaScript('Boolean(window.zion)').then((ok) => {
+      console.log('[zion] preload bridge injected:', ok);
+    }).catch(() => {});
+  });
 }
 
 // 惰性初始化 agent 会话：首次 prompt 时建，带超时保护（ModelRuntime 目录刷新可能慢）
@@ -62,6 +69,7 @@ function sendEvent(event) {
 ipcMain.handle('zion:ping', () => ({ ok: true, pid: process.pid }));
 
 ipcMain.handle('agent:prompt', async (_e, text) => {
+  console.log('[zion] prompt received: len=' + (text ? text.length : -1) + ' head=' + JSON.stringify(String(text)).slice(0, 80));
   const s = await ensureSession();
   await s.prompt(text);
   // prompt() 从不因模型/请求失败抛错 —— 查末条消息 stopReason

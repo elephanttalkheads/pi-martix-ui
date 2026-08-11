@@ -10,6 +10,7 @@ export default defineConfig({
     emptyOutDir: true,
   },
   server: {
+    host: '127.0.0.1', // 强制 IPv4：否则 vite8 只绑 ::1，wait-on tcp:127.0.0.1 永远等不到
     port: 5173,
     strictPort: true,
   },

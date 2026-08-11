@@ -1,6 +1,7 @@
-// ZION preload —— 安全桥（contextIsolation on）
+// ZION preload —— 安全桥（contextIsolation on, sandbox on）
+// 注意：sandbox 下必须 CJS（.cjs）；ESM preload 需 sandbox:false，此处不取
 // 渲染进程只能通过 window.zion.* 与主进程交互，拿不到 Node/凭据
-import { contextBridge, ipcRenderer } from 'electron';
+const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('zion', {
   ping: () => ipcRenderer.invoke('zion:ping'),
