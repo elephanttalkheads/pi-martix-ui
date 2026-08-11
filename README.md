@@ -25,6 +25,9 @@ npm run dist       # 打包 NSIS + portable → dist/
 
 前置：Node ≥ 22.19（本机 v24.19.0 ✓）；pi SDK 要求 Electron ≥ 39（38 内嵌 Node 22.18 不够）。
 
+> [!note] npm 11 注意
+> npm 11 默认拦截安装脚本（allow-scripts）。首次 `npm install` 后 electron 二进制不会自动下载，需先批准：`npm approve-scripts electron`，再 `npm rebuild electron`。若仍失败，手动下载解压：`https://npmmirror.com/mirrors/electron/<版本>/electron-v<版本>-win32-x64.zip` → 解压到 `node_modules/electron/dist/` 并写 `echo electron.exe > node_modules/electron/path.txt`。
+
 ## 结构
 
 ```
