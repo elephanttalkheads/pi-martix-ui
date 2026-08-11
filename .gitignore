@@ -5,3 +5,5 @@ out/
 *.log
 .DS_Store
 .gh-staging/
+graphify-out/
+.codex/
