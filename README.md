@@ -12,7 +12,7 @@
 | 桌面壳 | Electron（≥39，当前 43.x 线）— 固定 Chromium，canvas 确定性 |
 | Agent 内核 | pi SDK 进程内（`createAgentSession` + 事件流订阅），复用 `~/.pi/agent` 配置 |
 | 通信 | preload IPC 桥（contextIsolation on，凭据只留主进程） |
-| UI | Matrix 风控制台（数字雨/网格/扫描线）—— 框架选型见 Issue #9 |
+| UI | React 18 + zustand + vite（Matrix 风控制台，canvas 氛围资产来自 ui-demo） |
 | 打包 | electron-builder：NSIS 单 exe + portable；Gitee Releases 主更新通道 + GitHub 海外镜像 |
 
 ## 开发
@@ -30,8 +30,9 @@ npm run dist       # 打包 NSIS + portable → dist/
 ```
 src/main/        Electron 主进程（pi SDK 接入点）
 src/preload/     IPC 桥
-src/renderer/    UI 入口（index-v2.html 待迁入）
-research/       技术调研（壳层 / pi-SDK / pi-RPC）
+src/renderer/    React 渲染层（vite 脚手架，构建中）
+ui-demo/         静态 UI demo（index-v2.html 视觉参考 + canvas 模块来源、brand-spec 设计系统）
+research/        技术调研（壳层 / pi-SDK / pi-RPC）
 ```
 
 ## 许可
