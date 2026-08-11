@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<title>ZION</title>
+<style>body{background:#000;color:#00ff41;font-family:ui-monospace,Consolas,monospace;margin:2rem}
+.s{color:#00b32d} .ok{color:#c8ffd4;text-shadow:0 0 8px #00ff41}</style>
+</head>
+<body>
+<pre>
+<span class="s">ZION :: CONSOLE (skeleton)</span>
+electron main/preload 就绪。pid: <span id="p" class="ok">?</span>
+
+UI 骨架待办：
+  - index-v2.html（数字雨/网格/扫描线）迁入 renderer —— 等 Issue #9 框架选型
+  - pi SDK 接入主进程 —— 等 UI 框架票落定后接线
+</pre>
+<script>
+  window.zion?.ping().then(r => { document.getElementById('p').textContent = String(r.pid) + ' ' + (r.ok ? '[OK]' : '[ERR]'); });
+</script>
+</body>
+</html>
