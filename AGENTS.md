@@ -28,8 +28,13 @@ src/main/main.mjs        Electron 主进程：createAgentSession → session.sub
                          IPC: zion:ping / agent:prompt / agent:abort / agent:steer / agent:followUp
 src/preload/preload.cjs  安全桥（window.zion.*）
 src/renderer/src/        React 应用：store.js(zustand) / App.jsx / components/MatrixBg,Feed,InputBar
-ui-demo/                 index-v2.html 视觉参考 + canvas 模块来源；brand-spec.md 设计系统
-research/                技术调研（壳层 / pi-SDK / pi-RPC）
+ui-demo/                 index-v3.html = 最新视觉参考（含蠕虫定位动画 releaseWorm、diff 修改卡 addDiffCard、
+                         WebAudio 音效 SND、CRT 层、深度分层数字雨）；index-v2.html = 稳定基线；
+                         brand-spec.md 设计系统
+research/                技术调研（壳层 / pi-SDK / pi-RPC）；matrix-style-references.md = 黑客帝国风格
+                         参考作品调研（数字雨/电影 UI/CRT 还原，含 6 项优化清单及完成状态）
+pi-matrix-demo-handoff.md demo → 正式 UI 交接文档：v3 模块清单、mock→真实实现映射表。
+                         注意：开屏加载页（boot/CRT 亮线/药丸）已明确不实现
 ```
 
 关键 SDK 行为（docs/sdk.md）：
@@ -50,7 +55,8 @@ research/                技术调研（壳层 / pi-SDK / pi-RPC）
 
 - ✅ 首个可运行闭环 + E2E 验证（真实 prompt → deepseek → 事件流 → feed）
 - ✅ preload/vite 两个坑已修（commit a9c8859）
-- ⬜ 未做：项目选择 UI、完整数字雨/网格/开机引导对齐 ui-demo、工具调用行详情展开、会话历史/恢复、扩展 UI 桥、项目信任处理、离线字体、Gitee 备份镜像配置、打包实测（dist）
+- ✅ ui-demo 升级到 index-v3.html：深度分层镜像数字雨 + bloom、CRT 曲率/抖动/开机亮线、WebAudio bleep 音效、蠕虫定位动画（releaseWorm）、diff 修改卡（addDiffCard）、细线条几何 trace 卡片
+- ⬜ 未做：项目选择 UI、v3 视觉/交互资产向 React renderer 迁移（开屏加载页不迁移，见交接文档）、工具调用行详情展开、会话历史/恢复、扩展 UI 桥、项目信任处理、离线字体、Gitee 备份镜像配置、打包实测（dist）
 
 ## Git 约定
 

@@ -1,0 +1,1657 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ZION — Agent 主控台 v3</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@500;700;900&display=swap');
+
+:root {
+  --bg: #000000;
+  --surface: rgba(0, 8, 2, 0.86);
+  --surface-2: rgba(0, 14, 4, 0.9);
+  --fg: #00ff41;
+  --muted: #00b32d;
+  --dim: #00591a;
+  --bright: #c8ffd4;
+  --border: rgba(0, 255, 65, 0.22);
+  --danger: #ff4444;
+  --warn: #ffcc00;
+  --font: "Share Tech Mono", ui-monospace, "Courier New", monospace;
+  --font-display: "Orbitron", "Share Tech Mono", ui-monospace, monospace;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { height: 100%; }
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font);
+  overflow: hidden;
+  position: relative;
+}
+
+/* ---------- 背景层：雨 → 网格地板 → 扫描线 ---------- */
+#rain { position: fixed; inset: -40px; z-index: 0; will-change: transform; }
+#grid-floor { position: fixed; inset: 0; z-index: 1; pointer-events: none; }
+
+.scanlines {
+  position: fixed; inset: 0; z-index: 40; pointer-events: none;
+  background: repeating-linear-gradient(0deg,
+    rgba(0,0,0,0.14) 0px, rgba(0,0,0,0.14) 1px,
+    transparent 1px, transparent 3px);
+}
+.vignette {
+  position: fixed; inset: 0; z-index: 41; pointer-events: none;
+  background: radial-gradient(ellipse at center, transparent 52%, rgba(0,0,0,0.6) 100%);
+}
+
+/* ---------- CRT 玻璃曲面 / 亮度抖动 / 开机亮线（参考 cool-retro-term） ---------- */
+/* 曲面：圆角暗边模拟显像管边缘收束 + 一道斜向玻璃反光 */
+.crt-glass {
+  position: fixed; inset: 0; z-index: 42; pointer-events: none;
+  border-radius: 2vw;
+  box-shadow: inset 0 0 9vw rgba(0,0,0,0.85);
+  background: linear-gradient(115deg, rgba(180,255,200,0.028) 0%, transparent 22%);
+}
+/* 亮度抖动层：JS 每 70-180ms 随机微调不透明度 */
+.crt-flicker {
+  position: fixed; inset: 0; z-index: 43; pointer-events: none;
+  background: #000; opacity: 0;
+}
+/* 开机高压亮线：一道亮线垂直拉开成整个画面 */
+#crt-on {
+  position: fixed; left: 0; right: 0; top: 50%;
+  height: 2px; transform: translateY(-50%);
+  background: rgba(200,255,212,0.95);
+  box-shadow: 0 0 42px 8px rgba(0,255,65,0.55);
+  z-index: 101; pointer-events: none;
+  animation: crtLine 0.6s cubic-bezier(0.22,1,0.36,1) 0.15s forwards;
+}
+@keyframes crtLine {
+  0% { height: 2px; opacity: 1; }
+  55% { height: 100vh; opacity: 0.85; }
+  100% { height: 100vh; opacity: 0; }
+}
+
+/* ---------- 视差舞台：整体 ±0.8° 倾斜 ---------- */
+#stage {
+  position: relative;
+  z-index: 5;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  transform-style: preserve-3d;
+  will-change: transform;
+  transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* ---------- 开机引导 ---------- */
+#boot {
+  position: fixed; inset: 0; background: #000; z-index: 100;
+  display: flex; align-items: center; justify-content: center;
+  transition: opacity 1.2s ease;
+}
+#boot.done { opacity: 0; pointer-events: none; }
+#boot-log {
+  width: min(720px, 86vw);
+  font-size: 15px; line-height: 1.9;
+  color: var(--muted); white-space: pre-wrap;
+}
+#boot-log .b { color: var(--bright); text-shadow: 0 0 8px var(--fg); }
+#boot-bar {
+  width: min(720px, 86vw); height: 2px; margin-top: 26px;
+  background: rgba(0,255,65,0.12); position: relative; overflow: hidden;
+}
+#boot-bar i {
+  position: absolute; left: 0; top: 0; bottom: 0; width: 0%;
+  background: var(--fg); box-shadow: 0 0 12px var(--fg);
+  transition: width 0.4s ease;
+}
+#boot-skip {
+  position: fixed; bottom: 28px; right: 32px;
+  font-size: 12px; color: var(--dim);
+  letter-spacing: 0.2em; text-transform: uppercase;
+  cursor: pointer; background: none;
+  border: 1px solid var(--border); padding: 8px 14px;
+  font-family: var(--font);
+}
+#boot-skip:hover { color: var(--fg); border-color: var(--fg); }
+
+/* ---------- 标题栏 ---------- */
+.titlebar {
+  height: 40px; flex: none;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 14px;
+  position: relative; user-select: none;
+}
+.window-controls { display: flex; gap: 8px; }
+.dot { width: 11px; height: 11px; border-radius: 50%; cursor: pointer; }
+.dot.close { background: var(--danger); box-shadow: 0 0 8px var(--danger); }
+.dot.min { background: var(--muted); box-shadow: 0 0 8px var(--muted); }
+.dot.max { background: var(--fg); box-shadow: 0 0 8px var(--fg); }
+
+.brand {
+  font-family: var(--font-display);
+  font-weight: 700; font-size: 14px;
+  letter-spacing: 0.24em; text-transform: uppercase;
+  color: var(--bright); text-shadow: 0 0 12px var(--fg);
+  position: relative;
+}
+.brand .proto { color: var(--dim); font-family: var(--font); font-weight: 400; letter-spacing: 0.1em; }
+/* 故障闪烁：伪元素错位切片 */
+.brand::before, .brand::after {
+  content: attr(data-text);
+  position: absolute; inset: 0;
+  color: var(--fg); opacity: 0;
+  pointer-events: none;
+}
+.brand::before { animation: glitchA 6s steps(1) infinite; }
+.brand::after { animation: glitchB 6s steps(1) infinite; }
+@keyframes glitchA {
+  0%, 91%, 94.5%, 100% { opacity: 0; }
+  92% { opacity: 0.75; transform: translate(-2px, 1px); clip-path: inset(12% 0 58% 0); }
+  93.5% { opacity: 0.6; transform: translate(2px, -1px); clip-path: inset(62% 0 8% 0); }
+}
+@keyframes glitchB {
+  0%, 46%, 49.5%, 100% { opacity: 0; }
+  47% { opacity: 0.7; transform: translate(2px, 0); clip-path: inset(38% 0 34% 0); }
+  48.5% { opacity: 0.55; transform: translate(-2px, 1px); clip-path: inset(4% 0 82% 0); }
+}
+.titlebar .clock { color: var(--muted); letter-spacing: 0.1em; font-size: 13px; }
+
+/* ---------- 主区 ---------- */
+.main { display: flex; flex: 1; min-height: 0; transform-style: preserve-3d; }
+
+/* ---------- 侧栏 ---------- */
+.sidebar {
+  width: 248px; flex: none;
+  background: var(--surface-2);
+  border-right: 1px solid var(--border);
+  display: flex; flex-direction: column;
+  font-size: 14px; overflow-y: auto;
+  transform: translateZ(24px);
+}
+/* 3D 神经核心 */
+.core-wrap {
+  flex: none; position: relative;
+  border-bottom: 1px solid var(--border);
+  background:
+    radial-gradient(ellipse at 50% 42%, rgba(0,255,65,0.09), transparent 62%);
+  padding: 6px 0 2px;
+}
+#core { display: block; width: 100%; height: 168px; }
+.core-label {
+  position: absolute; left: 0; right: 0; bottom: 8px;
+  text-align: center; font-size: 11px;
+  letter-spacing: 0.3em; text-transform: uppercase;
+  color: var(--muted); text-shadow: 0 0 8px var(--fg);
+}
+.core-label b { color: var(--bright); font-weight: normal; }
+
+.side-section { padding: 14px 12px 6px; }
+.side-section h3 {
+  color: var(--dim); font-size: 12px; font-weight: normal;
+  text-transform: uppercase; letter-spacing: 0.18em;
+  margin-bottom: 8px;
+}
+.agent-card {
+  border: 1px solid var(--border);
+  padding: 10px 12px; margin-bottom: 8px;
+  cursor: pointer;
+  transition: transform 0.25s cubic-bezier(0.22,1,0.36,1), background 0.15s, box-shadow 0.25s;
+  transform-style: preserve-3d;
+  background: rgba(0, 20, 6, 0.35);
+}
+.agent-card:hover {
+  background: rgba(0, 255, 65, 0.08);
+  transform: perspective(600px) rotateX(5deg) translateZ(8px);
+  box-shadow: 0 10px 24px rgba(0,0,0,0.5), 0 0 14px rgba(0,255,65,0.12);
+}
+.agent-card.active {
+  background: rgba(0, 255, 65, 0.14);
+  border-color: var(--fg);
+  box-shadow: inset 0 0 18px rgba(0, 255, 65, 0.08), 0 0 16px rgba(0,255,65,0.18);
+}
+.agent-card .a-name {
+  font-family: var(--font-display); font-weight: 500; font-size: 13px;
+  letter-spacing: 0.14em;
+  color: var(--bright); text-shadow: 0 0 6px var(--fg);
+}
+.agent-card .a-desc { color: var(--dim); font-size: 12px; margin-top: 3px; }
+.agent-card .a-state { font-size: 12px; margin-top: 5px; }
+.a-state.online { color: var(--fg); }
+.a-state.idle { color: var(--warn); }
+
+/* ---------- 项目文件 · 突触树 ---------- */
+#file-tree { font-size: 13px; padding-bottom: 6px; }
+.ft-row {
+  display: flex; align-items: center; gap: 7px;
+  padding: 4px 8px 4px 2px;
+  cursor: pointer; color: var(--muted);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  position: relative;
+}
+.ft-row:hover { background: rgba(0,255,65,0.08); color: var(--fg); }
+.ft-row .ft-caret {
+  flex: none; width: 12px; text-align: center;
+  color: var(--dim); font-size: 11px;
+  transition: transform 0.3s cubic-bezier(0.22,1,0.36,1), color 0.2s;
+}
+.ft-node.open > .ft-row .ft-caret { transform: rotate(90deg); color: var(--fg); }
+/* 神经元节点 */
+.ft-dot {
+  flex: none; width: 7px; height: 7px; border-radius: 50%;
+  background: var(--dim); box-shadow: 0 0 4px rgba(0,255,65,0.35);
+  transition: all 0.25s;
+}
+.ft-node.dir > .ft-row .ft-dot {
+  width: 9px; height: 9px; background: transparent;
+  border: 1px solid var(--fg); box-shadow: 0 0 7px rgba(0,255,65,0.55);
+}
+.ft-row:hover .ft-dot { background: var(--fg); box-shadow: 0 0 10px var(--fg); }
+.ft-node.dir > .ft-row:hover .ft-dot { background: rgba(0,255,65,0.35); }
+.ft-row.active { color: var(--bright); text-shadow: 0 0 8px var(--fg); background: rgba(0,255,65,0.13); }
+.ft-row.active .ft-dot { background: var(--bright); box-shadow: 0 0 12px var(--fg); }
+/* 突触放电 */
+.ft-dot.firing { animation: fire 0.65s ease-out; }
+@keyframes fire {
+  0% { box-shadow: 0 0 4px rgba(0,255,65,0.4); }
+  30% { background: var(--bright); box-shadow: 0 0 16px var(--fg), 0 0 30px rgba(0,255,65,0.5); }
+  100% { box-shadow: 0 0 4px rgba(0,255,65,0.4); }
+}
+.ft-size { color: var(--dim); font-size: 11px; margin-left: auto; padding-left: 8px; flex: none; }
+.ft-row:hover .ft-size, .ft-row.active .ft-size { color: var(--muted); }
+/* 轴突连接 */
+.ft-children {
+  display: grid; grid-template-rows: 0fr;
+  transition: grid-template-rows 0.35s cubic-bezier(0.22,1,0.36,1);
+  margin-left: 13px;
+}
+.ft-node.open > .ft-children { grid-template-rows: 1fr; }
+.ft-inner { overflow: hidden; min-height: 0; position: relative; }
+/* 垂直轴突线 */
+.ft-inner::before {
+  content: ""; position: absolute; left: 0; top: 0; bottom: 6px;
+  width: 1px; background: rgba(0,255,65,0.18);
+}
+/* 沿线下行的信号脉冲 */
+.ft-node.open > .ft-children > .ft-inner::after {
+  content: ""; position: absolute; left: -1px; top: 0; width: 3px; height: 14px;
+  background: var(--fg); box-shadow: 0 0 8px var(--fg);
+  animation: synapse 2.6s linear infinite;
+  animation-delay: var(--pulse-delay, 0s);
+}
+@keyframes synapse {
+  0% { top: 0; opacity: 0; }
+  12% { opacity: 0.9; }
+  85% { opacity: 0.9; }
+  100% { top: calc(100% - 20px); opacity: 0; }
+}
+/* 水平突触 stub */
+.ft-inner .ft-row { padding-left: 16px; }
+.ft-inner .ft-row::before {
+  content: ""; position: absolute; left: 1px; top: 50%;
+  width: 11px; height: 1px; background: rgba(0,255,65,0.22);
+}
+
+/* 神经负载频谱 */
+.spectrum-wrap {
+  margin-top: auto;
+  border-top: 1px solid var(--border);
+  padding: 10px 12px 4px;
+}
+.spectrum-wrap h3 {
+  color: var(--dim); font-size: 11px; font-weight: normal;
+  text-transform: uppercase; letter-spacing: 0.18em; margin-bottom: 4px;
+}
+#spectrum { display: block; width: 100%; height: 42px; }
+.side-foot {
+  padding: 10px 12px 12px;
+  font-size: 12px; color: var(--dim); line-height: 1.8;
+}
+.side-foot .ok { color: var(--fg); }
+
+/* ---------- 对话区 ---------- */
+.console {
+  flex: 1; min-width: 0;
+  display: flex; flex-direction: column;
+  background: var(--surface);
+  transform: translateZ(0);
+  position: relative;
+}
+/* HUD 转角括线 */
+.console::before {
+  content: ""; position: absolute; inset: 10px; z-index: 3;
+  pointer-events: none;
+  background:
+    linear-gradient(var(--fg), var(--fg)) left 0 top 0 / 18px 1px,
+    linear-gradient(var(--fg), var(--fg)) left 0 top 0 / 1px 18px,
+    linear-gradient(var(--fg), var(--fg)) right 0 top 0 / 18px 1px,
+    linear-gradient(var(--fg), var(--fg)) right 0 top 0 / 1px 18px,
+    linear-gradient(var(--fg), var(--fg)) left 0 bottom 0 / 18px 1px,
+    linear-gradient(var(--fg), var(--fg)) left 0 bottom 0 / 1px 18px,
+    linear-gradient(var(--fg), var(--fg)) right 0 bottom 0 / 18px 1px,
+    linear-gradient(var(--fg), var(--fg)) right 0 bottom 0 / 1px 18px;
+  background-repeat: no-repeat;
+  opacity: 0.5;
+}
+.conv-head {
+  flex: none;
+  display: flex; align-items: center; gap: 14px;
+  padding: 10px 20px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
+  font-size: 13px;
+}
+.conv-head .c-title {
+  font-family: var(--font-display); font-weight: 500;
+  letter-spacing: 0.14em; font-size: 13px;
+  color: var(--bright); text-shadow: 0 0 6px var(--fg);
+}
+.chip {
+  border: 1px solid var(--border);
+  padding: 2px 10px; font-size: 12px;
+  color: var(--muted); letter-spacing: 0.08em;
+}
+.chip.on { color: var(--fg); border-color: var(--fg); box-shadow: 0 0 10px rgba(0,255,65,0.2); }
+.conv-head .spacer { flex: 1; }
+
+#feed {
+  flex: 1; overflow-y: auto;
+  padding: 22px 26px 12px;
+  scroll-behavior: smooth;
+  perspective: 900px;
+}
+#feed::-webkit-scrollbar, .sidebar::-webkit-scrollbar, #term-body::-webkit-scrollbar { width: 8px; }
+#feed::-webkit-scrollbar-thumb, .sidebar::-webkit-scrollbar-thumb, #term-body::-webkit-scrollbar-thumb { background: var(--dim); }
+#feed::-webkit-scrollbar-track, .sidebar::-webkit-scrollbar-track, #term-body::-webkit-scrollbar-track { background: transparent; }
+
+.msg { margin-bottom: 22px; max-width: 860px; animation: msgIn 0.4s cubic-bezier(0.22,1,0.36,1); transform-origin: top center; }
+@keyframes msgIn {
+  from { opacity: 0; transform: rotateX(-14deg) translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+.msg-head {
+  display: flex; align-items: baseline; gap: 10px;
+  font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase;
+  margin-bottom: 6px;
+}
+.msg.user { margin-left: auto; }
+.msg.user .msg-head { justify-content: flex-end; color: var(--dim); }
+.msg.agent .msg-head { color: var(--fg); font-family: var(--font-display); font-weight: 500; }
+.msg-head .m-time { color: var(--dim); letter-spacing: 0.05em; text-transform: none; font-family: var(--font); }
+.msg-body { font-size: 15px; line-height: 1.75; white-space: pre-wrap; word-break: break-word; }
+.msg.user .msg-body {
+  color: var(--bright); text-align: right;
+  text-shadow: 0 0 4px rgba(200, 255, 212, 0.35);
+}
+.msg.agent .msg-body { color: var(--fg); text-shadow: 0 0 4px rgba(0, 255, 65, 0.35); }
+.msg-body .hl { color: var(--bright); text-shadow: 0 0 6px var(--fg); }
+.msg-body code {
+  background: rgba(0, 255, 65, 0.1);
+  border: 1px solid var(--border);
+  padding: 0 5px; font-size: 13px;
+}
+
+/* 工具调用卡 —— 细线条几何风格（参考 Zion 控制室的克制细线界面） */
+.trace {
+  position: relative;
+  border: 1px solid rgba(0,255,65,0.16);
+  margin: 8px 0 10px 2px;
+  padding: 8px 12px;
+  font-size: 13px; color: var(--muted); line-height: 1.8;
+  background: rgba(0, 12, 4, 0.28);
+}
+/* 对角括线：仅左上和右下一对细角标 */
+.trace::before, .trace::after {
+  content: ""; position: absolute; width: 9px; height: 9px; pointer-events: none;
+}
+.trace::before {
+  left: -1px; top: -1px;
+  border-left: 1px solid var(--fg); border-top: 1px solid var(--fg);
+}
+.trace::after {
+  right: -1px; bottom: -1px;
+  border-right: 1px solid var(--fg); border-bottom: 1px solid var(--fg);
+}
+.trace .step { display: flex; gap: 8px; align-items: baseline; }
+.trace .step .tag { color: var(--dim); flex: none; }
+.trace .step.done .tag { color: var(--fg); }
+.trace .step .st { color: var(--dim); margin-left: auto; flex: none; }
+.trace .step.done .st { color: var(--muted); }
+.trace .step.run .st { color: var(--warn); animation: blink 1s step-end infinite; }
+.trace .step.run .tag { color: var(--warn); text-shadow: 0 0 6px var(--warn); }
+@keyframes blink { 50% { opacity: 0; } }
+
+.caret {
+  display: inline-block; width: 8px; height: 1.05em;
+  background: var(--fg); box-shadow: 0 0 10px var(--fg);
+  vertical-align: text-bottom;
+  animation: blink 0.9s step-end infinite;
+}
+
+/* ---------- 编辑文件 diff 卡（黑客帝国风） ---------- */
+.diff {
+  margin: 10px 0 4px 2px;
+  border: 1px solid rgba(0,255,65,0.2);
+  background: rgba(0, 6, 2, 0.55);
+  font-size: 13px; line-height: 1.55;
+  position: relative;
+  box-shadow: inset 0 0 24px rgba(0,255,65,0.05), 0 0 18px rgba(0,255,65,0.06);
+  animation: diffIn 0.5s cubic-bezier(0.22,1,0.36,1);
+}
+@keyframes diffIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+/* 对角括线：与 trace 卡一致的几何细角标 */
+.diff::before, .diff::after {
+  content: ""; position: absolute; width: 9px; height: 9px; pointer-events: none;
+}
+.diff::before { left: -1px; top: -1px; border-left: 1px solid var(--fg); border-top: 1px solid var(--fg); }
+.diff::after { right: -1px; bottom: -1px; border-right: 1px solid var(--fg); border-bottom: 1px solid var(--fg); }
+.diff-head {
+  display: flex; align-items: center; gap: 10px;
+  padding: 6px 12px;
+  border-bottom: 1px solid rgba(0,255,65,0.16);
+  background: rgba(0, 18, 6, 0.5);
+  font-size: 12px; letter-spacing: 0.1em;
+}
+.diff-head .d-file { color: var(--bright); text-shadow: 0 0 6px var(--fg); }
+.diff-head .d-op { color: var(--warn); margin-left: auto; letter-spacing: 0.18em; text-transform: uppercase; }
+.diff-body { overflow-x: auto; padding: 4px 0; }
+.diff-line {
+  display: flex; white-space: pre;
+  padding: 0 12px 0 0;
+  font-family: ui-monospace, "Share Tech Mono", "Courier New", monospace;
+}
+.diff-line .ln {
+  flex: none; width: 44px; text-align: right;
+  padding-right: 12px; user-select: none;
+  color: var(--dim);
+}
+.diff-line .sign { flex: none; width: 14px; text-align: center; user-select: none; }
+.diff-line .code { flex: 1; }
+.diff-line.ctx { color: var(--muted); }
+.diff-line.ctx .sign { color: transparent; }
+.diff-line.del {
+  background: rgba(255, 68, 68, 0.1);
+  color: #ff8f8f;
+}
+.diff-line.del .ln { color: rgba(255,120,120,0.5); }
+.diff-line.del .sign { color: var(--danger); }
+.diff-line.add {
+  background: rgba(0, 255, 65, 0.1);
+  color: var(--fg);
+  text-shadow: 0 0 4px rgba(0,255,65,0.4);
+}
+.diff-line.add .ln { color: rgba(0,255,65,0.45); }
+.diff-line.add .sign { color: var(--bright); }
+/* 新增行扫入：一行行点亮 */
+.diff-line.reveal { animation: lineIn 0.28s ease-out both; }
+@keyframes lineIn {
+  from { opacity: 0; transform: translateX(-6px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* ---------- 蠕虫爬行画布 ---------- */
+#worm {
+  position: fixed; inset: 0; z-index: 60;
+  pointer-events: none;
+}
+/* 命中后目标文件行放电 */
+.ft-row.worm-hit { animation: wormHit 0.9s ease-out; }
+@keyframes wormHit {
+  0% { background: rgba(200,255,212,0.35); box-shadow: inset 0 0 24px rgba(0,255,65,0.5); }
+  40% { background: rgba(0,255,65,0.22); }
+  100% { background: rgba(0,255,65,0.13); }
+}
+
+/* ---------- 输入区 ---------- */
+.inputbar {
+  flex: none;
+  border-top: 1px solid var(--border);
+  background: var(--surface-2);
+  padding: 12px 20px 8px;
+}
+.quick-cmds { display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+.qcmd {
+  font-family: var(--font); font-size: 12px; color: var(--dim);
+  background: none; border: 1px solid var(--border);
+  padding: 4px 12px; cursor: pointer; letter-spacing: 0.06em;
+  transition: all 0.15s;
+  clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px);
+}
+.qcmd:hover { color: var(--fg); border-color: var(--fg); text-shadow: 0 0 6px var(--fg); background: rgba(0,255,65,0.06); }
+.input-row { display: flex; align-items: center; gap: 10px; }
+.prompt-sign { color: var(--bright); text-shadow: 0 0 8px var(--fg); font-size: 16px; flex: none; }
+#cmdline {
+  flex: 1; background: none; border: none; outline: none;
+  color: var(--bright); font-family: var(--font); font-size: 16px;
+  text-shadow: 0 0 6px rgba(0, 255, 65, 0.5);
+  caret-color: var(--fg);
+}
+#cmdline::placeholder { color: var(--dim); }
+/* 切角主按钮 */
+.send-btn {
+  flex: none;
+  font-family: var(--font-display); font-weight: 500;
+  font-size: 12px; letter-spacing: 0.2em;
+  color: var(--fg);
+  background: rgba(0, 255, 65, 0.1);
+  border: 1px solid var(--fg);
+  padding: 9px 22px; min-height: 36px;
+  cursor: pointer; text-transform: uppercase;
+  transition: all 0.15s;
+  clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
+}
+.send-btn:hover { background: var(--fg); color: #000; box-shadow: 0 0 22px rgba(0, 255, 65, 0.65); }
+.send-btn:disabled { opacity: 0.35; cursor: default; background: none; color: var(--fg); box-shadow: none; }
+.send-btn.stop { color: var(--danger); border-color: var(--danger); background: rgba(255, 68, 68, 0.08); }
+.send-btn.stop:hover { background: var(--danger); color: #000; box-shadow: 0 0 22px rgba(255, 68, 68, 0.5); }
+.input-hint { font-size: 11px; color: var(--dim); margin-top: 8px; letter-spacing: 0.08em; }
+
+/* ---------- 日志终端 ---------- */
+.term {
+  flex: none; height: 132px;
+  border-top: 1px solid var(--border);
+  background: var(--surface-2);
+  display: flex; flex-direction: column;
+}
+.term-head {
+  flex: none;
+  display: flex; align-items: center; gap: 14px;
+  padding: 5px 16px; font-size: 11px;
+  letter-spacing: 0.18em; text-transform: uppercase;
+  color: var(--dim);
+  border-bottom: 1px solid var(--border);
+}
+.term-head .live { color: var(--fg); }
+.term-head .live::before { content: "● "; }
+#term-body {
+  flex: 1; overflow-y: auto;
+  padding: 8px 16px;
+  font-size: 12.5px; line-height: 1.7; color: var(--muted);
+}
+#term-body .t-ok { color: var(--fg); }
+#term-body .t-err { color: var(--danger); }
+#term-body .t-dim { color: var(--dim); }
+#term-body .t-warn { color: var(--warn); }
+
+/* ---------- 状态栏 ---------- */
+.statusbar {
+  flex: none; height: 26px;
+  background: var(--surface-2);
+  border-top: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 14px; font-size: 12px; color: var(--muted);
+}
+.statusbar .s-group { display: flex; gap: 18px; }
+.st-acc { color: var(--fg); text-shadow: 0 0 6px var(--fg); }
+.st-dim { color: var(--dim); }
+
+@media (max-width: 900px) {
+  .sidebar { display: none; }
+}
+</style>
+</head>
+<body>
+
+<canvas id="rain"></canvas>
+<canvas id="grid-floor"></canvas>
+<canvas id="worm"></canvas>
+<div class="scanlines"></div>
+<div class="vignette"></div>
+<div class="crt-glass"></div>
+<div class="crt-flicker"></div>
+
+<!-- CRT 开机亮线 -->
+<div id="crt-on"></div>
+
+<!-- 开机引导 -->
+<div id="boot" data-od-id="boot">
+  <div>
+    <div id="boot-log"></div>
+    <div id="boot-bar"><i></i></div>
+  </div>
+  <button id="boot-skip" type="button">跳过 →</button>
+</div>
+
+<div id="stage">
+  <!-- 标题栏 -->
+  <header class="titlebar" data-od-id="titlebar">
+    <div class="window-controls">
+      <div class="dot close" title="关闭"></div>
+      <div class="dot min" title="最小化"></div>
+      <div class="dot max" title="最大化"></div>
+    </div>
+    <div class="brand" data-text="ZION://AGENT-CONSOLE">ZION://agent-console <span class="proto">v2.0-neural</span></div>
+    <div class="clock" id="clock">--:--:--</div>
+  </header>
+
+  <div class="main">
+    <!-- 侧栏 -->
+    <aside class="sidebar" data-od-id="sidebar">
+      <div class="core-wrap" data-od-id="neural-core">
+        <canvas id="core"></canvas>
+        <div class="core-label">NEURAL CORE · <b id="core-agent">NEO-7</b></div>
+      </div>
+      <div class="side-section">
+        <h3>在线 Agent</h3>
+        <div class="agent-card active" data-agent="neo" data-od-id="agent-neo">
+          <div class="a-name">NEO-7</div>
+          <div class="a-desc">通用推理 · 工具链调用</div>
+          <div class="a-state online">● 在线 — 待命</div>
+        </div>
+        <div class="agent-card" data-agent="trinity" data-od-id="agent-trinity">
+          <div class="a-name">TRINITY-2</div>
+          <div class="a-desc">代码检索 · 漏洞分析</div>
+          <div class="a-state idle">◐ 空闲 — 上次运行 12 分钟前</div>
+        </div>
+        <div class="agent-card" data-agent="morpheus" data-od-id="agent-morpheus">
+          <div class="a-name">MORPHEUS-0</div>
+          <div class="a-desc">长程规划 · 多步任务编排</div>
+          <div class="a-state online">● 在线 — 训练中</div>
+        </div>
+      </div>
+      <div class="side-section" data-od-id="file-tree-section">
+        <h3>项目文件 · 突触映射</h3>
+        <div id="file-tree" data-od-id="file-tree"></div>
+      </div>
+      <div class="spectrum-wrap" data-od-id="spectrum">
+        <h3>神经负载</h3>
+        <canvas id="spectrum"></canvas>
+      </div>
+      <div class="side-foot">
+        <div>上行链路 <span class="ok">稳定</span></div>
+        <div>延迟 <span class="ok" id="latency">18ms</span></div>
+        <div>节点 <span class="ok">zion-core-01</span></div>
+      </div>
+    </aside>
+
+    <!-- 对话区 -->
+    <section class="console" data-od-id="console">
+      <div class="conv-head">
+        <span class="c-title" id="conv-title">主控会话 #0047</span>
+        <span class="chip on" id="chip-model">MODEL: NEO-7</span>
+        <span class="chip" id="chip-mode">MODE: 自主执行</span>
+        <span class="spacer"></span>
+        <span class="chip">上下文 12.4k / 128k</span>
+      </div>
+
+      <div id="feed" data-od-id="feed"></div>
+
+      <div class="inputbar" data-od-id="inputbar">
+        <div class="quick-cmds">
+          <button class="qcmd" type="button" data-cmd="/status">/status 系统状态</button>
+          <button class="qcmd" type="button" data-cmd="/trace 上次运行">/trace 回放链路</button>
+          <button class="qcmd" type="button" data-cmd="帮我检索记忆库里关于调试偏好的条目">检索记忆库</button>
+          <button class="qcmd" type="button" data-cmd="扫描当前项目并给出风险摘要">扫描项目风险</button>
+        </div>
+        <div class="input-row">
+          <span class="prompt-sign">❯</span>
+          <input id="cmdline" type="text" autocomplete="off" spellcheck="false"
+                 placeholder="向 NEO-7 下达指令…（Enter 发送）" />
+          <button class="send-btn" id="send-btn" type="button">发送</button>
+        </div>
+        <div class="input-hint">Enter 发送 · 支持 /status /trace /clear 指令 · 生成中可点击「中断」</div>
+      </div>
+
+      <!-- 日志终端 -->
+      <div class="term" data-od-id="term">
+        <div class="term-head">
+          <span class="live">系统日志 · LIVE</span>
+          <span>stdout / stderr 合并</span>
+        </div>
+        <div id="term-body"></div>
+      </div>
+    </section>
+  </div>
+
+  <!-- 状态栏 -->
+  <footer class="statusbar" data-od-id="statusbar">
+    <div class="s-group">
+      <span><span class="st-acc">●</span> 已连接 zion 主网</span>
+      <span class="st-dim">加密通道 TLS 1.3</span>
+    </div>
+    <div class="s-group">
+      <span id="st-tokens">tokens: 0</span>
+      <span id="st-uptime">uptime: 00:00</span>
+      <span class="st-dim" id="snd-toggle" style="cursor:pointer" title="切换 UI 音效">SND: ON</span>
+      <span class="st-acc" id="st-state">READY</span>
+    </div>
+  </footer>
+</div>
+
+<script>
+/* ================= 全局联动状态 ================= */
+const FX = { speed: 1, glow: 0.55, load: 0.25 }; // 流式时 speed/load 提升
+
+/* ================= UI 音效（WebAudio 合成 bleep，参考 Arwes） ================= */
+const SND = (function () {
+  let ac = null;
+  let enabled = true;
+  function ctx() {
+    if (!ac) {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return null;
+      ac = new AC();
+    }
+    if (ac.state === 'suspended') ac.resume();
+    return ac;
+  }
+  function tone(freq, dur, opts) {
+    opts = opts || {};
+    if (!enabled) return;
+    const a = ctx();
+    if (!a) return;
+    const t0 = a.currentTime + (opts.delay || 0);
+    const o = a.createOscillator();
+    const g = a.createGain();
+    o.type = opts.type || 'square';
+    o.frequency.setValueAtTime(freq, t0);
+    if (opts.slide) o.frequency.exponentialRampToValueAtTime(Math.max(1, opts.slide), t0 + dur);
+    g.gain.setValueAtTime(0, t0);
+    g.gain.linearRampToValueAtTime(opts.vol || 0.035, t0 + 0.006);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    o.connect(g); g.connect(a.destination);
+    o.start(t0); o.stop(t0 + dur + 0.05);
+  }
+  return {
+    blip:  function () { tone(880, 0.06); },
+    send:  function () { tone(660, 0.06); tone(1320, 0.09, { delay: 0.05 }); },
+    step:  function () { tone(1250, 0.035, { type: 'sine', vol: 0.022 }); },
+    reply: function () { tone(523, 0.08, { type: 'sine' }); tone(784, 0.1, { delay: 0.07, type: 'sine' }); },
+    abort: function () { tone(220, 0.18, { type: 'sawtooth', slide: 90, vol: 0.05 }); },
+    boot:  function () { tone(110, 0.5, { type: 'sawtooth', slide: 440, vol: 0.045 }); tone(880, 0.16, { delay: 0.42, vol: 0.03 }); },
+    toggle: function () { enabled = !enabled; if (enabled) tone(880, 0.06); return enabled; },
+    unlock: function () { ctx(); }
+  };
+})();
+// 浏览器自动播放策略：首个用户手势时解锁 AudioContext
+['pointerdown', 'keydown'].forEach(function (ev) {
+  document.addEventListener(ev, SND.unlock, { once: true });
+});
+
+/* ================= 数字雨（深度分层 + 列首 bloom + 视差反向漂移） ================= */
+(function () {
+  const canvas = document.getElementById('rain');
+  const ctx = canvas.getContext('2d');
+  // 电影原版字符集：半角片假名 + 数字/字母/符号；
+  // 约一半字形做水平镜像（Simon Whiteley 混入镜像拉丁字符的标志性细节）
+  const CHARS = 'ｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿﾀﾁﾂﾃﾄﾅﾆﾇﾈﾉﾊﾋﾌﾍﾎﾏﾐﾑﾒﾓﾔﾕﾖﾗﾘﾙﾚﾛﾜﾝ0123456789ABCDEFXYZ<>+*:;';
+  const FS = 16;
+  let cols = [], last = 0;
+  function resize() {
+    canvas.width = window.innerWidth + 80;
+    canvas.height = window.innerHeight + 80;
+    // 每列携带深度 d∈[0.45,1]：近处的列更大、更亮、下落更快，形成纵深
+    cols = Array.from({ length: Math.ceil(canvas.width / FS) }, function (_, i) {
+      return { x: i * FS, y: Math.random() * -60 * FS, d: 0.45 + Math.random() * 0.55 };
+    });
+  }
+  window.addEventListener('resize', resize);
+  resize();
+  ctx.textAlign = 'center';
+  function draw(ts) {
+    requestAnimationFrame(draw);
+    if (ts - last < 46) return;
+    last = ts;
+    ctx.fillStyle = 'rgba(0,0,0,0.07)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    for (let k = 0; k < cols.length; k++) {
+      const c = cols[k];
+      const size = FS * (0.65 + c.d * 0.55);
+      ctx.font = size + 'px monospace';
+      const ch = CHARS[(Math.random() * CHARS.length) | 0];
+      const x = c.x + FS / 2;
+      if (Math.random() < 0.05 * c.d) {
+        // 列首白炽闪光 + bloom 光晕（近处的列更频繁、更强）
+        ctx.shadowColor = 'rgba(0,255,65,0.9)';
+        ctx.shadowBlur = 16 * c.d;
+        ctx.fillStyle = 'rgba(200,255,212,' + (0.6 + c.d * 0.4).toFixed(3) + ')';
+      } else {
+        // 头部高亮，拖尾由黑色渐隐层自然衰减
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = 'rgba(0,255,65,' + (0.14 + c.d * 0.5).toFixed(3) + ')';
+      }
+      if (Math.random() < 0.45) {
+        // 镜像字形：水平翻转绘制
+        ctx.save();
+        ctx.translate(x, c.y);
+        ctx.scale(-1, 1);
+        ctx.fillText(ch, 0, 0);
+        ctx.restore();
+      } else {
+        ctx.fillText(ch, x, c.y);
+      }
+      // 深度视差：近处下落更快
+      c.y += (0.55 + c.d * 0.85) * size;
+      if (c.y > canvas.height && Math.random() > 0.97) c.y = Math.random() * -30 * size;
+    }
+    ctx.shadowBlur = 0;
+  }
+  requestAnimationFrame(draw);
+})();
+
+/* ================= 透视网格地板（向观察者流动） ================= */
+(function () {
+  const cv = document.getElementById('grid-floor');
+  const ctx = cv.getContext('2d');
+  let W, H;
+  function resize() { W = cv.width = window.innerWidth; H = cv.height = window.innerHeight; }
+  window.addEventListener('resize', resize);
+  resize();
+  let off = 0;
+  const HOR = 0.62; // 地平线高度比例
+  function draw() {
+    requestAnimationFrame(draw);
+    ctx.clearRect(0, 0, W, H);
+    const hy = H * HOR;
+    const vpx = W / 2;
+    off = (off + 0.0035 * FX.speed) % 1;
+    ctx.lineWidth = 1;
+    // 横向线：向观察者推进
+    for (let i = 0; i < 16; i++) {
+      const t = ((i + off) / 16);
+      const y = hy + (H - hy) * t * t;
+      const a = 0.02 + t * 0.16;
+      ctx.strokeStyle = 'rgba(0,255,65,' + a.toFixed(3) + ')';
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+    }
+    // 纵向线：向消失点收束
+    for (let i = -12; i <= 12; i++) {
+      const x2 = vpx + i * (W / 14);
+      const x1 = vpx + i * (W / 90);
+      ctx.strokeStyle = 'rgba(0,255,65,0.07)';
+      ctx.beginPath(); ctx.moveTo(x1, hy); ctx.lineTo(x2, H); ctx.stroke();
+    }
+    // 地平线辉光
+    const g = ctx.createLinearGradient(0, hy - 30, 0, hy + 30);
+    g.addColorStop(0, 'rgba(0,255,65,0)');
+    g.addColorStop(0.5, 'rgba(0,255,65,' + (0.06 * FX.glow + 0.03) + ')');
+    g.addColorStop(1, 'rgba(0,255,65,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, hy - 30, W, 60);
+  }
+  draw();
+})();
+
+/* ================= 3D 神经核心：线框二十面体 + 轨道粒子环 ================= */
+(function () {
+  const cv = document.getElementById('core');
+  const ctx = cv.getContext('2d');
+  let W, H, CX, CY;
+  function resize() {
+    W = cv.width = cv.clientWidth * 2;  // 高清渲染
+    H = cv.height = cv.clientHeight * 2;
+    CX = W / 2; CY = H / 2 - 8;
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  // 二十面体顶点（黄金比例）
+  const t = (1 + Math.sqrt(5)) / 2;
+  const raw = [
+    [-1, t, 0], [1, t, 0], [-1, -t, 0], [1, -t, 0],
+    [0, -1, t], [0, 1, t], [0, -1, -t], [0, 1, -t],
+    [t, 0, -1], [t, 0, 1], [-t, 0, -1], [-t, 0, 1]
+  ];
+  const norm = Math.sqrt(1 + t * t);
+  const V = raw.map(v => v.map(c => c / norm));
+  // 边：所有距离为 2/norm 的点对
+  const EDGES = [];
+  const edgeLen = 2 / norm;
+  for (let i = 0; i < V.length; i++)
+    for (let j = i + 1; j < V.length; j++) {
+      const dx = V[i][0] - V[j][0], dy = V[i][1] - V[j][1], dz = V[i][2] - V[j][2];
+      if (Math.abs(Math.sqrt(dx*dx + dy*dy + dz*dz) - edgeLen) < 0.01) EDGES.push([i, j]);
+    }
+  // 轨道粒子
+  const P = Array.from({ length: 42 }, (_, i) => ({
+    a: (i / 42) * Math.PI * 2,
+    r: 1.45 + Math.random() * 0.25,
+    tilt: Math.random() * 0.9 - 0.45,
+    sp: 0.4 + Math.random() * 0.6
+  }));
+
+  let rx = 0.4, ry = 0;
+  function project(v) {
+    // 旋转
+    const cy = Math.cos(ry), sy = Math.sin(ry);
+    let x = v[0] * cy + v[2] * sy, z = -v[0] * sy + v[2] * cy, y = v[1];
+    const cx2 = Math.cos(rx), sx2 = Math.sin(rx);
+    const y2 = y * cx2 - z * sx2, z2 = y * sx2 + z * cx2;
+    // 透视
+    const d = 3.4;
+    const s = (d / (d + z2)) * (H * 0.24);
+    return [CX + x * s, CY + y2 * s, z2];
+  }
+  function draw() {
+    requestAnimationFrame(draw);
+    ctx.clearRect(0, 0, W, H);
+    ry += 0.012 * FX.speed;
+    rx = 0.35 + Math.sin(ry * 0.4) * 0.18;
+    const glow = FX.glow;
+
+    // 核心辉光
+    const g = ctx.createRadialGradient(CX, CY, 4, CX, CY, H * 0.42);
+    g.addColorStop(0, 'rgba(0,255,65,' + (0.22 * glow) + ')');
+    g.addColorStop(1, 'rgba(0,255,65,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H);
+
+    // 轨道粒子
+    for (const p of P) {
+      p.a += 0.008 * p.sp * FX.speed;
+      const px = Math.cos(p.a) * p.r;
+      const pz = Math.sin(p.a) * p.r * Math.cos(p.tilt);
+      const py = Math.sin(p.a) * p.r * Math.sin(p.tilt) * 0.6;
+      const q = project([px, py, pz]);
+      const depth = (q[2] + 2) / 4;
+      ctx.fillStyle = 'rgba(0,255,65,' + (0.12 + depth * 0.5 * glow) + ')';
+      const sz = 1 + depth * 2.2;
+      ctx.fillRect(q[0] - sz / 2, q[1] - sz / 2, sz, sz);
+    }
+
+    // 线框边
+    for (const [i, j] of EDGES) {
+      const a = project(V[i]), b = project(V[j]);
+      const depth = ((a[2] + b[2]) / 2 + 1.6) / 3.2;
+      ctx.strokeStyle = 'rgba(0,255,65,' + (0.08 + depth * 0.5 * glow) + ')';
+      ctx.lineWidth = 1 + depth * 1.2;
+      ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke();
+    }
+    // 顶点亮斑
+    for (const v of V) {
+      const q = project(v);
+      const depth = (q[2] + 1.6) / 3.2;
+      ctx.fillStyle = 'rgba(200,255,212,' + (0.15 + depth * 0.7 * glow) + ')';
+      ctx.beginPath(); ctx.arc(q[0], q[1], 1.4 + depth * 2.4, 0, Math.PI * 2); ctx.fill();
+    }
+  }
+  draw();
+})();
+
+/* ================= 神经负载频谱仪 ================= */
+(function () {
+  const cv = document.getElementById('spectrum');
+  const ctx = cv.getContext('2d');
+  function resize() { cv.width = cv.clientWidth * 2; cv.height = cv.clientHeight * 2; }
+  window.addEventListener('resize', resize);
+  resize();
+  const N = 18;
+  let ph = 0;
+  function draw() {
+    requestAnimationFrame(draw);
+    ph += 0.05 * FX.speed;
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    const bw = cv.width / N;
+    for (let i = 0; i < N; i++) {
+      const v = (Math.sin(ph + i * 0.7) * 0.5 + 0.5) * (Math.sin(ph * 0.6 + i * 1.9) * 0.5 + 0.5);
+      const h = 4 + v * cv.height * 0.82 * FX.load;
+      const x = i * bw + 2;
+      ctx.fillStyle = v > 0.62 ? 'rgba(200,255,212,0.85)' : 'rgba(0,255,65,' + (0.25 + v * 0.55) + ')';
+      ctx.fillRect(x, cv.height - h, bw - 4, h);
+    }
+  }
+  draw();
+})();
+
+/* ================= 鼠标空间视差 ================= */
+(function () {
+  const stage = document.getElementById('stage');
+  const rain = document.getElementById('rain');
+  let tx = 0, ty = 0, cx = 0, cy = 0;
+  document.addEventListener('mousemove', function (e) {
+    tx = (e.clientX / window.innerWidth - 0.5) * 2;
+    ty = (e.clientY / window.innerHeight - 0.5) * 2;
+  });
+  (function loop() {
+    requestAnimationFrame(loop);
+    cx += (tx - cx) * 0.06;
+    cy += (ty - cy) * 0.06;
+    stage.style.transform =
+      'perspective(1600px) rotateY(' + (cx * 0.8) + 'deg) rotateX(' + (-cy * 0.8) + 'deg)';
+    rain.style.transform = 'translate(' + (-cx * 14) + 'px,' + (-cy * 10) + 'px)';
+  })();
+})();
+
+/* ================= CRT 亮度抖动 + 开机亮线清理 ================= */
+setTimeout(function () {
+  const el = document.getElementById('crt-on');
+  if (el) el.remove();
+}, 1000);
+(function () {
+  const fl = document.querySelector('.crt-flicker');
+  (function flick() {
+    // 常态微弱抖动，偶发一次稍强的亮度跌落
+    fl.style.opacity = Math.random() < 0.06
+      ? (0.05 + Math.random() * 0.05).toFixed(3)
+      : (Math.random() * 0.03).toFixed(3);
+    setTimeout(flick, 70 + Math.random() * 110);
+  })();
+})();
+
+/* ================= 时钟 / 状态栏 ================= */
+const bootTime = Date.now();
+let tokenCount = 0;
+function tick() {
+  const d = new Date();
+  const p = n => String(n).padStart(2, '0');
+  document.getElementById('clock').textContent = p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds());
+  const up = Math.floor((Date.now() - bootTime) / 1000);
+  document.getElementById('st-uptime').textContent = 'uptime: ' + p(Math.floor(up / 60)) + ':' + p(up % 60);
+  document.getElementById('st-tokens').textContent = 'tokens: ' + tokenCount.toLocaleString();
+}
+setInterval(tick, 1000);
+tick();
+setInterval(() => {
+  document.getElementById('latency').textContent = (12 + ((Math.random() * 14) | 0)) + 'ms';
+}, 3000);
+
+/* 音效开关 */
+document.getElementById('snd-toggle').addEventListener('click', function () {
+  const on = SND.toggle();
+  this.textContent = 'SND: ' + (on ? 'ON' : 'OFF');
+  this.style.color = on ? '' : 'var(--dim)';
+});
+
+/* ================= 日志终端 ================= */
+const termBody = document.getElementById('term-body');
+function tlog(html, cls) {
+  const line = document.createElement('div');
+  if (cls) line.className = cls;
+  const d = new Date();
+  const p = n => String(n).padStart(2, '0');
+  line.innerHTML = '<span class="t-dim">[' + p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds()) + ']</span> ' + html;
+  termBody.appendChild(line);
+  termBody.scrollTop = termBody.scrollHeight;
+  while (termBody.children.length > 120) termBody.removeChild(termBody.firstChild);
+}
+const ambient = [
+  ['心跳包已确认 · zion-core-01', 't-dim'],
+  ['memory.index: 1842 条向量已就绪', ''],
+  ['watcher: 无文件变更', 't-dim'],
+  ['gc: 回收 3 个空闲上下文窗口', 't-dim'],
+  ['uplink 吞吐 1.2 MB/s', ''],
+  ['policy.engine: 规则快照 v41 已加载', ''],
+];
+tlog('<span class="t-ok">[OK]</span> 子系统自检完成 — 7/7 通过');
+tlog('<span class="t-ok">[OK]</span> 工具链注册：shell / fs / web / memory / code-search');
+tlog('等待操作员输入…', 't-dim');
+setInterval(() => {
+  const a = ambient[(Math.random() * ambient.length) | 0];
+  tlog(a[0], a[1]);
+}, 7000);
+
+/* ================= 开机引导 ================= */
+(function () {
+  const boot = document.getElementById('boot');
+  const log = document.getElementById('boot-log');
+  const bar = document.querySelector('#boot-bar i');
+  const lines = [
+    ['ZION MAINFRAME — BIOS v2.0 NEURAL', 'b'],
+    ['正在建立加密上行链路 ............ <span class="b">[OK]</span>', ''],
+    ['加载神经接口驱动 ................ <span class="b">[OK]</span>', ''],
+    ['校准全息投影矩阵 ................ <span class="b">[OK]</span>', ''],
+    ['唤醒 Agent 集群: NEO-7 / TRINITY-2 / MORPHEUS-0', ''],
+    ['', ''],
+    ['Wake up, operator…', 'b'],
+    ['The Matrix has you.', ''],
+    ['接入主控台 _', 'b'],
+  ];
+  let li = 0, done = false;
+  function finish() {
+    if (done) return;
+    done = true;
+    SND.boot();
+    boot.classList.add('done');
+    setTimeout(() => boot.remove(), 1400);
+  }
+  function next() {
+    if (done) return;
+    if (li >= lines.length) { bar.style.width = '100%'; setTimeout(finish, 700); return; }
+    const div = document.createElement('div');
+    div.innerHTML = lines[li][0] || '&nbsp;';
+    if (lines[li][1] === 'b') div.className = 'b';
+    log.appendChild(div);
+    li++;
+    bar.style.width = Math.round((li / lines.length) * 100) + '%';
+    setTimeout(next, li < 5 ? 400 : 600);
+  }
+  document.getElementById('boot-skip').addEventListener('click', finish);
+  boot.addEventListener('click', function (e) { if (e.target.id !== 'boot-skip') finish(); });
+  // 等 CRT 开机亮线拉开后再开始打印日志
+  setTimeout(next, 750);
+})();
+
+/* ================= 会话 ================= */
+const feed = document.getElementById('feed');
+const cmdline = document.getElementById('cmdline');
+const sendBtn = document.getElementById('send-btn');
+const stState = document.getElementById('st-state');
+let streaming = false;
+let abortStream = false;
+
+function now() {
+  const d = new Date();
+  const p = n => String(n).padStart(2, '0');
+  return p(d.getHours()) + ':' + p(d.getMinutes());
+}
+function scrollFeed() { feed.scrollTop = feed.scrollHeight; }
+
+function addMsg(role, text) {
+  const msg = document.createElement('div');
+  msg.className = 'msg ' + role;
+  const who = role === 'user' ? 'OPERATOR' : document.getElementById('core-agent').textContent;
+  msg.innerHTML =
+    '<div class="msg-head"><span>' + who + '</span><span class="m-time">' + now() + '</span></div>' +
+    '<div class="msg-body"></div>';
+  feed.appendChild(msg);
+  const body = msg.querySelector('.msg-body');
+  if (text) body.textContent = text;
+  scrollFeed();
+  return body;
+}
+
+function addTrace(steps) {
+  const t = document.createElement('div');
+  t.className = 'trace';
+  feed.appendChild(t);
+  scrollFeed();
+  return { el: t, steps: steps.slice() };
+}
+function runTrace(trace, done) {
+  let i = 0;
+  function step() {
+    if (abortStream) { done(); return; }
+    if (i > 0) {
+      const prev = trace.el.children[i - 1];
+      prev.classList.remove('run');
+      prev.classList.add('done');
+      prev.querySelector('.st').textContent = '完成';
+      SND.step();
+    }
+    if (i >= trace.steps.length) { done(); return; }
+    const s = trace.steps[i];
+    const row = document.createElement('div');
+    row.className = 'step run';
+    row.innerHTML = '<span class="tag">' + s.tag + '</span><span>' + s.label + '</span><span class="st">执行中…</span>';
+    trace.el.appendChild(row);
+    scrollFeed();
+    i++;
+    setTimeout(step, 380 + Math.random() * 420);
+  }
+  step();
+}
+
+function renderInline(text) {
+  return text
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/【([^】]+)】/g, '<span class="hl">$1</span>');
+}
+
+function streamReply(body, fullText, cb) {
+  body.innerHTML = '';
+  const caret = document.createElement('span');
+  caret.className = 'caret';
+  body.appendChild(caret);
+  let i = 0;
+  (function tickChar() {
+    if (abortStream) {
+      caret.remove();
+      body.innerHTML += '\n<span style="color:var(--danger)">[已被操作员中断]</span>';
+      cb();
+      return;
+    }
+    const chunk = 1 + ((Math.random() * 2) | 0);
+    i = Math.min(i + chunk, fullText.length);
+    body.innerHTML = renderInline(fullText.slice(0, i));
+    body.appendChild(caret);
+    tokenCount += chunk * 2;
+    scrollFeed();
+    if (i >= fullText.length) { caret.remove(); cb(); return; }
+    const ch = fullText[i - 1];
+    setTimeout(tickChar, ch === '\n' ? 160 : 18 + Math.random() * 26);
+  })();
+}
+
+/* ---------- Agent 回复脚本 ---------- */
+const REPLIES = [
+  {
+    match: /status|状态/,
+    trace: [
+      { tag: '[sys]', label: '采集 7 个子系统心跳' },
+      { tag: '[net]', label: '探测 zion 主网延迟' },
+    ],
+    text: '系统状态摘要：\n· 上行链路 【稳定】，当前延迟 18ms\n· Agent 集群 3/3 在线，NEO-7 待命，MORPHEUS-0 训练中\n· 记忆库 1842 条向量就绪，索引新鲜度 4 分钟\n· 神经核心转速正常，负载频谱平稳\n· 上下文占用 12.4k / 128k，余量充足\n\n没有待处理的告警。可以随时下达下一步指令。'
+  },
+  {
+    match: /trace|回放|链路/,
+    trace: [
+      { tag: '[replay]', label: '加载运行记录 run_0046' },
+      { tag: '[fmt]', label: '重建调用时间线' },
+    ],
+    text: '上一次运行（run_0046）回放：\n\n1. 【规划】拆解为 3 个子任务，耗时 1.2s\n2. 【检索】memory.search → 命中 6 条，相关度 ≥ 0.81\n3. 【执行】shell: `npm run build` → 退出码 0\n4. 【校验】diff 对比预期产物，一致\n\n总耗时 8.4s，无重试。完整链路已写入 `logs/run_0046.jsonl`。'
+  },
+  {
+    match: /记忆|memory|检索/,
+    trace: [
+      { tag: '[mem]', label: '向量检索 "调试偏好"' },
+      { tag: '[rank]', label: '重排序 top-6 结果' },
+    ],
+    text: '记忆库检索完成，命中 2 条高相关条目：\n\n· `debugging-methodology.md` — 先定位代码逻辑、DOM 行为与 API 调用，不预设环境问题\n· `chrome-devtools-debugging-preference.md` — 调试时不再询问扩展是否刷新\n\n两条均为 feedback 类型，已在当前会话生效。需要我展开全文吗？'
+  },
+  {
+    match: /扫描|风险|项目/,
+    trace: [
+      { tag: '[fs]', label: '遍历项目目录（跳过 node_modules）' },
+      { tag: '[sast]', label: '运行静态规则集 v41' },
+      { tag: '[dep]', label: '核对依赖许可证与版本' },
+    ],
+    text: '项目扫描完成：\n\n· 源码文件 47 个，未发现硬编码密钥\n· 依赖 128 项，其中 【2 项】存在已知 CVE（均为低危，dev 依赖）\n· 静态规则命中 3 处：2 处未处理的 Promise 拒绝，1 处过宽的 CORS 配置\n\n建议先处理 CORS 那一处。要我把详细清单列出来吗？'
+  },
+  {
+    match: /edit|编辑|修改/,
+    text: '__EDIT__'
+  },
+  {
+    match: /clear|清空/,
+    text: '__CLEAR__'
+  },
+  {
+    match: /./,
+    trace: [
+      { tag: '[plan]', label: '解析意图，拆解任务' },
+      { tag: '[tool]', label: '调用 code-search 收集上下文' },
+      { tag: '[llm]', label: '生成候选方案并自检' },
+    ],
+    text: '收到。我拆解了一下这条指令：\n\n· 目标：【完成你描述的任务】\n· 约束：保持当前代码风格，改动最小化\n· 计划：先检索相关上下文，再给出可执行方案\n\n这是一个原型演示 —— 真实接入模型后，这里会输出完整的推理与工具调用结果。试试左侧快捷指令，或输入 /status 查看系统状态。'
+  },
+];
+
+function pickReply(input) {
+  for (const r of REPLIES) if (r.match.test(input)) return r;
+  return REPLIES[REPLIES.length - 1];
+}
+
+function setBusy(busy) {
+  streaming = busy;
+  stState.textContent = busy ? 'STREAMING' : 'READY';
+  stState.style.color = busy ? 'var(--warn)' : '';
+  // 联动：核心加速 + 负载频谱升高
+  FX.speed = busy ? 3.2 : 1;
+  FX.glow = busy ? 1 : 0.55;
+  FX.load = busy ? 0.95 : 0.25;
+  if (busy) {
+    sendBtn.textContent = '中断';
+    sendBtn.classList.add('stop');
+  } else {
+    sendBtn.textContent = '发送';
+    sendBtn.classList.remove('stop');
+  }
+}
+
+function send(text) {
+  const input = (text !== undefined ? text : cmdline.value).trim();
+  if (!input || streaming) return;
+  cmdline.value = '';
+  addMsg('user', input);
+  SND.send();
+  const agentName = document.getElementById('core-agent').textContent.toLowerCase();
+  tlog('operator → ' + agentName + ': "' + (input.length > 42 ? input.slice(0, 42) + '…' : input) + '"');
+
+  const reply = pickReply(input);
+  if (reply.text === '__CLEAR__') {
+    feed.innerHTML = '';
+    tlog('<span class="t-ok">[OK]</span> 会话缓冲区已清空');
+    return;
+  }
+  if (reply.text === '__EDIT__') {
+    setBusy(true);
+    abortStream = false;
+    // 从指令里解析文件名，缺省编辑 neural-core.js
+    const m = input.match(/([\w\-.]+\.(?:js|ts|css|html|json|md))/i);
+    const target = m ? findPathByName(m[1]) || ('src/core/' + m[1]) : 'src/core/neural-core.js';
+    const rows = EDIT_DEMOS[target] || EDIT_DEMOS['src/core/neural-core.js'];
+    editFileFlow({ file: target, rows: rows });
+    return;
+  }
+
+  setBusy(true);
+  abortStream = false;
+  const trace = addTrace(reply.trace || []);
+  runTrace(trace, function () {
+    if (reply.trace && reply.trace.length) tlog('工具链执行完成 · ' + reply.trace.length + ' 步', 't-ok');
+    const body = addMsg('agent');
+    streamReply(body, reply.text, function () {
+      if (!abortStream) SND.reply();
+      setBusy(false);
+      tlog('响应完成 · 输出 ' + reply.text.length + ' 字符', 't-dim');
+    });
+  });
+}
+
+sendBtn.addEventListener('click', function () {
+  if (streaming) {
+    abortStream = true;
+    SND.abort();
+    tlog('<span class="t-err">[INT]</span> 操作员中断当前生成', 't-err');
+  } else {
+    send();
+  }
+});
+cmdline.addEventListener('keydown', function (e) {
+  if (e.key === 'Enter') {
+    if (streaming) { abortStream = true; SND.abort(); }
+    else send();
+  }
+});
+document.querySelectorAll('.qcmd').forEach(function (b) {
+  b.addEventListener('click', function () { send(b.dataset.cmd); });
+});
+
+/* ================= 编辑文件：蠕虫定位 + diff 展示 ================= */
+/* 蠕虫：一条由片假名/符号组成的字符蛇，从输入区爬到文件树目标行。 */
+const WORM_CHARS = 'ｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿ0123456789<>+*';
+const wormCv = document.getElementById('worm');
+const wormCtx = wormCv.getContext('2d');
+function wormResize() { wormCv.width = window.innerWidth; wormCv.height = window.innerHeight; }
+window.addEventListener('resize', wormResize);
+wormResize();
+
+let wormAnim = null;
+function releaseWorm(targetRow, done) {
+  // 起点：输入区中央上方
+  const startEl = document.querySelector('.input-row');
+  const sr = startEl.getBoundingClientRect();
+  const sx = sr.left + sr.width * 0.5;
+  const sy = sr.top - 6;
+
+  // 目标若在侧栏可视区外，先滚动侧栏让其可见（不用 scrollIntoView，避免破坏嵌入预览）
+  const sidebar = document.querySelector('.sidebar');
+  const srect = sidebar.getBoundingClientRect();
+  let tr2 = targetRow.getBoundingClientRect();
+  if (tr2.top < srect.top || tr2.bottom > srect.bottom) {
+    sidebar.scrollTop += (tr2.top - srect.top) - srect.height / 2;
+    tr2 = targetRow.getBoundingClientRect();
+  }
+  const TX = tr2.left + 14, TY = tr2.top + tr2.height / 2;
+
+  // 途经点：先向右出输入区，再横向切到侧栏，制造折线爬行的「虫子」感
+  const midX = sr.left + sr.width * 0.78;
+  const path = [
+    { x: sx, y: sy },
+    { x: midX, y: sy - 30 },
+    { x: midX, y: TY },
+    { x: TX, y: TY },
+  ];
+  // 把折线路径采样成等距点
+  const pts = [];
+  for (let i = 0; i < path.length - 1; i++) {
+    const a = path[i], b = path[i + 1];
+    const segLen = Math.hypot(b.x - a.x, b.y - a.y);
+    const steps = Math.max(2, Math.floor(segLen / 10));
+    for (let s = 0; s < steps; s++) {
+      pts.push({ x: a.x + (b.x - a.x) * (s / steps), y: a.y + (b.y - a.y) * (s / steps) });
+    }
+  }
+  pts.push({ x: TX, y: TY });
+
+  const LEN = 16;          // 蠕虫体节数
+  const SPEED = 3;         // 每帧前进的采样点数
+  let head = 0;
+  const cell = 13;
+
+  if (wormAnim) cancelAnimationFrame(wormAnim);
+  (function frame() {
+    wormCtx.clearRect(0, 0, wormCv.width, wormCv.height);
+    head += SPEED;
+    if (head >= pts.length + LEN * 2) {
+      wormCtx.clearRect(0, 0, wormCv.width, wormCv.height);
+      wormAnim = null;
+      // 命中：目标行放电
+      targetRow.classList.remove('worm-hit');
+      void targetRow.offsetWidth; // 重触发动画
+      targetRow.classList.add('worm-hit');
+      setTimeout(() => targetRow.classList.remove('worm-hit'), 950);
+      const dot = targetRow.querySelector('.ft-dot');
+      if (dot) { dot.classList.add('firing'); setTimeout(() => dot.classList.remove('firing'), 700); }
+      done && done();
+      return;
+    }
+    for (let i = 0; i < LEN; i++) {
+      const idx = head - i;
+      if (idx < 0 || idx >= pts.length) continue;
+      const p = pts[idx];
+      const t = 1 - i / LEN;                 // 头亮尾暗
+      const a = 0.15 + t * 0.75;
+      wormCtx.font = cell + 'px monospace';
+      wormCtx.textAlign = 'center';
+      wormCtx.textBaseline = 'middle';
+      if (i === 0) {
+        wormCtx.shadowColor = 'rgba(0,255,65,0.95)';
+        wormCtx.shadowBlur = 14;
+        wormCtx.fillStyle = 'rgba(200,255,212,' + a.toFixed(3) + ')';
+      } else {
+        wormCtx.shadowBlur = 0;
+        wormCtx.fillStyle = 'rgba(0,255,65,' + a.toFixed(3) + ')';
+      }
+      const ch = WORM_CHARS[(Math.random() * WORM_CHARS.length) | 0];
+      wormCtx.fillText(ch, p.x, p.y + Math.sin((idx) * 0.5) * 2);
+    }
+    wormCtx.shadowBlur = 0;
+    wormAnim = requestAnimationFrame(frame);
+  })();
+}
+
+/* diff 卡：行号 + 红删/绿增，逐行扫入 */
+function esc(s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;'); }
+function addDiffCard(file, rows) {
+  const card = document.createElement('div');
+  card.className = 'diff';
+  card.setAttribute('data-od-id', 'diff-' + file.replace(/[^a-z0-9]/gi, '-'));
+  let html = '<div class="diff-head"><span class="d-file">✎ ' + esc(file) + '</span><span class="d-op">modified</span></div><div class="diff-body">';
+  rows.forEach(function (r, i) {
+    const cls = r.t === '+' ? 'add' : r.t === '-' ? 'del' : 'ctx';
+    const sign = r.t === '+' ? '+' : r.t === '-' ? '-' : '·';
+    const ln = r.n === null ? '' : r.n;
+    html += '<div class="diff-line ' + cls + ' reveal" style="animation-delay:' + (i * 40) + 'ms">' +
+      '<span class="ln">' + ln + '</span><span class="sign">' + sign + '</span>' +
+      '<span class="code">' + esc(r.c) + '</span></div>';
+  });
+  card.innerHTML = html + '</div>';
+  feed.appendChild(card);
+  scrollFeed();
+  return card;
+}
+
+/* 文件树查找：按路径片段定位 .ft-row */
+function findFileRow(path) {
+  const name = path.split('/').pop();
+  const rows = document.querySelectorAll('#file-tree .ft-row');
+  for (const r of rows) {
+    if (r.title === path) return r;
+  }
+  for (const r of rows) {
+    const nm = r.querySelector('.ft-name');
+    if (nm && nm.textContent === name) return r;
+  }
+  return null;
+}
+
+/* 编辑文件主流程：trace → 蠕虫 → diff */
+function editFileFlow(spec) {
+  const row = findFileRow(spec.file);
+  const trace = addTrace([
+    { tag: '[locate]', label: '定位 ' + spec.file + ' 在突触映射中的节点' },
+    { tag: '[worm]', label: '释放编辑蠕虫，注入修改载体' },
+    { tag: '[diff]', label: '渲染变更差异' },
+  ]);
+  runTrace(trace, function () {
+    if (row) {
+      releaseWorm(row, function () {
+        tlog('蠕虫命中 → ' + spec.file, 't-ok');
+        addDiffCard(spec.file, spec.rows);
+        SND.reply();
+        setBusy(false);
+      });
+    } else {
+      addDiffCard(spec.file, spec.rows);
+      setBusy(false);
+    }
+  });
+}
+
+/* 示例编辑内容（演示用，真实接入时由模型产出 diff） */
+const EDIT_DEMOS = {
+  'src/core/neural-core.js': [
+    { n: 5, t: ' ', c: '  cursor: pointer;' },
+    { n: 6, t: '-', c: '  font-size: 16px;' },
+    { n: 6, t: '+', c: '  font-size: 18px;' },
+    { n: 7, t: ' ', c: '  padding: 5px;' },
+    { n: 8, t: '-', c: '  background-color: #fff;' },
+    { n: 8, t: '+', c: '  background-color: #0f0f0f;' },
+    { n: 9, t: '-', c: '  border: 1px solid #ccc;' },
+    { n: 9, t: '+', c: '  border: 1px solid #333;' },
+    { n: 10, t: ' ', c: '  font-size: 18px;' },
+    { n: 11, t: '-', c: '  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);' },
+    { n: 11, t: '+', c: '  background: linear-gradient(135deg, #00ff41 0%, #00b32d 100%);' },
+    { n: 12, t: ' ', c: '  border: none;' },
+    { n: 13, t: ' ', c: '  border-radius: 50%;' },
+    { n: 14, t: ' ', c: '  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);' },
+    { n: 15, t: ' ', c: '  transition: all 0.2s ease;' },
+    { n: 16, t: '-', c: '  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);' },
+    { n: 16, t: '+', c: '  box-shadow: 0 4px 12px rgba(0, 255, 65, 0.4);' },
+  ],
+};
+
+/* ---------- 侧栏交互 ---------- */
+document.querySelectorAll('.agent-card').forEach(function (card) {
+  card.addEventListener('click', function () {
+    document.querySelectorAll('.agent-card').forEach(c => c.classList.remove('active'));
+    card.classList.add('active');
+    const name = card.querySelector('.a-name').textContent;
+    document.getElementById('chip-model').textContent = 'MODEL: ' + name;
+    document.getElementById('core-agent').textContent = name;
+    cmdline.placeholder = '向 ' + name + ' 下达指令…（Enter 发送）';
+    SND.blip();
+    tlog('已切换目标 Agent → ' + name, 't-ok');
+  });
+});
+/* ---------- 项目文件 · 突触树 ---------- */
+const FILE_TREE = [
+  { name: 'src', dir: true, open: true, children: [
+    { name: 'core', dir: true, open: true, children: [
+      { name: 'neural-core.js', size: '8.2k' },
+      { name: 'synapse-bus.js', size: '3.1k' },
+      { name: 'memory-bank.js', size: '5.7k' },
+    ]},
+    { name: 'agents', dir: true, children: [
+      { name: 'neo-7.js', size: '4.4k' },
+      { name: 'trinity-2.js', size: '3.9k' },
+      { name: 'morpheus-0.js', size: '6.0k' },
+    ]},
+    { name: 'ui', dir: true, children: [
+      { name: 'rain.js', size: '2.6k' },
+      { name: 'grid-floor.js', size: '1.8k' },
+      { name: 'spectrum.js', size: '1.2k' },
+    ]},
+    { name: 'main.js', size: '7.3k' },
+  ]},
+  { name: 'assets', dir: true, children: [
+    { name: 'glyphs.kf', size: '412k' },
+    { name: 'crt-overlay.png', size: '96k' },
+  ]},
+  { name: 'brand-spec.md', size: '2.1k' },
+  { name: 'index-v2.html', size: '41k' },
+  { name: 'od.config.json', size: '0.8k' },
+];
+const fileTreeEl = document.getElementById('file-tree');
+function buildTree(nodes, parent, path, depth) {
+  nodes.forEach(function (n) {
+    const full = path ? path + '/' + n.name : n.name;
+    const node = document.createElement('div');
+    node.className = 'ft-node' + (n.dir ? ' dir' : '') + (n.open ? ' open' : '');
+    const row = document.createElement('div');
+    row.className = 'ft-row';
+    row.title = full;
+    if (n.dir) {
+      row.innerHTML = '<span class="ft-caret">▸</span><span class="ft-dot"></span><span class="ft-name"></span>';
+    } else {
+      row.innerHTML = '<span class="ft-dot"></span><span class="ft-name"></span><span class="ft-size"></span>';
+    }
+    row.querySelector('.ft-name').textContent = n.name;
+    const sz = row.querySelector('.ft-size');
+    if (sz) sz.textContent = n.size;
+    node.appendChild(row);
+    if (n.dir) {
+      const kids = document.createElement('div');
+      kids.className = 'ft-children';
+      const inner = document.createElement('div');
+      inner.className = 'ft-inner';
+      inner.style.setProperty('--pulse-delay', (depth * 0.7) + 's');
+      kids.appendChild(inner);
+      buildTree(n.children, inner, full, depth + 1);
+      node.appendChild(kids);
+      row.addEventListener('click', function () {
+        node.classList.toggle('open');
+        SND.blip();
+        tlog((node.classList.contains('open') ? '展开目录 → ' : '收起目录 → ') + full);
+      });
+    } else {
+      row.addEventListener('click', function () {
+        document.querySelectorAll('#file-tree .ft-row').forEach(r => r.classList.remove('active'));
+        row.classList.add('active');
+        document.getElementById('conv-title').textContent = full;
+        SND.blip();
+        tlog('挂载文件 → ' + full + ' <span class="t-dim">(' + n.size + ')</span>', 't-ok');
+        // 触发一次编辑演示：释放蠕虫定位该文件 + 展示 diff
+        if (!streaming) {
+          const rows = EDIT_DEMOS[full] || EDIT_DEMOS['src/core/neural-core.js'];
+          addMsg('user', '修改 ' + full);
+          setBusy(true);
+          abortStream = false;
+          editFileFlow({ file: full, rows: rows });
+        }
+      });
+    }
+    parent.appendChild(node);
+  });
+}
+buildTree(FILE_TREE, fileTreeEl, '', 0);
+/* 按文件名反查完整路径 */
+function findPathByName(name) {
+  let found = null;
+  (function walk(nodes, path) {
+    nodes.forEach(function (n) {
+      const full = path ? path + '/' + n.name : n.name;
+      if (!n.dir && n.name === name) found = full;
+      if (n.dir && n.children) walk(n.children, full);
+    });
+  })(FILE_TREE, '');
+  return found;
+}
+/* 随机突触放电 */
+setInterval(function () {
+  const dots = document.querySelectorAll('#file-tree .ft-dot');
+  if (!dots.length) return;
+  const d = dots[Math.floor(Math.random() * dots.length)];
+  d.classList.add('firing');
+  setTimeout(() => d.classList.remove('firing'), 700);
+}, 1800);
+
+/* ---------- 初始对话 ---------- */
+addMsg('agent', '接入成功。我是 【NEO-7】，当前挂载 shell / fs / web / memory / code-search 五条工具链。\n\n左侧是我的神经核心实时投影 —— 我思考时它会加速旋转。直接输入指令，或点下方快捷命令开始。');
+cmdline.focus();
+document.addEventListener('mousedown', function () { setTimeout(() => cmdline.focus(), 0); });
+</script>
+</body>
+</html>
