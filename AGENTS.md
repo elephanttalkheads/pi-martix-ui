@@ -60,7 +60,7 @@ pi-matrix-demo-handoff.md demo → 正式 UI 交接文档：v3 模块清单、mo
 1. **npm 11 allow-scripts** 默认拦截安装脚本 → electron 二进制不下载。首次 `npm install` 后需 `npm approve-scripts electron`；失败则从 `https://npmmirror.com/mirrors/electron/<版本>/` 手动下载 zip 解压到 `node_modules/electron/dist/` 并写 `path.txt`（内容 `electron.exe`）
 2. **vite 8 只绑 IPv6** → `vite.config.mjs` 必须 `server.host: '127.0.0.1'`，否则 `wait-on tcp:127.0.0.1:5173` 卡死、electron 不启动
 3. **preload 必须 `.cjs`（CJS）** —— `sandbox: true` 下 ESM preload 不注入，`window.zion` 会 undefined
-4. npm 源/镜像走 npmmirror（`.npmrc`）；GitHub 域名在本机可能被墙，下载走 npmmirror 镜像
+4. npm 源/镜像走 npmmirror；GitHub 域名在本机可能被墙，electron/electron-builder 下载走镜像。**镜像地址在用户环境变量**（`ELECTRON_MIRROR` / `ELECTRON_BUILDER_BINARIES_MIRROR`，User 作用域，PowerShell `[Environment]::SetEnvironmentVariable`）—— 勿写回 `.npmrc`：npm 11 对未知键告警、npm 12 将不再透传
 5. **SDK 的 d.ts 内部用 `.ts` 后缀 import（tsgo 产物）** → tsconfig 必须 `moduleResolution: bundler` 才能解析；`NodeNext` 解析不到会把整个 SDK import 变 any（静默，typecheck 不易发现）
 6. **CJS 里 `require('electron')` 返回 any** → 用 `/** @type {typeof import('electron')} */` 注解解构（见 preload.cjs）
 7. **`stopReason` 只在 LLM 助手消息分支**（`AgentMessage` 联合的其他成员没有）→ 取 stopReason 用 `'stopReason' in msg` 守卫，直接 `msg.stopReason` 在 strict 下会报错

@@ -18,7 +18,7 @@
 ## 开发
 
 ```bash
-npm install        # .npmrc 已配 npmmirror 镜像（含 electron 二进制）
+npm install        # 需要用户环境变量 ELECTRON_MIRROR / ELECTRON_BUILDER_BINARIES_MIRROR 指向 npmmirror（.npmrc 已不含镜像键，见下）
 npm run dev        # vite dev server + electron（开发）
 npm run typecheck  # renderer + main/preload 双配置类型检查
 npm run smoke      # 构建 + electron 冒烟（CDP 验证桥/渲染/IPC）
@@ -26,6 +26,13 @@ npm run e2e        # 构建 + 真实 prompt E2E（deepseek → 事件流 → fee
 npm start          # 启动 Electron（dist 产物）
 npm run dist       # 打包 NSIS + portable → dist/
 ```
+
+> [!note] electron 镜像配置
+> `electron_mirror` / `electron_builder_binaries_mirror` 是 @electron/get 与 electron-builder 的镜像键，**不是 npm 配置**（npm 11 会告警 Unknown project config，npm 12 将不再透传）。已迁移到用户环境变量（PowerShell）：
+> ```powershell
+> [Environment]::SetEnvironmentVariable('ELECTRON_MIRROR','https://npmmirror.com/mirrors/electron/','User')
+> [Environment]::SetEnvironmentVariable('ELECTRON_BUILDER_BINARIES_MIRROR','https://npmmirror.com/mirrors/electron-builder-binaries/','User')
+> ```
 
 前置：Node ≥ 22.19（本机 v24.19.0 ✓）；pi SDK 要求 Electron ≥ 39（38 内嵌 Node 22.18 不够）。
 
