@@ -7,8 +7,9 @@
 
 - **Electron 43.x**（≥39；38 内嵌 Node 22.18 低于 pi SDK 门槛，不可用）
 - **主进程**：pi SDK 进程内 —— `createAgentSession`（复用 `~/.pi/agent` 配置：auth/models/settings）
-- **renderer**：React 18 + zustand + vite 8（`@vitejs/plugin-react`）
-- **通信**：preload IPC 桥（`contextIsolation: true` + `sandbox: true`，凭据只留主进程）
+- **renderer**：React 18 + zustand + vite 8（`@vitejs/plugin-react`）**+ TypeScript（strict）**
+- **主进程/preload 保持 JS**（`.mjs`/`.cjs`）：preload 受 sandbox 约束必须 CJS；main 的 TS 构建管线是后续步骤。两者用 JSDoc + `tsc -p tsconfig.node.json`（checkJs）做类型检查
+- **通信**：preload IPC 桥（`contextIsolation: true` + `sandbox: true`，凭据只留主进程）；桥面/事件类型契约见 `src/shared/protocol.ts`
 - **打包**：electron-builder（NSIS + portable）；更新通道 Gitee Releases 主 + GitHub 海外镜像（generic provider）
 
 ## 常用命令
@@ -16,6 +17,9 @@
 ```bash
 npm run dev            # vite dev server + electron（开发）
 npm run build:renderer # 构建 renderer → dist-renderer/
+npm run typecheck     # tsc --noEmit 双配置（renderer + main/preload checkJs）
+npm run smoke         # 构建 + 启动 electron 冒烟（CDP 查桥注入/渲染/ipc ping）
+npm run e2e           # 构建 + 真实 prompt E2E（deepseek → 事件流 → feed，~12s）
 npm run dist           # 打包 NSIS + portable → dist/
 ```
 
@@ -26,8 +30,15 @@ npm run dist           # 打包 NSIS + portable → dist/
 ```
 src/main/main.mjs        Electron 主进程：createAgentSession → session.subscribe(事件流) → IPC → renderer
                          IPC: zion:ping / agent:prompt / agent:abort / agent:steer / agent:followUp
-src/preload/preload.cjs  安全桥（window.zion.*）
-src/renderer/src/        React 应用：store.js(zustand) / App.jsx / components/MatrixBg,Feed,InputBar
+                         （JS + JSDoc；类型经 tsconfig.node.json checkJs 校验）
+src/preload/preload.cjs  安全桥（window.zion.*，CJS 必须；桥面契约 = shared/protocol.ts 的 ZionAPI）
+src/shared/protocol.ts   IPC 类型契约单一事实源：AgentSessionEvent（re-export SDK 类型）+ ZionAPI；
+                         渲染层 type-only import，主进程/preload 经 JSDoc import 引用
+src/renderer/src/        React + TS 应用：store.ts(zustand) / App.tsx / env.d.ts(window.zion 声明) /
+                         components/MatrixBg,Feed,InputBar（.tsx）
+tsconfig.json            renderer 类型检查（moduleResolution: bundler，strict，noEmit）
+tsconfig.node.json       main/preload checkJs（bundler 解析 + allowImportingTsExtensions，noEmit）
+scripts/                 smoke-cdp.mjs（冒烟）/ e2e-prompt.mjs（真实 prompt 回归）
 ui-demo/                 index-v3.html = 最新视觉参考（含蠕虫定位动画 releaseWorm、diff 修改卡 addDiffCard、
                          WebAudio 音效 SND、CRT 层、深度分层数字雨）；index-v2.html = 稳定基线；
                          brand-spec.md 设计系统
@@ -50,13 +61,18 @@ pi-matrix-demo-handoff.md demo → 正式 UI 交接文档：v3 模块清单、mo
 2. **vite 8 只绑 IPv6** → `vite.config.mjs` 必须 `server.host: '127.0.0.1'`，否则 `wait-on tcp:127.0.0.1:5173` 卡死、electron 不启动
 3. **preload 必须 `.cjs`（CJS）** —— `sandbox: true` 下 ESM preload 不注入，`window.zion` 会 undefined
 4. npm 源/镜像走 npmmirror（`.npmrc`）；GitHub 域名在本机可能被墙，下载走 npmmirror 镜像
+5. **SDK 的 d.ts 内部用 `.ts` 后缀 import（tsgo 产物）** → tsconfig 必须 `moduleResolution: bundler` 才能解析；`NodeNext` 解析不到会把整个 SDK import 变 any（静默，typecheck 不易发现）
+6. **CJS 里 `require('electron')` 返回 any** → 用 `/** @type {typeof import('electron')} */` 注解解构（见 preload.cjs）
+7. **`stopReason` 只在 LLM 助手消息分支**（`AgentMessage` 联合的其他成员没有）→ 取 stopReason 用 `'stopReason' in msg` 守卫，直接 `msg.stopReason` 在 strict 下会报错
+8. **JSDoc `import('../shared/protocol.ts')` 需要 `allowImportingTsExtensions: true`**（tsconfig.node.json 已开；noEmit 下合法）
 
 ## 当前状态（2026-08-11）
 
 - ✅ 首个可运行闭环 + E2E 验证（真实 prompt → deepseek → 事件流 → feed）
 - ✅ preload/vite 两个坑已修（commit a9c8859）
+- ✅ **TypeScript 重构完成**：renderer 全 TS（strict）+ shared/protocol.ts 类型契约 + main/preload JSDoc 类型 + typecheck/smoke/e2e 回归脚本（typecheck 双配置通过；smoke + 真实 prompt E2E 复验通过）
 - ✅ ui-demo 升级到 index-v3.html：深度分层镜像数字雨 + bloom、CRT 曲率/抖动/开机亮线、WebAudio bleep 音效、蠕虫定位动画（releaseWorm）、diff 修改卡（addDiffCard）、细线条几何 trace 卡片
-- ⬜ 未做：项目选择 UI、v3 视觉/交互资产向 React renderer 迁移（开屏加载页不迁移，见交接文档）、工具调用行详情展开、会话历史/恢复、扩展 UI 桥、项目信任处理、离线字体、Gitee 备份镜像配置、打包实测（dist）
+- ⬜ 未做：项目选择 UI、v3 视觉/交互资产向 React renderer 迁移（开屏加载页不迁移，见交接文档）、工具调用行详情展开、会话历史/恢复、扩展 UI 桥、项目信任处理、离线字体、Gitee 备份镜像配置、打包实测（dist）、main 进程 TS 构建管线
 
 ## Git 约定
 

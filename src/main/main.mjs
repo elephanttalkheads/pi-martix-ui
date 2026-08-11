@@ -14,11 +14,13 @@ const RENDERER_DEV_URL = 'http://127.0.0.1:5173';
 // 初始会话工作目录（项目选择 UI 落地前先用独立工作区，避免 agent 直接操作主目录）
 const WORKSPACE_DIR = path.join('D:', 'zion-workspace');
 
+/** @type {import('electron').BrowserWindow | null} */
 let win = null;
+/** @type {import('@earendil-works/pi-coding-agent').AgentSession | null} */
 let session = null;
 
 function createWindow() {
-  win = new BrowserWindow({
+  const w = new BrowserWindow({
     width: 1440,
     height: 900,
     backgroundColor: '#000000',
@@ -30,12 +32,13 @@ function createWindow() {
       sandbox: true,
     },
   });
-  if (isDev) win.loadURL(RENDERER_DEV_URL);
-  else win.loadFile(path.join(__dirname, '../../dist-renderer/index.html'));
+  win = w;
+  if (isDev) w.loadURL(RENDERER_DEV_URL);
+  else w.loadFile(path.join(__dirname, '../../dist-renderer/index.html'));
 
   // 渲染层加载完成后自检（便于 CDP/日志确认桥已注入）
-  win.webContents.on('did-finish-load', () => {
-    win.webContents.executeJavaScript('Boolean(window.zion)').then((ok) => {
+  w.webContents.on('did-finish-load', () => {
+    w.webContents.executeJavaScript('Boolean(window.zion)').then((ok) => {
       console.log('[zion] preload bridge injected:', ok);
     }).catch(() => {});
   });
@@ -53,16 +56,12 @@ async function ensureSession() {
     });
     session = s;
     // 事件流推给渲染进程
-    s.subscribe((event) => {
+    s.subscribe(/** @param {import('@earendil-works/pi-coding-agent').AgentSessionEvent} event */ (event) => {
       if (win && !win.isDestroyed()) win.webContents.send('agent:event', event);
     });
     return s;
   })();
   return Promise.race([init, timeout]);
-}
-
-function sendEvent(event) {
-  if (win && !win.isDestroyed()) win.webContents.send('agent:event', event);
 }
 
 // ---- IPC ----
@@ -73,8 +72,10 @@ ipcMain.handle('agent:prompt', async (_e, text) => {
   const s = await ensureSession();
   await s.prompt(text);
   // prompt() 从不因模型/请求失败抛错 —— 查末条消息 stopReason
+  // 注意：stopReason 只存在于 LLM 助手消息分支，其他消息类型用 in 守卫跳过
   const last = s.state.messages.at(-1);
-  return last?.stopReason ?? 'ok';
+  const stop = last && 'stopReason' in last ? last.stopReason : undefined;
+  return stop ?? 'ok';
 });
 
 ipcMain.handle('agent:abort', async () => {

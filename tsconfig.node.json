@@ -1,0 +1,19 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    // 类型检查用 bundler 解析：SDK 的 d.ts 内部使用 .ts 后缀 import（tsgo 产物），
+    // NodeNext 解析不到；本配置 noEmit，仅静态检查，不影响运行时。
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "allowJs": true,
+    "checkJs": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "allowImportingTsExtensions": true, // JSDoc import('../shared/protocol.ts') 需要
+    "forceConsistentCasingInFileNames": true,
+    "types": ["node"]
+  },
+  "include": ["src/main", "src/preload", "src/shared"]
+}

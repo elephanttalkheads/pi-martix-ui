@@ -9,6 +9,9 @@
   "scripts": {
     "dev": "concurrently -k \"vite --config vite.config.mjs\" \"wait-on tcp:127.0.0.1:5173 && electron . --dev\"",
     "build:renderer": "vite build --config vite.config.mjs",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json",
+    "smoke": "npm run build:renderer && node scripts/smoke-cdp.mjs",
+    "e2e": "npm run build:renderer && node scripts/e2e-prompt.mjs",
     "start": "electron .",
     "pack": "npm run build:renderer && electron-builder --dir",
     "dist": "npm run build:renderer && electron-builder"
@@ -20,10 +23,14 @@
     "zustand": "^5.0.3"
   },
   "devDependencies": {
+    "@types/node": "^26.2.0",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
     "@vitejs/plugin-react": "^5.2.0",
     "concurrently": "^9.1.2",
     "electron": "^43.2.0",
     "electron-builder": "^26.15.3",
+    "typescript": "^7.0.2",
     "vite": "^8.1.5",
     "wait-on": "^8.0.1"
   },

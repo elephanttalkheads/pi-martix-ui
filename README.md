@@ -12,14 +12,18 @@
 | 桌面壳 | Electron（≥39，当前 43.x 线）— 固定 Chromium，canvas 确定性 |
 | Agent 内核 | pi SDK 进程内（`createAgentSession` + 事件流订阅），复用 `~/.pi/agent` 配置 |
 | 通信 | preload IPC 桥（contextIsolation on，凭据只留主进程） |
-| UI | React 18 + zustand + vite（Matrix 风控制台，canvas 氛围资产来自 ui-demo） |
+| UI | React 18 + zustand + vite + **TypeScript（strict）**（Matrix 风控制台，canvas 氛围资产来自 ui-demo） |
 | 打包 | electron-builder：NSIS 单 exe + portable；Gitee Releases 主更新通道 + GitHub 海外镜像 |
 
 ## 开发
 
 ```bash
 npm install        # .npmrc 已配 npmmirror 镜像（含 electron 二进制）
-npm start          # 启动 Electron
+npm run dev        # vite dev server + electron（开发）
+npm run typecheck  # renderer + main/preload 双配置类型检查
+npm run smoke      # 构建 + electron 冒烟（CDP 验证桥/渲染/IPC）
+npm run e2e        # 构建 + 真实 prompt E2E（deepseek → 事件流 → feed）
+npm start          # 启动 Electron（dist 产物）
 npm run dist       # 打包 NSIS + portable → dist/
 ```
 
@@ -31,9 +35,11 @@ npm run dist       # 打包 NSIS + portable → dist/
 ## 结构
 
 ```
-src/main/        Electron 主进程（pi SDK 接入点）
-src/preload/     IPC 桥
-src/renderer/    React 渲染层（vite 脚手架，构建中）
+src/main/        Electron 主进程（pi SDK 接入点，JS + JSDoc 类型）
+src/preload/     IPC 桥（CJS，类型契约见 src/shared/protocol.ts）
+src/shared/      IPC 类型契约（AgentSessionEvent + ZionAPI）
+src/renderer/    React + TS 渲染层（store.ts / App.tsx / components/）
+scripts/         smoke-cdp.mjs / e2e-prompt.mjs（CDP 回归）
 ui-demo/         静态 UI demo（index-v2.html 视觉参考 + canvas 模块来源、brand-spec 设计系统）
 research/        技术调研（壳层 / pi-SDK / pi-RPC）
 ```

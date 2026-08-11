@@ -16,10 +16,10 @@ export default function InputBar() {
     if (r && r !== 'ok') console.warn('turn ended:', r);
   };
 
-  const onKey = (e) => {
+  const onKey = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      send();
+      void send();
     }
   };
 
@@ -34,9 +34,9 @@ export default function InputBar() {
         spellCheck={false}
       />
       {busy ? (
-        <button className="send-btn danger" onClick={() => window.zion.abort()}>■ 中止</button>
+        <button className="send-btn danger" onClick={() => void window.zion.abort()}>■ 中止</button>
       ) : (
-        <button className="send-btn" onClick={send}>发送</button>
+        <button className="send-btn" onClick={() => void send()}>发送</button>
       )}
     </div>
   );
