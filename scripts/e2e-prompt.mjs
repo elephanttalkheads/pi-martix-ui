@@ -48,8 +48,8 @@ try {
   await sleep(800); // 等事件流消化
   const r2 = await call('Runtime.evaluate', {
     expression: `(() => {
-      const els = [...document.querySelectorAll('.feed-assistant')];
-      return JSON.stringify({ assistantCount: els.length, lastText: els.at(-1)?.textContent?.slice(0, 200) || null, toolRows: document.querySelectorAll('.feed-tool').length });
+      const els = [...document.querySelectorAll('.msg.agent')];
+      return JSON.stringify({ assistantCount: els.length, lastText: els.at(-1)?.querySelector('.msg-body')?.textContent?.slice(0, 200) || null, toolRows: document.querySelectorAll('.trace').length });
     })()`,
     returnByValue: true,
   });

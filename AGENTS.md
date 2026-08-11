@@ -35,7 +35,8 @@ src/preload/preload.cjs  安全桥（window.zion.*，CJS 必须；桥面契约 =
 src/shared/protocol.ts   IPC 类型契约单一事实源：AgentSessionEvent（re-export SDK 类型）+ ZionAPI；
                          渲染层 type-only import，主进程/preload 经 JSDoc import 引用
 src/renderer/src/        React + TS 应用：store.ts(zustand) / App.tsx / env.d.ts(window.zion 声明) /
-                         components/MatrixBg,Feed,InputBar（.tsx）
+                         components/MatrixBg(深度分层数字雨),CrtOverlay, WormLayer(蠕虫动画),SoundFx,
+                         DiffCard, Feed, InputBar（.tsx/.ts）
 tsconfig.json            renderer 类型检查（moduleResolution: bundler，strict，noEmit）
 tsconfig.node.json       main/preload checkJs（bundler 解析 + allowImportingTsExtensions，noEmit）
 scripts/                 smoke-cdp.mjs（冒烟）/ e2e-prompt.mjs（真实 prompt 回归）
@@ -69,10 +70,17 @@ pi-matrix-demo-handoff.md demo → 正式 UI 交接文档：v3 模块清单、mo
 ## 当前状态（2026-08-11）
 
 - ✅ 首个可运行闭环 + E2E 验证（真实 prompt → deepseek → 事件流 → feed）
+- ✅ v3 视觉迁移完成：深度分层数字雨+镜像片假名+bloom / CRT 层（扫描线/暗角/曲面/亮度抖动）/ WebAudio 音效
+  （SND，localStorage 持久化开关）/ 蠕虫动画（编辑类工具调用触发）/ diff 卡（tool 事件解析：edit 的 edits[]/patch、
+  write 的 content、end 事件 result.patch 升级；toolCallId 精确匹配）/ FX 折算规则（agent_start→busy+FX 抬升，
+  rAF 指数插值衰减，规则见 CONTEXT.md）/ 状态栏 SND 开关+时钟
+- ✅ 域文档：CONTEXT.md（词汇表）+ docs/adr/0001-canvas-doom-boundary.md（氛围层 canvas、数据卡 DOM）
+- ✅ 回归：typecheck 双配置 / smoke / 真实 prompt E2E / 真实编辑工具验证（write→diff 卡带内容行）
+- 未做（v3 范围外）：3D 神经核心+频谱+鼠标视差（纯装饰，可后续加）、开屏加载页（明确不实现）
 - ✅ preload/vite 两个坑已修（commit a9c8859）
 - ✅ **TypeScript 重构完成**：renderer 全 TS（strict）+ shared/protocol.ts 类型契约 + main/preload JSDoc 类型 + typecheck/smoke/e2e 回归脚本（typecheck 双配置通过；smoke + 真实 prompt E2E 复验通过）
 - ✅ ui-demo 升级到 index-v3.html：深度分层镜像数字雨 + bloom、CRT 曲率/抖动/开机亮线、WebAudio bleep 音效、蠕虫定位动画（releaseWorm）、diff 修改卡（addDiffCard）、细线条几何 trace 卡片
-- ⬜ 未做：项目选择 UI、v3 视觉/交互资产向 React renderer 迁移（开屏加载页不迁移，见交接文档）、工具调用行详情展开、会话历史/恢复、扩展 UI 桥、项目信任处理、离线字体、Gitee 备份镜像配置、打包实测（dist）、main 进程 TS 构建管线
+- ⬜ 未做：项目选择 UI、工具调用行详情展开（diff 卡已部分覆盖）、会话历史/恢复、扩展 UI 桥、项目信任处理、离线字体、Gitee 备份镜像配置、打包实测（dist）、main 进程 TS 构建管线、v3 残余氛围装饰（3D 神经核心/频谱/视差）
 
 ## Git 约定
 

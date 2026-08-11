@@ -52,7 +52,7 @@ try {
   await sleep(2500);
 
   const r1 = await call('Runtime.evaluate', {
-    expression: `JSON.stringify({ zion: !!window.zion, title: document.title, root: !!document.querySelector('#root'), feedEmpty: document.querySelector('.feed-empty')?.textContent || null, hasBg: !!document.querySelector('.matrix-bg') })`,
+    expression: `JSON.stringify({ zion: !!window.zion, title: document.title, root: !!document.querySelector('#root'), feedEmpty: document.querySelector('.feed-empty')?.textContent || null, hasBg: !!document.querySelector('.rain'), hasCrt: !!document.querySelector('.scanlines') && !!document.querySelector('.crt-flicker'), hasWorm: !!document.querySelector('.worm') })`,
     returnByValue: true, awaitPromise: true,
   });
   console.log('RENDER:', r1.result.value);
