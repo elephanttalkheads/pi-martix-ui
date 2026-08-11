@@ -4,6 +4,7 @@ directories:
   output: dist
 files:
   - src/**/*
+  - dist-renderer/**/*
   - package.json
 win:
   target:
