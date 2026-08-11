@@ -73,10 +73,10 @@ export default function MatrixBg() {
           // 列首白炽闪光 + bloom（近处更频繁、更强）
           ctx.shadowColor = 'rgba(0,255,65,0.9)';
           ctx.shadowBlur = 16 * c.d;
-          ctx.fillStyle = `rgba(200,255,212,${(0.6 + c.d * 0.4).toFixed(3)})`;
+          ctx.fillStyle = `rgba(200,255,212,${(0.7 + c.d * 0.3).toFixed(3)})`;
         } else {
           ctx.shadowBlur = 0;
-          ctx.fillStyle = `rgba(0,255,65,${((0.14 + c.d * 0.5) * loadK).toFixed(3)})`;
+          ctx.fillStyle = `rgba(0,255,65,${((0.24 + c.d * 0.55) * loadK).toFixed(3)})`;
         }
         if (Math.random() < 0.45) {
           // 镜像字形：水平翻转绘制

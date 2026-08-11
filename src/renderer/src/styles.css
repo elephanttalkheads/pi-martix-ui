@@ -2,16 +2,16 @@
    未移植：boot 开屏 / 网格地板 / 3D 神经核心 / 频谱 / 侧栏文件树 / 日志终端 / 鼠标视差 */
 
 :root {
-  --bg: #000000;
-  --surface: rgba(0, 8, 2, 0.86);
-  --surface-2: rgba(0, 14, 4, 0.9);
-  --fg: #00ff41;
-  --muted: #00b32d;
-  --dim: #00591a;
-  --bright: #c8ffd4;
-  --border: rgba(0, 255, 65, 0.22);
-  --danger: #ff4444;
-  --warn: #ffcc00;
+  --bg: #06120a;
+  --surface: rgba(8, 26, 14, 0.88);
+  --surface-2: rgba(10, 32, 17, 0.92);
+  --fg: #22ff5c;
+  --muted: #16c94a;
+  --dim: #0d8a35;
+  --bright: #eafff2;
+  --border: rgba(0, 255, 65, 0.35);
+  --danger: #ff5555;
+  --warn: #ffd23d;
   --font: "Share Tech Mono", ui-monospace, "Courier New", monospace;
   --font-display: "Orbitron", "Share Tech Mono", ui-monospace, monospace;
 }
@@ -19,7 +19,7 @@
 * { margin: 0; padding: 0; box-sizing: border-box; }
 html, body { height: 100%; }
 body {
-  background: var(--bg);
+  background: radial-gradient(ellipse at 50% -10%, rgba(0, 255, 65, 0.07), transparent 62%), var(--bg);
   color: var(--fg);
   font-family: var(--font);
   overflow: hidden;
@@ -34,17 +34,17 @@ body {
 .scanlines {
   position: fixed; inset: 0; z-index: 40; pointer-events: none;
   background: repeating-linear-gradient(0deg,
-    rgba(0,0,0,0.14) 0px, rgba(0,0,0,0.14) 1px, transparent 1px, transparent 3px);
+    rgba(0,0,0,0.08) 0px, rgba(0,0,0,0.08) 1px, transparent 1px, transparent 3px);
 }
 .vignette {
   position: fixed; inset: 0; z-index: 41; pointer-events: none;
-  background: radial-gradient(ellipse at center, transparent 52%, rgba(0,0,0,0.6) 100%);
+  background: radial-gradient(ellipse at center, transparent 58%, rgba(0,0,0,0.4) 100%);
 }
 .crt-glass {
   position: fixed; inset: 0; z-index: 42; pointer-events: none;
   border-radius: 2vw;
-  box-shadow: inset 0 0 9vw rgba(0,0,0,0.85);
-  background: linear-gradient(115deg, rgba(180,255,200,0.028) 0%, transparent 22%);
+  box-shadow: inset 0 0 9vw rgba(0,0,0,0.6);
+  background: linear-gradient(115deg, rgba(180,255,200,0.04) 0%, transparent 22%);
 }
 .crt-flicker {
   position: fixed; inset: 0; z-index: 43; pointer-events: none;
@@ -144,9 +144,9 @@ body {
   perspective: 900px;
 }
 .feed::-webkit-scrollbar { width: 8px; }
-.feed::-webkit-scrollbar-thumb { background: var(--dim); }
+.feed::-webkit-scrollbar-thumb { background: var(--muted); }
 .feed::-webkit-scrollbar-track { background: transparent; }
-.feed-empty { color: var(--dim); }
+.feed-empty { color: var(--muted); }
 
 .msg { margin-bottom: 22px; max-width: 860px; animation: msgIn 0.4s cubic-bezier(0.22,1,0.36,1); transform-origin: top center; }
 @keyframes msgIn {
@@ -172,19 +172,20 @@ body {
 .msg.system .msg-body { color: var(--muted); }
 .msg-body .hl { color: var(--bright); text-shadow: 0 0 6px var(--fg); }
 .msg-body code {
-  background: rgba(0, 255, 65, 0.1);
+  background: rgba(0, 255, 65, 0.14);
   border: 1px solid var(--border);
   padding: 0 5px; font-size: 13px;
+  color: var(--bright);
 }
 
 /* 工具调用卡 —— 细线条几何风格（参考 Zion 控制室的克制细线界面） */
 .trace {
   position: relative;
-  border: 1px solid rgba(0,255,65,0.16);
+  border: 1px solid rgba(0,255,65,0.3);
   margin: 8px 0 10px 2px;
   padding: 8px 12px;
   font-size: 13px; color: var(--muted); line-height: 1.8;
-  background: rgba(0, 12, 4, 0.28);
+  background: rgba(0, 22, 9, 0.42);
 }
 /* 对角括线：仅左上和右下一对细角标 */
 .trace::before, .trace::after {
@@ -214,11 +215,11 @@ body {
 /* ---------- 编辑文件 diff 卡（黑客帝国风） ---------- */
 .diff {
   margin: 10px 0 4px 2px;
-  border: 1px solid rgba(0,255,65,0.2);
-  background: rgba(0, 6, 2, 0.55);
+  border: 1px solid rgba(0,255,65,0.32);
+  background: rgba(0, 16, 7, 0.66);
   font-size: 13px; line-height: 1.55;
   position: relative;
-  box-shadow: inset 0 0 24px rgba(0,255,65,0.05), 0 0 18px rgba(0,255,65,0.06);
+  box-shadow: inset 0 0 24px rgba(0,255,65,0.07), 0 0 18px rgba(0,255,65,0.09);
   animation: diffIn 0.5s cubic-bezier(0.22,1,0.36,1);
 }
 @keyframes diffIn {
@@ -233,8 +234,8 @@ body {
 .diff-head {
   display: flex; align-items: center; gap: 10px;
   padding: 6px 12px;
-  border-bottom: 1px solid rgba(0,255,65,0.16);
-  background: rgba(0, 18, 6, 0.5);
+  border-bottom: 1px solid rgba(0,255,65,0.26);
+  background: rgba(0, 26, 10, 0.62);
   font-size: 12px; letter-spacing: 0.1em;
 }
 .diff-head .d-file { color: var(--bright); text-shadow: 0 0 6px var(--fg); }

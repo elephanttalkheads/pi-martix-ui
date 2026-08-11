@@ -13,8 +13,8 @@ export default function CrtOverlay() {
     const flick = () => {
       fl.style.opacity =
         Math.random() < 0.06
-          ? (0.05 + Math.random() * 0.05).toFixed(3)
-          : (Math.random() * 0.03).toFixed(3);
+          ? (0.025 + Math.random() * 0.03).toFixed(3)
+          : (Math.random() * 0.015).toFixed(3);
       t = window.setTimeout(flick, 70 + Math.random() * 110);
     };
     flick();
