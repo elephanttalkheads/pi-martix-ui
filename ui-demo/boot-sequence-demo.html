@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ZION — 开屏序列（待机循环）demo</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #010a04; overflow: hidden; }
+  #stage { position: fixed; inset: 0; width: 100%; height: 100%; display: block; transition: opacity .6s ease; }
+  #stage.gone { opacity: 0; }
+  #status {
+    position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%);
+    font: 12px/1 ui-monospace, 'Cascadia Mono', Consolas, monospace;
+    color: rgba(61,255,143,.55); letter-spacing: .22em; white-space: nowrap;
+    pointer-events: none; transition: opacity .4s ease;
+  }
+  #status .cur { animation: blink 1.06s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+  #snd {
+    position: fixed; right: 10px; bottom: 10px;
+    font: 11px ui-monospace, Consolas, monospace; letter-spacing: .12em;
+    color: rgba(61,255,143,.45); background: transparent; border: none;
+    padding: 6px 8px; cursor: pointer; user-select: none;
+  }
+  #snd:hover { color: rgba(61,255,143,.85); }
+  #end {
+    position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+    font: 13px ui-monospace, Consolas, monospace; letter-spacing: .18em;
+    color: rgba(61,255,143,.8); opacity: 0; transition: opacity .8s ease .25s; pointer-events: none;
+  }
+  #end.show { opacity: 1; }
+  @media (prefers-reduced-motion: reduce) { #status .cur { animation: none; } }
+</style>
+</head>
+<body>
+<canvas id="stage" aria-hidden="true"></canvas>
+<div id="status">ZION://agent-console — 选择会话或输入指令 <span class="cur">█</span></div>
+<button id="snd" aria-label="切换音效">[SND:ON]</button>
+<div id="end">// session started — press R to restart</div>
+<script>
+'use strict';
+
+// ===== 常量（字符集沿用 agent-ui-design-spec §4.1）=====
+// 运动模型：数字雨始终垂直向下落；前冲感全部来自镜头——
+// 雨帘在纵深(Z)上分层排布，镜头持续前进，雨帘逼近、放大、从屏幕边缘掠过身后。
+const CHARS = 'ｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿﾀﾁﾂﾃﾄﾅﾆﾇﾈﾉ0123456789ABCDEFXYZ<>+*';
+const FS = 18;
+const INTRO = 1.5;       // 点亮+缓推入场(s)
+const BREATH_PERIOD = 24;// 稳态呼吸调制周期(s)
+const BEAT_FIRST = 12;   // 首次 ZION 扰码解密节拍(s)
+const BEAT_EVERY = 15;   // 之后每拍间隔(s)
+const EXIT_DUR = 1100;   // 冲入灭点退出过渡(ms)
+const N_COLS = 68;       // 近处雨帘列数（走廊两侧，逼近时向各自一侧扫开）
+const N_FAR = 18;        // 远景帘列数（中央通道内、永不逼近的纵深层）
+const DEPTH = 6;         // 镜头前方的世界纵深
+const NEAR = 0.15;       // 擦身回收距离
+const CORRIDOR_W = 0.5;  // 中央通道半宽（世界单位）：近处帘不进入
+const LANE_DRIFT = 0.55; // 侧向漂移速率（∝ 镜头速度）：左帘向左、右帘向右
+const FAR_HOLD = 2.8;    // 远景帘保持的最近距离
+
+const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const rndCh = () => CHARS[(Math.random() * CHARS.length) | 0];
+
+const cv = document.getElementById('stage');
+const ctx = cv.getContext('2d');
+const statusEl = document.getElementById('status');
+const endEl = document.getElementById('end');
+const sndBtn = document.getElementById('snd');
+
+let W, H, cx, cy, focal, diag;
+
+// ===== 雨幕：列有世界坐标 (wx, wz)，列内字符永向下落（wy 递增）=====
+let cols = [];
+function spawnCol(c, wz, far) {
+  c.far = !!far;
+  if (far) {
+    c.wx = (Math.random() * 2 - 1) * 1.2; // 远景帘可留在中央通道
+  } else {
+    c.side = Math.random() < 0.5 ? -1 : 1;
+    c.wx = c.side * (CORRIDOR_W + 0.15 + Math.random() * 1.9); // 近处帘只在通道外
+  }
+  c.wz = wz;
+  c.wy = Math.random() * 2.6 - 1.3;   // 下落相位
+  c.fall = 0.5 + Math.random() * 0.4; // 世界下落速度
+  c.head = Math.random() < 0.12;
+}
+function initCols() {
+  cols = [];
+  for (let i = 0; i < N_COLS; i++) {
+    const c = {};
+    spawnCol(c, 0.2 + Math.random() * DEPTH, false); // 初始铺满纵深
+    cols.push(c);
+  }
+  for (let i = 0; i < N_FAR; i++) {
+    const c = {};
+    spawnCol(c, FAR_HOLD + 0.3 + Math.random() * (DEPTH - FAR_HOLD), true);
+    cols.push(c);
+  }
+}
+let camZ = 0;
+function drawRain(dt, camSpeed, energy, alphaMul) {
+  camZ += camSpeed * dt;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  for (const c of cols) {
+    c.wy += c.fall * dt;
+    if (c.wy > 1.5) c.wy = -1.5;
+    if (c.far) c.wz += camSpeed * dt * 0.92;          // 远景帘几乎随镜头后退，永不逼近
+    else c.wx += c.side * LANE_DRIFT * camSpeed * dt; // 侧向漂移：左帘向左、右帘向右
+    const rel = c.wz - camZ;
+    if (c.far ? rel < FAR_HOLD : rel < NEAR) {
+      spawnCol(c, camZ + DEPTH * (0.85 + Math.random() * 0.15), c.far);
+      continue;
+    }
+    const sx = cx + c.wx * focal / rel;
+    if (sx < -120 || sx > W + 120) continue;
+    const depth01 = Math.max(0, Math.min(1, 1.3 - rel / DEPTH * 1.3));
+    // 近处衰减：掠过镜头时不糊一脸
+    const nearFade = Math.min(1, (rel - NEAR) / 0.45);
+    const alpha = (0.14 + 0.72 * depth01 * depth01) * (0.55 + 0.45 * energy) * nearFade * alphaMul;
+    if (alpha <= 0.01) continue;
+
+    if (rel > 2.8) { // 远帘：只画细竖线（省 fillText）
+      const h = Math.min(H * 1.2, 2.6 * focal / rel);
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = 'rgba(61,255,143,' + (alpha * 0.7) + ')';
+      ctx.beginPath(); ctx.moveTo(sx, cy - h / 2); ctx.lineTo(sx, cy + h / 2); ctx.stroke();
+      continue;
+    }
+    const size = Math.min(92, FS * 1.15 / rel);
+    ctx.font = size + 'px monospace';
+    const step = 0.175; // 世界字符间距
+    const K = rel < 1.4 ? 15 : 8;
+    const gap = rel < 1.4 ? 1 : 2;
+    for (let i = 0; i < K; i++) {
+      const wy = c.wy - i * step * gap; // i=0 是落点亮头
+      if (wy < -1.5) continue;
+      const sy = cy + wy * focal / rel;
+      if (sy < -60 || sy > H + 60) continue;
+      const tail = 1 - i / K; // 尾巴渐暗
+      if (i === 0 && c.head) {
+        ctx.shadowColor = 'rgba(120,255,175,0.9)'; ctx.shadowBlur = 8;
+        ctx.fillStyle = 'rgba(220,255,232,' + alpha + ')';
+      } else {
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = 'rgba(61,255,143,' + (alpha * (0.25 + 0.75 * tail)) + ')';
+      }
+      ctx.fillText(Math.random() < 0.06 ? rndCh() : (c['ch' + i] || (c['ch' + i] = rndCh())), sx, sy);
+    }
+    ctx.shadowBlur = 0;
+  }
+}
+
+// ===== 灭点白热核心（镜头前进方向"远方的光"）=====
+function drawCore(energy, scale) {
+  const R = Math.max(1, (26 + energy * 30) * scale);
+  const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, R);
+  const a = 0.35 + 0.45 * energy;
+  g.addColorStop(0, 'rgba(240,255,245,' + Math.min(0.95, a + 0.3) + ')');
+  g.addColorStop(0.25, 'rgba(150,255,190,' + (a * 0.5) + ')');
+  g.addColorStop(1, 'rgba(61,255,143,0)');
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.fill();
+}
+
+// ===== ZION 扰码解密节拍（锁定后被镜头"穿过去"：放大+淡出）=====
+const WORD = 'ZION';
+let beatStart = null, nextBeat = BEAT_FIRST, locksFired = 0;
+function drawBeat(t) {
+  if (mode === 'cruise' && t >= nextBeat) { beatStart = t; nextBeat = t + BEAT_EVERY; locksFired = 0; }
+  if (beatStart === null) return;
+  const bt = t - beatStart;
+  if (bt > 3.2) { beatStart = null; return; }
+  let scale = 1, alphaMul = 1;
+  if (bt > 2.2) { // 镜头穿过：放大掠过
+    const p = Math.min(1, (bt - 2.2) / 1.0);
+    scale = 1 + p * 2.5;
+    alphaMul = 1 - p;
+  }
+  const size = Math.min(W, H) * 0.13 * scale;
+  const spacing = size * 0.82;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = 'bold ' + size + 'px monospace';
+  for (let i = 0; i < WORD.length; i++) {
+    const lockAt = 0.5 + i * 0.18;
+    const locked = bt >= lockAt;
+    if (locked && locksFired === i) { tick(); locksFired = i + 1; }
+    const alpha = Math.min(1, bt / 0.4) * alphaMul;
+    if (alpha <= 0) continue;
+    if (locked) {
+      ctx.shadowColor = 'rgba(160,255,200,0.95)'; ctx.shadowBlur = 24;
+      ctx.fillStyle = 'rgba(225,255,236,' + alpha + ')';
+    } else {
+      ctx.shadowColor = 'rgba(120,255,175,0.6)'; ctx.shadowBlur = 10;
+      ctx.fillStyle = 'rgba(61,255,143,' + (alpha * 0.8) + ')';
+    }
+    ctx.fillText(locked ? WORD[i] : rndCh(), cx + (i - 1.5) * spacing, cy - size * 0.08);
+  }
+  ctx.shadowBlur = 0;
+}
+
+// ===== 声音（WebAudio 全合成，无音频文件；首次手势后才允许出声）=====
+let AC = null, master = null, droneGain = null, noiseGain = null, noiseBP = null;
+let sndOn = localStorage.getItem('zion.snd') !== '0';
+function ensureAudio() {
+  if (!AC) {
+    AC = new (window.AudioContext || window.webkitAudioContext)();
+    master = AC.createGain(); master.gain.value = sndOn ? 1 : 0; master.connect(AC.destination);
+    // 低频嗡鸣：双失谐正弦 + 一个泛音，过低通
+    const lp = AC.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 240;
+    droneGain = AC.createGain(); droneGain.gain.value = 0.045;
+    [[54, 1], [54.6, 1], [108.3, 0.3]].forEach(([f, g]) => {
+      const o = AC.createOscillator(); o.type = 'sine'; o.frequency.value = f;
+      const og = AC.createGain(); og.gain.value = g;
+      o.connect(og); og.connect(lp); o.start();
+    });
+    lp.connect(droneGain); droneGain.connect(master);
+    // 穿越白噪：循环噪声过带通，电平/频率随相位驱动
+    const len = AC.sampleRate * 2;
+    const buf = AC.createBuffer(1, len, AC.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+    const ns = AC.createBufferSource(); ns.buffer = buf; ns.loop = true;
+    noiseBP = AC.createBiquadFilter(); noiseBP.type = 'bandpass'; noiseBP.frequency.value = 300; noiseBP.Q.value = 1.1;
+    noiseGain = AC.createGain(); noiseGain.gain.value = 0;
+    ns.connect(noiseBP); noiseBP.connect(noiseGain); noiseGain.connect(master); ns.start();
+  }
+  if (AC.state === 'suspended') AC.resume();
+}
+function tick() { // 解密落锁音（SND 'breach' 语言）
+  if (!AC || !sndOn) return;
+  const o = AC.createOscillator(); o.type = 'square'; o.frequency.value = 1180;
+  const g = AC.createGain();
+  g.gain.setValueAtTime(0.05, AC.currentTime);
+  g.gain.exponentialRampToValueAtTime(0.0001, AC.currentTime + 0.07);
+  o.connect(g); g.connect(master); o.start(); o.stop(AC.currentTime + 0.08);
+}
+function driveNoise(level, exitP) { // 每帧驱动白噪电平/频点
+  if (!AC) return;
+  noiseGain.gain.setTargetAtTime(level, AC.currentTime, 0.12);
+  noiseBP.frequency.setTargetAtTime(300 + level * 6000 + exitP * 1800, AC.currentTime, 0.15);
+}
+function setSnd(on) {
+  sndOn = on;
+  localStorage.setItem('zion.snd', on ? '1' : '0');
+  sndBtn.textContent = on ? '[SND:ON]' : '[SND:OFF]';
+  if (master) master.gain.setTargetAtTime(on ? 1 : 0, AC.currentTime, 0.05);
+}
+sndBtn.textContent = sndOn ? '[SND:ON]' : '[SND:OFF]';
+sndBtn.addEventListener('click', e => { e.stopPropagation(); ensureAudio(); setSnd(!sndOn); });
+
+// ===== 主循环 =====
+let mode = 'intro'; // intro | cruise | exiting | done
+let t0 = performance.now(), last = t0, exitT0 = 0, raf = 0;
+
+function frame(now) {
+  raf = requestAnimationFrame(frame);
+  const t = (now - t0) / 1000;
+  const dt = Math.min(0.05, (now - last) / 1000);
+  last = now;
+  if (mode === 'intro' && t >= INTRO) mode = 'cruise';
+
+  const breath = mode !== 'intro' ? 0.5 + 0.5 * Math.sin((t - INTRO) * 2 * Math.PI / BREATH_PERIOD) : 0;
+  let energy = mode === 'cruise' ? 0.35 + 0.5 * breath : 0.2;
+  let exitP = 0, speedExit = 1;
+  if (mode === 'exiting') {
+    exitP = Math.min(1, (now - exitT0) / EXIT_DUR);
+    speedExit = 1 + 9 * exitP * exitP;
+    energy = Math.min(1, energy + exitP);
+  }
+  const introRamp = Math.min(1, t / INTRO);
+
+  // 拖尾覆盖层（数值越小尾巴越长）
+  let fade = 0.185 - 0.075 * (mode === 'intro' ? 0.3 : breath);
+  if (mode === 'exiting') fade = Math.max(0.05, fade * (1 - exitP * 0.8));
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.fillStyle = 'rgba(1,10,4,' + fade + ')';
+  ctx.fillRect(0, 0, W, H);
+  ctx.globalCompositeOperation = 'lighter';
+
+  // 雨幕穿越：雨始终垂直下落，镜头速度驱动前冲
+  const camSpeed = 1.05 * introRamp * (0.85 + 0.45 * breath) * speedExit;
+  drawRain(dt, camSpeed, energy, 0.15 + 0.85 * introRamp);
+
+  drawCore(energy * (0.3 + 0.7 * introRamp), mode === 'exiting' ? 1 + exitP * exitP * (diag / 30) : 1);
+  if (mode !== 'exiting') drawBeat(t);
+
+  // 白噪驱动
+  let lvl = 0;
+  if (mode === 'cruise') lvl = 0.006 + breath * 0.01;
+  else if (mode === 'intro') lvl = 0.015 + introRamp * 0.03;
+  if (mode === 'exiting') lvl = 0.05 + exitP * 0.13;
+  driveNoise(lvl, exitP);
+
+  // 末段白热吞屏
+  if (mode === 'exiting' && exitP > 0.72) {
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.fillStyle = 'rgba(235,255,242,' + ((exitP - 0.72) / 0.28 * 0.96) + ')';
+    ctx.fillRect(0, 0, W, H);
+  }
+  if (mode === 'exiting' && exitP >= 1) finishExit();
+}
+
+function startExit() {
+  if (mode !== 'intro' && mode !== 'cruise') return;
+  mode = 'exiting';
+  exitT0 = performance.now();
+  statusEl.style.opacity = '0';
+  beatStart = null;
+}
+function finishExit() {
+  mode = 'done';
+  cancelAnimationFrame(raf);
+  cv.classList.add('gone');
+  endEl.classList.add('show');
+  if (AC) { droneGain.gain.setTargetAtTime(0, AC.currentTime, 0.3); driveNoise(0, 0); }
+}
+function restart() {
+  endEl.classList.remove('show');
+  cv.classList.remove('gone');
+  statusEl.style.opacity = '';
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.fillStyle = '#010a04'; ctx.fillRect(0, 0, W, H);
+  initCols(); camZ = 0;
+  beatStart = null; nextBeat = BEAT_FIRST;
+  locksFired = 0;
+  t0 = performance.now(); last = t0; mode = 'intro';
+  if (AC) droneGain.gain.setTargetAtTime(0.045, AC.currentTime, 0.3);
+  if (REDUCED) { staticFrame(); return; }
+  raf = requestAnimationFrame(frame);
+}
+
+// ===== reduced-motion：静态走廊帧，无循环 =====
+function staticFrame() {
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.fillStyle = '#010a04'; ctx.fillRect(0, 0, W, H);
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  for (const c of cols) {
+    const rel = 0.3 + Math.random() * (DEPTH - 0.5);
+    const sx = cx + c.wx * focal / rel;
+    if (sx < -60 || sx > W + 60) continue;
+    const depth01 = Math.max(0, Math.min(1, 1.3 - rel / DEPTH * 1.3));
+    const alpha = 0.12 + 0.55 * depth01 * depth01;
+    const size = Math.min(92, FS * 1.15 / rel);
+    ctx.font = size + 'px monospace';
+    for (let i = 0; i < 8; i++) {
+      const sy = cy + (c.wy - i * 0.35) * focal / rel;
+      if (sy < -40 || sy > H + 40) continue;
+      ctx.fillStyle = 'rgba(61,255,143,' + (alpha * (1 - i / 8)) + ')';
+      ctx.fillText(rndCh(), sx, sy);
+    }
+  }
+  drawCore(0.4, 1);
+}
+
+// ===== 输入：任意键/点击 = 选择会话或发送消息 → 退出；done 后 R/点击重播 =====
+addEventListener('keydown', e => {
+  if (mode === 'done') { if (e.key === 'r' || e.key === 'R') restart(); return; }
+  ensureAudio(); startExit();
+});
+addEventListener('pointerdown', e => {
+  if (e.target === sndBtn) return;
+  if (mode === 'done') { restart(); return; }
+  ensureAudio(); startExit();
+});
+
+// ===== 布局 =====
+function resize() {
+  const DPR = Math.min(devicePixelRatio || 1, 2);
+  W = innerWidth; H = innerHeight;
+  cv.width = W * DPR; cv.height = H * DPR;
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  cx = W / 2; cy = H / 2;
+  focal = Math.min(W, H) * 0.5;
+  diag = Math.hypot(W, H);
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.fillStyle = '#010a04'; ctx.fillRect(0, 0, W, H);
+  if (REDUCED) staticFrame();
+}
+addEventListener('resize', resize);
+
+resize();
+initCols();
+if (REDUCED) staticFrame();
+else raf = requestAnimationFrame(frame);
+</script>
+</body>
+</html>
