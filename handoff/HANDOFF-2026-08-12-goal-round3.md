@@ -48,7 +48,46 @@
 - `diagnosing-bugs`——遇到难复现问题（本会话曾用 CDP 临时验证脚本 `scripts/_verify-*.mjs` 模式，用后即删）
 - 涉图像任务交 `vision` 子代理（主会话 deepseek 无图像能力，AGENTS.md 规则）
 
-## 6. 安全边界
+## 6. Goal 自主开发流程（跨设备复现）
+
+本机已验证三路径闭环（小功能直通 / UI 决策 goal_wait 停顿→resume / 复杂功能五段管线+tickets 链）。**另一台电脑上复现整套流程**需要以下全部件：
+
+### 6.1 新机冷启动（一次性）
+
+1. **复制用户配置**：`~/.pi/agent/` 整目录到新机同路径（含 auth.json 凭据、settings.json、`skills/`、`agents/`（vision.md）、`extensions/`、`pi-goal.json`）——这是唯一手动步骤（详见 `handoff/HANDOFF-2026-08-11-next.md`）
+2. 安装 pi-goal 扩展：`pi install npm:@narumitw/pi-goal`（依赖 pi ≥0.80.6）
+3. clone 本仓库（GitHub `elephanttalkheads/pi-martix-ui`）
+4. 若缺失，重建 `~/.pi/agent/pi-goal.json`（本机现值，automaticTurns 100 是自主推进关键）：
+   ```json
+   { "toolVisibility": "after-first-goal", "experimental": { "goals": false }, "rpc": { "enabled": false }, "continuationLimits": { "automaticTurns": 100, "noProgressTurns": 3 } }
+   ```
+
+### 6.2 协议文件（仓库内，随 clone 携带）
+
+- **权威副本**：`docs/agents/GOAL-PROTOCOL.md`（本机另有一份 `D:\zion-workspace\GOAL-PROTOCOL.md` 供旧命令引用，内容相同；新机一律用仓库副本）
+- 内容零本机路径依赖（48 行：分级/流程/停顿规则/纪律/完成上报）
+
+### 6.3 启动命令模板
+
+```bash
+/goal 读 <clone路径>/docs/agents/GOAL-PROTOCOL.md 按协议自主开发
+# 订阅套餐无需 --tokens（token 不再是约束；automaticTurns 100 回合 + noProgressTurns 3 是剩余安全阀）
+```
+
+### 6.4 依赖技能（~/.pi/agent/skills/，随配置目录复制）
+
+核心链：`grill-with-docs`（grilling + domain-modeling）→ `to-spec` → `to-tickets` → `implement` → `code-review`；配套：`handoff`、`ett-doc-update`（commit 前）、`prototype`（UI demo）、`diagnosing-bugs`；issue 流程：`issue-tracker` + `triage-labels`（文档在仓库 `docs/agents/`）。
+
+### 6.5 约定与行为（跨设备一致）
+
+- 待办池 = GitHub Issues `ready-for-agent` 标签（远端共享，跨设备可见）
+- 停顿规则仅两种：UI 设计（v4 未覆盖）→ `goal_wait`；决策无法敲定 → `goal_wait`；真阻塞 ≥3 回合 → `goal_blocked`
+- 每项完成：回归 + 中文聚焦 commit；**默认不 push**（等用户指令）
+- 复杂功能发布 spec/tickets 用 sub-issue blocking 链（gh api 需 `-F` 整数传参，`-f` 会 422）
+- 视觉任务交 `vision` 子代理；UI 数值照 `ui-demo/react/agent-ui-design-spec.md` 逐字，不优化
+- 知识库参考：`D:\skills-guide\pi-agent\10-插件\Pi Goal 自主推进工作流.md`（本机路径，新机可后续同步 skills-guide 仓库）
+
+## 7. 安全边界
 
 - 本仓库与交接文档不含凭据；主进程复用 `~/.pi/agent/`（auth.json 等）——新机器需复制该目录（见 `handoff/HANDOFF-2026-08-11-next.md` 冷启动章节）
 - renderer 零凭据架构：IPC 契约 `src/shared/protocol.ts` 单一事实源；凭据只留主进程
