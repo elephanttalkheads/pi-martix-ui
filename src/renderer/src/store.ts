@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type { ToolExecutionStartEvent } from '@earendil-works/pi-coding-agent';
-import type { FileNode } from '../../shared/protocol';
+import type { FileNode, SessionHistoryItem, SessionInfoLike } from '../../shared/protocol';
 
 export type ToolStatus = 'run' | 'ok' | 'err';
 
@@ -14,7 +14,7 @@ export interface LogLine {
   text: string;
 }
 
-/** 侧栏 Agent 卡片（静态 demo 数据；真实 agent 注册表是后续工作） */
+/** 侧栏 Agent 卡片（已移除——侧栏改为会话列表；保留类型供未来 agent 注册表） */
 export interface AgentInfo {
   name: string;
   desc: string;
@@ -74,7 +74,12 @@ interface FeedState {
   sessionState: SessionState;
   logs: LogLine[];
   tree: FileNode[];
-  activeAgent: string;
+  /** 工作区会话列表（左侧会话卡） */
+  sessions: SessionInfoLike[];
+  /** 当前会话 id（null=尚未就绪） */
+  currentSessionId: string | null;
+  /** 当前会话显示标题（消息头/芯片/神经核心标签） */
+  sessionTitle: string;
   tokenCount: number;
   sndOn: boolean;
   /** 蠕虫命中完成（releaseWorm done 回调）后登记的 toolCallId 集合——diff 卡延迟到命中后渲染 */
@@ -91,7 +96,9 @@ interface FeedState {
   log(level: LogLine['level'], text: string): void;
   revealEdit(toolCallId: string): void;
   setTree(tree: FileNode[]): void;
-  setActiveAgent(name: string): void;
+  setSessions(sessions: SessionInfoLike[]): void;
+  /** 切换/新建会话：设置当前会话 + 以历史重建 feed（清 token/状态机回 READY） */
+  applySession(id: string, title: string, items: SessionHistoryItem[]): void;
   setSndOn(on: boolean): void;
   reset(): void;
 }
@@ -106,7 +113,9 @@ export const useFeed = create<FeedState>()((set) => ({
   sessionState: 'READY',
   logs: [],
   tree: [],
-  activeAgent: 'NEO-7',
+  sessions: [],
+  currentSessionId: null,
+  sessionTitle: '…',
   tokenCount: 0,
   sndOn: localStorage.getItem('zion.snd') !== '0',
   revealedEdits: {},
@@ -186,8 +195,17 @@ export const useFeed = create<FeedState>()((set) => ({
   revealEdit(toolCallId) {
     set((s) => ({ revealedEdits: { ...s.revealedEdits, [toolCallId]: true } }));
   },
+  setSessions(sessions) { set({ sessions }); },
   setTree(tree) { set({ tree }); },
-  setActiveAgent(activeAgent) { set({ activeAgent }); },
+  applySession(id, title, items) {
+    const feedItems: FeedItem[] = items.map((h) => ({
+      id: nid(),
+      kind: h.role,
+      text: h.text,
+      time: h.ts ? new Date(h.ts).toLocaleTimeString('zh-CN', { hour12: false, hour: '2-digit', minute: '2-digit' }) : msgTime(),
+    }));
+    set({ currentSessionId: id, sessionTitle: title, items: feedItems, sessionState: 'READY', tokenCount: 0 });
+  },
   setSndOn(sndOn) {
     localStorage.setItem('zion.snd', sndOn ? '1' : '0');
     set({ sndOn });

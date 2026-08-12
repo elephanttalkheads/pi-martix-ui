@@ -12,6 +12,10 @@ _Avoid_: 对话列表、聊天记录
 一次 prompt 驱动的最小执行周期：从 `agent_start` 开始，到 `agent_end` / `agent_settled` 结束。
 _Avoid_: 任务、请求、session
 
+**会话（session）**：
+pi SDK 持久化的对话上下文（`~/.pi/agent/sessions/` JSONL）。界面左侧会话列表展示真实会话（首条消息摘要为标题/消息数/上次活动时间），点击切换——主进程按会话懒创建 AgentSession 实例（Map 缓存），事件转发只发当前会话；切换时 feed 恢复该会话的 user/assistant 文本历史（工具链/diff 不重建）。
+_Avoid_: 聊天记录、对话
+
 **会话状态机**：
 界面全局 4 态：`READY`（空闲）/ `RUNNING`（工具执行中）/ `STREAMING`（文本流式输出中）/ `CANCELLING`（中断处理中）。由 agent 事件唯一驱动：agent_start→RUNNING、tool_execution_start→RUNNING、message_update→STREAMING、abort→CANCELLING、agent_end→READY。
 _Avoid_: busy、loading
@@ -25,7 +29,8 @@ feed 中表示一次工具调用生命周期（开始→结束）的细线角标
 _Avoid_: 工具卡、命令卡片
 
 **编辑类工具调用**：
-会对工作目录文件产生修改的工具调用（edit / batch_execute / write / apply_patch 等）。它是蠕虫入侵与 diff 卡的触发源。
+会对工作目录文件产生修改的工具调用（edit / batch_execute / write / apply_patch / bash 写操作[重定向/echo/printf/tee/sed -i/cp/mv/touch] 等）。它是蠕虫入侵与 diff 卡的触发源；bash 写入经启发式解析提取目标路径与内容。
+_Avoid_: 文件操作、命令执行
 
 **diff 卡**：
 feed 中展示一次真实文件修改的卡片：行号列 + 红删/绿增符号列 + 代码列，以 `glitchIn` 分段扫入。增删是符号+颜色双编码。

@@ -141,15 +141,36 @@ export default function App() {
   useAgentEvents();
   useSoundFx();
   const sessionState = useFeed((s) => s.sessionState);
-  const activeAgent = useFeed((s) => s.activeAgent);
+  const sessionTitle = useFeed((s) => s.sessionTitle);
   const sndOn = useFeed((s) => s.sndOn);
   const setSndOn = useFeed((s) => s.setSndOn);
   const tokenCount = useFeed((s) => s.tokenCount);
   const pushUser = useFeed((s) => s.pushUser);
   const log = useFeed((s) => s.log);
+  const applySession = useFeed((s) => s.applySession);
   const [termOpen, setTermOpen] = useState(false);
   const [bootAt] = useState(() => Date.now());
   const [now, setNow] = useState(() => new Date());
+
+  // 启动：恢复当前会话（continueRecent）→ 历史重建 feed
+  useEffect(() => {
+    let alive = true;
+    window.zion
+      .getCurrentSession()
+      .then(async ({ id, items }) => {
+        if (!alive) return;
+        const sessions = await window.zion.listSessions().catch(() => []);
+        if (!alive) return;
+        const info = sessions.find((s) => s.id === id);
+        const title = info?.name ?? (info?.firstMessage ? info.firstMessage.slice(0, 22) : `会话 ${id.slice(0, 4)}`);
+        applySession(id, title, items);
+        useFeed.getState().setSessions(sessions);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [applySession]);
 
   // SND 开关与 store 同步：挂载时用持久化值初始化内部 enabled
   useEffect(() => {
@@ -208,7 +229,7 @@ export default function App() {
         <section className="console">
           <div className="conv-head">
             <span className="c-title">主控会话 #0047</span>
-            <span className="chip on">MODEL: {activeAgent}</span>
+            <span className="chip on">SESS: {sessionTitle}</span>
             <span id="chip-state" className={`chip ${sessionState === 'READY' ? 'on' : 'warn'}`}>
               {sessionState}
             </span>

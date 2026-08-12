@@ -18,6 +18,24 @@
 import type { AgentSessionEvent } from '@earendil-works/pi-coding-agent';
 export type { AgentSessionEvent } from '@earendil-works/pi-coding-agent';
 
+/** 会话列表项（主进程 SessionManager.list 精简映射） */
+export interface SessionInfoLike {
+  id: string;
+  path: string;
+  name?: string;
+  /** 首条消息摘要（标题） */
+  firstMessage: string;
+  messageCount: number;
+  modified: string;
+}
+
+/** 会话历史消息（切换会话时恢复 feed 用，仅 user/assistant 文本） */
+export interface SessionHistoryItem {
+  role: 'user' | 'assistant';
+  text: string;
+  ts: number;
+}
+
 /**
  * window.zion —— preload（preload.cjs）暴露给渲染进程的安全桥。
  * 渲染进程零 Node 访问，仅此白名单 API（contextIsolation + sandbox）。
@@ -25,7 +43,7 @@ export type { AgentSessionEvent } from '@earendil-works/pi-coding-agent';
 export interface ZionAPI {
   /** 桥连通性自检：{ ok: true, pid } */
   ping(): Promise<{ ok: boolean; pid: number }>;
-  /** 发送指令到 agent 会话；resolve 为末条消息 stopReason（'ok'/'error'/'aborted'…，prompt 从不抛错） */
+  /** 发送指令到当前 agent 会话；resolve 为末条消息 stopReason（'ok'/'error'/'aborted'…，prompt 从不抛错） */
   prompt(text: string): Promise<string>;
   /** 中止当前回合 */
   abort(): Promise<boolean>;
@@ -35,6 +53,14 @@ export interface ZionAPI {
   followUp(text: string): Promise<boolean>;
   /** 扫描工作目录 → 文件树（目录递归，跳过 node_modules/.git 等） */
   scanTree(): Promise<FileNode[]>;
+  /** 工作区会话列表（SessionManager.list 精简） */
+  listSessions(): Promise<SessionInfoLike[]>;
+  /** 当前会话（惰性确保：continueRecent 或新建）+ 其历史；返回会话信息与历史 */
+  getCurrentSession(): Promise<{ id: string; items: SessionHistoryItem[] }>;
+  /** 切换到指定会话（首次进入懒创建实例，慢则秒级）；返回历史 */
+  switchSession(id: string): Promise<{ id: string; items: SessionHistoryItem[] }>;
+  /** 新建会话并切换 */
+  newSession(): Promise<{ id: string; items: SessionHistoryItem[] }>;
   /** 订阅主进程转发的 agent 事件流；返回取消订阅函数（App 卸载时调用） */
   onAgentEvent(cb: (event: AgentSessionEvent) => void): () => void;
 }

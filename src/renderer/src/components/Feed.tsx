@@ -69,7 +69,7 @@ function ToolCard({ item, revealed }: { item: Extract<FeedItem, { kind: 'tool' }
 export default function Feed() {
   const items = useFeed((s) => s.items);
   const sessionState = useFeed((s) => s.sessionState);
-  const activeAgent = useFeed((s) => s.activeAgent);
+  const sessionTitle = useFeed((s) => s.sessionTitle);
   const revealedEdits = useFeed((s) => s.revealedEdits);
   const feedRef = useRef<HTMLDivElement | null>(null);
 
@@ -103,7 +103,7 @@ export default function Feed() {
             return (
               <div key={it.id} className="msg agent">
                 <div className="msg-head">
-                  <span>{activeAgent}</span>
+                  <span>{sessionTitle}</span>
                   <span className="m-time">{it.time}</span>
                 </div>
                 <div className="msg-body">

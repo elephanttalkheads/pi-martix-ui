@@ -1,5 +1,6 @@
 // ZION 主进程 —— pi SDK 进程内接入
-// 模式：createAgentSession（复用 ~/.pi/agent 配置）→ session.subscribe(事件流) → IPC → renderer
+// 模式：多会话并存（Map<sessionId, AgentSession>，懒创建）+ 当前指针切换
+// 事件转发只发当前会话；createAgentSession（复用 ~/.pi/agent 配置）→ session.subscribe → IPC → renderer
 // 参考：tbrandenburg/pi-desktop；docs/sdk.md
 import { app, BrowserWindow, ipcMain } from 'electron';
 import path from 'node:path';
@@ -16,8 +17,10 @@ const WORKSPACE_DIR = path.join('D:', 'zion-workspace');
 
 /** @type {import('electron').BrowserWindow | null} */
 let win = null;
+/** @type {Map<string, import('@earendil-works/pi-coding-agent').AgentSession>} */
+const sessions = new Map();
 /** @type {import('@earendil-works/pi-coding-agent').AgentSession | null} */
-let session = null;
+let currentSession = null;
 
 function createWindow() {
   const w = new BrowserWindow({
@@ -44,24 +47,87 @@ function createWindow() {
   });
 }
 
-// 惰性初始化 agent 会话：首次 prompt 时建，带超时保护（ModelRuntime 目录刷新可能慢）
-async function ensureSession() {
-  if (session) return session;
-  fs.mkdirSync(WORKSPACE_DIR, { recursive: true });
+// 事件转发：仅当前会话的事件发给渲染层
+function wireSession(/** @type {import('@earendil-works/pi-coding-agent').AgentSession} */ s) {
+  s.subscribe(/** @param {import('@earendil-works/pi-coding-agent').AgentSessionEvent} event */ (event) => {
+    if (win && !win.isDestroyed() && s === currentSession) {
+      win.webContents.send('agent:event', event);
+    }
+  });
+}
+
+/** 从 state.messages 提取 user/assistant 文本历史（工具消息跳过） */
+function historyFromSession(/** @type {import('@earendil-works/pi-coding-agent').AgentSession} */ s) {
+  /** @type {import('../shared/protocol.ts').SessionHistoryItem[]} */
+  const out = [];
+  for (const m of s.state.messages) {
+    if (m.role === 'user') {
+      const text =
+        typeof m.content === 'string'
+          ? m.content
+          : m.content
+              .filter((/** @type {any} */ c) => c.type === 'text')
+              .map((/** @type {any} */ c) => c.text)
+              .join('\n');
+      if (text) out.push({ role: 'user', text, ts: m.timestamp });
+    } else if (m.role === 'assistant') {
+      const text = m.content
+        .filter((/** @type {any} */ c) => c.type === 'text')
+        .map((/** @type {any} */ c) => c.text)
+        .join('\n');
+      if (text) out.push({ role: 'assistant', text, ts: m.timestamp });
+    }
+  }
+  return out;
+}
+
+/**
+ * @param {import('@earendil-works/pi-coding-agent').SessionManager} sessionManager
+ * @param {string} id
+ */
+async function ensureSessionFor(sessionManager, id) {
+  const cached = sessions.get(id);
+  if (cached) {
+    currentSession = cached;
+    return cached;
+  }
   const timeout = new Promise((_, rej) => setTimeout(() => rej(new Error('agent init timeout')), 45000));
   const init = (async () => {
-    const { session: s } = await createAgentSession({
+    const { session } = await createAgentSession({
       cwd: WORKSPACE_DIR,
-      sessionManager: SessionManager.create(WORKSPACE_DIR),
+      sessionManager,
     });
-    session = s;
-    // 事件流推给渲染进程
-    s.subscribe(/** @param {import('@earendil-works/pi-coding-agent').AgentSessionEvent} event */ (event) => {
-      if (win && !win.isDestroyed()) win.webContents.send('agent:event', event);
-    });
-    return s;
+    sessions.set(id, session);
+    currentSession = session;
+    wireSession(session);
+    return session;
   })();
   return Promise.race([init, timeout]);
+}
+
+/** 当前会话（无则 continueRecent，无历史则新建） */
+async function ensureCurrentSession() {
+  if (currentSession) return currentSession;
+  fs.mkdirSync(WORKSPACE_DIR, { recursive: true });
+  const sm = SessionManager.continueRecent(WORKSPACE_DIR);
+  const id = sm.getSessionId();
+  return ensureSessionFor(sm, id);
+}
+
+/** 会话列表（工作区） */
+async function listSessionInfos() {
+  fs.mkdirSync(WORKSPACE_DIR, { recursive: true });
+  const infos = await SessionManager.list(WORKSPACE_DIR);
+  return infos
+    .map((i) => ({
+      id: i.id,
+      path: i.path,
+      name: i.name,
+      firstMessage: (i.firstMessage ?? '').slice(0, 80),
+      messageCount: i.messageCount,
+      modified: i.modified.toISOString(),
+    }))
+    .sort((a, b) => (a.modified < b.modified ? 1 : -1));
 }
 
 // ---- IPC ----
@@ -117,7 +183,7 @@ ipcMain.handle('zion:scan-tree', () => scanDir(WORKSPACE_DIR, WORKSPACE_DIR, 0))
 
 ipcMain.handle('agent:prompt', async (_e, text) => {
   console.log('[zion] prompt received: len=' + (text ? text.length : -1) + ' head=' + JSON.stringify(String(text)).slice(0, 80));
-  const s = await ensureSession();
+  const s = await ensureCurrentSession();
   await s.prompt(text);
   // prompt() 从不因模型/请求失败抛错 —— 查末条消息 stopReason
   // 注意：stopReason 只存在于 LLM 助手消息分支，其他消息类型用 in 守卫跳过
@@ -127,18 +193,43 @@ ipcMain.handle('agent:prompt', async (_e, text) => {
 });
 
 ipcMain.handle('agent:abort', async () => {
-  if (session) session.abort();
+  if (currentSession) currentSession.abort();
   return true;
 });
 
 ipcMain.handle('agent:steer', async (_e, text) => {
-  if (session) session.steer(text);
+  if (currentSession) currentSession.steer(text);
   return true;
 });
 
 ipcMain.handle('agent:followUp', async (_e, text) => {
-  if (session) session.followUp(text);
+  if (currentSession) currentSession.followUp(text);
   return true;
+});
+
+ipcMain.handle('zion:list-sessions', () => listSessionInfos());
+
+ipcMain.handle('zion:get-current', async () => {
+  const s = await ensureCurrentSession();
+  return { id: s.sessionManager.getSessionId(), items: historyFromSession(s) };
+});
+
+ipcMain.handle('zion:switch-session', async (_e, id) => {
+  const infos = await listSessionInfos();
+  const info = infos.find((i) => i.id === id);
+  if (!info) throw new Error('session not found: ' + id);
+  const sm = SessionManager.open(info.path, undefined, WORKSPACE_DIR);
+  const s = await ensureSessionFor(sm, id);
+  console.log('[zion] switched session:', id);
+  return { id: sm.getSessionId(), items: historyFromSession(s) };
+});
+
+ipcMain.handle('zion:new-session', async () => {
+  const sm = SessionManager.create(WORKSPACE_DIR);
+  const id = sm.getSessionId();
+  const s = await ensureSessionFor(sm, id);
+  console.log('[zion] new session:', id);
+  return { id: sm.getSessionId(), items: historyFromSession(s) };
 });
 
 app.whenReady().then(() => {

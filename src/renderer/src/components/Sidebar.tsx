@@ -1,16 +1,20 @@
-// 侧栏 —— 神经核心 + Agent 卡片（静态 demo）+ 真实文件树 + 底部信息
-// 文件树数据来自主进程扫描（zion:scan-tree）；行元素带 data-path 供蠕虫定位。
-// 点击文件行 → onFileSelect(path)（App 发真实读取指令）；点击目录 → 展开/收起。
-import { useEffect } from 'react';
-import type { FileNode } from '../../../shared/protocol';
+// 侧栏 —— 神经核心 + 会话列表（真实 SDK 会话）+ 文件树 + 底部信息
+// 会话卡：标题（firstMessage 摘要）+ 消息数 + 上次活动时间；点击切换（懒创建实例）；
+// 「新建会话」按钮。文件树行带 data-path 供蠕虫定位；点击文件行发读取指令。
+import { useEffect, useState } from 'react';
+import type { FileNode, SessionInfoLike } from '../../../shared/protocol';
 import { useFeed } from '../store';
 import NeuralCore from './NeuralCore';
 
-const AGENTS = [
-  { name: 'NEO-7', desc: '通用推理 · 工具链调用', state: '在线 — 待命', online: true },
-  { name: 'TRINITY-2', desc: '代码检索 · 漏洞分析', state: '空闲 — 上次运行 12 分钟前', online: false },
-  { name: 'MORPHEUS-0', desc: '长程规划 · 多步任务编排', state: '在线 — 队列中', online: true },
-];
+/** 会话显示标题：name → firstMessage 摘要 → 会话短码 */
+function titleFor(s: SessionInfoLike): string {
+  if (s.name) return s.name;
+  if (s.firstMessage) return s.firstMessage.length > 22 ? s.firstMessage.slice(0, 22) + '…' : s.firstMessage;
+  return `会话 ${s.id.slice(0, 4)}`;
+}
+
+const fmtTime = (iso: string) =>
+  new Date(iso).toLocaleTimeString('zh-CN', { hour12: false, hour: '2-digit', minute: '2-digit' });
 
 function TreeRows({
   nodes,
@@ -57,14 +61,20 @@ function TreeRows({
 export default function Sidebar({ onSelectFile }: { onSelectFile: (path: string) => void }) {
   const tree = useFeed((s) => s.tree);
   const setTree = useFeed((s) => s.setTree);
-  const activeAgent = useFeed((s) => s.activeAgent);
-  const setActiveAgent = useFeed((s) => s.setActiveAgent);
+  const sessionTitle = useFeed((s) => s.sessionTitle);
   const sessionState = useFeed((s) => s.sessionState);
+  const sessions = useFeed((s) => s.sessions);
+  const currentSessionId = useFeed((s) => s.currentSessionId);
+  const setSessions = useFeed((s) => s.setSessions);
+  const applySession = useFeed((s) => s.applySession);
   const log = useFeed((s) => s.log);
+  const [switching, setSwitching] = useState(false);
 
+  // 初始：文件树 + 会话列表
   useEffect(() => {
     window.zion?.scanTree().then(setTree).catch(() => {});
-  }, [setTree]);
+    window.zion?.listSessions().then(setSessions).catch(() => {});
+  }, [setTree, setSessions]);
 
   const toggleDir = (n: FileNode) => {
     const flip = (nodes: FileNode[]): FileNode[] =>
@@ -75,43 +85,84 @@ export default function Sidebar({ onSelectFile }: { onSelectFile: (path: string)
     log('dim', `展开目录 ${n.path}`);
   };
 
+  const selectSession = async (s: SessionInfoLike) => {
+    if (s.id === currentSessionId || switching) return;
+    setSwitching(true);
+    log('dim', `[SESS] 切换会话 → ${titleFor(s)}`);
+    try {
+      const { id, items } = await window.zion.switchSession(s.id);
+      applySession(id, titleFor(s), items);
+      log('ok', `[SESS] 已切换 · ${items.length} 条历史`);
+    } catch (e) {
+      log('err', `[SESS] 切换失败: ${String(e)}`);
+    }
+    setSwitching(false);
+    void window.zion.listSessions().then(setSessions).catch(() => {});
+  };
+
+  const newSession = async () => {
+    if (switching) return;
+    setSwitching(true);
+    log('dim', '[SESS] 新建会话');
+    try {
+      const { id, items } = await window.zion.newSession();
+      applySession(id, `会话 ${id.slice(0, 4)}`, items);
+      log('ok', '[SESS] 新会话就绪');
+    } catch (e) {
+      log('err', `[SESS] 新建失败: ${String(e)}`);
+    }
+    setSwitching(false);
+    void window.zion.listSessions().then(setSessions).catch(() => {});
+  };
+
   return (
     <aside className="sidebar" aria-label="侧栏">
       <div className="core-wrap">
         <NeuralCore />
         <div className="core-label">
-          NEURAL CORE · <b>{activeAgent}</b> ·{' '}
+          NEURAL CORE · <b>{sessionTitle}</b> ·{' '}
           <span id="core-state">{sessionState === 'READY' ? 'IDLE' : 'ACTIVE'}</span>
         </div>
       </div>
 
       <div className="side-section">
-        <h3>Agents</h3>
-        {AGENTS.map((a) => (
-          <div
-            key={a.name}
-            className={`agent-card${a.name === activeAgent ? ' active' : ''}`}
-            role="button"
-            tabIndex={0}
-            onClick={() => {
-              setActiveAgent(a.name);
-              log('dim', `切换 Agent → ${a.name}`);
-            }}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                setActiveAgent(a.name);
-                log('dim', `切换 Agent → ${a.name}`);
-              }
-            }}
-          >
-            <div className="a-name">{a.name}</div>
-            <div className="a-desc">{a.desc}</div>
-            <div className="a-state">
-              {a.online ? <span className="st-online">●</span> : <span className="st-idle">◐</span>} {a.state}
+        <h3>会话</h3>
+        {sessions.map((s) => {
+          const active = s.id === currentSessionId;
+          return (
+            <div
+              key={s.id}
+              className={`agent-card${active ? ' active' : ''}`}
+              role="button"
+              tabIndex={0}
+              aria-current={active || undefined}
+              onClick={() => void selectSession(s)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  void selectSession(s);
+                }
+              }}
+            >
+              <div className="a-name">{titleFor(s)}</div>
+              <div className="a-desc">
+                {s.messageCount} 条消息 · {fmtTime(s.modified)}
+              </div>
+              <div className="a-state">
+                {active ? <span className="st-online">●</span> : <span className="st-idle">◐</span>}{' '}
+                {active ? '当前会话' : '上次活动 ' + fmtTime(s.modified)}
+              </div>
             </div>
+          );
+        })}
+        {sessions.length === 0 && (
+          <div className="ft-row" style={{ color: 'var(--text-tertiary)' }}>
+            （尚无会话）
           </div>
-        ))}
+        )}
+        <button className="qcmd" style={{ marginTop: 8 }} disabled={switching} onClick={() => void newSession()}>
+          ＋ 新建会话
+        </button>
       </div>
 
       <div className="side-section">

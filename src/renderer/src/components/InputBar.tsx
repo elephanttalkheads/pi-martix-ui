@@ -9,7 +9,7 @@ const QUICK_CMDS = ['/status 系统状态', '/trace 回放链路', '检索记忆
 export default function InputBar() {
   const [text, setText] = useState('');
   const sessionState = useFeed((s) => s.sessionState);
-  const activeAgent = useFeed((s) => s.activeAgent);
+  const sessionTitle = useFeed((s) => s.sessionTitle);
   const busy = sessionState !== 'READY';
   const cancelling = sessionState === 'CANCELLING';
   const sendDisabled = busy || text.trim() === '';
@@ -64,7 +64,7 @@ export default function InputBar() {
         <input
           id="cmdline"
           value={text}
-          placeholder={`输入指令给 ${activeAgent} …`}
+          placeholder={`输入指令给 ${sessionTitle} …`}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === 'Enter') {

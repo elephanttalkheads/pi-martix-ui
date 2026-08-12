@@ -16,6 +16,10 @@ const api = {
   steer: (text) => ipcRenderer.invoke('agent:steer', text),
   followUp: (text) => ipcRenderer.invoke('agent:followUp', text),
   scanTree: () => ipcRenderer.invoke('zion:scan-tree'),
+  listSessions: () => ipcRenderer.invoke('zion:list-sessions'),
+  getCurrentSession: () => ipcRenderer.invoke('zion:get-current'),
+  switchSession: (id) => ipcRenderer.invoke('zion:switch-session', id),
+  newSession: () => ipcRenderer.invoke('zion:new-session'),
   onAgentEvent: (cb) => {
     const listener = (
       /** @type {import('electron').IpcRendererEvent} */ _e,
