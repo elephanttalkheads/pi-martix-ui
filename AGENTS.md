@@ -87,6 +87,13 @@ pi-matrix-demo-handoff.md demo → 正式 UI 交接文档：v3 模块清单、mo
 - 唯一推送目标：`origin/main`（GitHub）。Gitee 由镜像/手动同步，不直接推
 - 提交信息中文、聚焦单件事；动环境变量前先读后写（本项目曾发生 setx 覆盖 PATH 事故，恢复法见 D:\skills-guide\用户配置\环境变量备份与恢复记录-2026-08-11.md）
 
+## Subagents
+
+- 需要**视觉/多媒体能力**的任务（截图分析、图像理解、UI 还原比对、图表/示意图解读等）→ 统一交给 `vision` subagent：
+  `runs.run('main', { agent: 'vision', task: '...' })`（模型 MiniMax-M3，思考深度 max，别名 `multimodal` / `vision-m3`）
+- 主会话默认模型（deepseek）无图像输入能力，**不要**用主会话假装处理图片内容；涉及图像的 prompt 一律改派 `vision`
+- `vision` 无法加载或理解图像时，要求它如实说明，不得编造图片内容
+
 ## Agent skills
 
 ### Issue tracker
