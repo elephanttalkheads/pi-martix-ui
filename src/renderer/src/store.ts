@@ -90,6 +90,8 @@ interface FeedState {
   uiAsk: UiAsk | null;
   /** 扩展通知队列（toast） */
   toasts: { id: number; message: string; type?: UiNotify['type'] }[];
+  /** 在爬蠕虫计数（releaseWorm 开始 +1、done -1）——Neo 头像张嘴 = wormActive > 0 */
+  wormActive: number;
 
   pushUser(text: string): void;
   /** 流式增量追加到末条 assistant 消息（无则新建）；每字符 token +2 */
@@ -101,6 +103,9 @@ interface FeedState {
   setSessionState(state: SessionState): void;
   log(level: LogLine['level'], text: string): void;
   revealEdit(toolCallId: string): void;
+  /** 蠕虫生命周期计数（SignalCanvas.releaseWorm 同步路径调用） */
+  wormStart(): void;
+  wormDone(): void;
   toggleToolExpand(toolCallId: string): void;
   setUiAsk(ask: UiAsk | null): void;
   pushToast(n: UiNotify): void;
@@ -134,6 +139,7 @@ export const useFeed = create<FeedState>()((set) => ({
   expandedTools: {},
   uiAsk: null,
   toasts: [],
+  wormActive: 0,
 
   pushUser(text) {
     set((s) => ({ items: [...s.items, { id: nid(), kind: 'user', text, time: msgTime() }] }));
@@ -209,6 +215,12 @@ export const useFeed = create<FeedState>()((set) => ({
   },
   revealEdit(toolCallId) {
     set((s) => ({ revealedEdits: { ...s.revealedEdits, [toolCallId]: true } }));
+  },
+  wormStart() {
+    set((s) => ({ wormActive: s.wormActive + 1 }));
+  },
+  wormDone() {
+    set((s) => ({ wormActive: Math.max(0, s.wormActive - 1) }));
   },
   toggleToolExpand(toolCallId) {
     set((s) => {

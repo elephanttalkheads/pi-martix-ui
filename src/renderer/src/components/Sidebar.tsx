@@ -1,10 +1,10 @@
-// 侧栏 —— 神经核心 + 会话列表（真实 SDK 会话）+ 文件树 + 底部信息
+// 侧栏 —— Neo 头像 + 会话列表（真实 SDK 会话）+ 文件树 + 底部信息
 // 会话卡：标题（firstMessage 摘要）+ 消息数 + 上次活动时间；点击切换（懒创建实例）；
 // 「新建会话」按钮。文件树行带 data-path 供蠕虫定位；点击文件行发读取指令。
 import { useEffect, useRef, useState } from 'react';
 import type { FileNode, SessionInfoLike } from '../../../shared/protocol';
 import { useFeed, deriveSessionTitle } from '../store';
-import NeuralCore from './NeuralCore';
+import NeoAvatar from './NeoAvatar';
 
 /** 会话显示标题：name → firstMessage 摘要 → 会话短码（统一 deriveSessionTitle，store.ts 单测覆盖） */
 function titleFor(s: SessionInfoLike): string {
@@ -186,9 +186,9 @@ export default function Sidebar({ onSelectFile }: { onSelectFile: (path: string)
   return (
     <aside className="sidebar" aria-label="侧栏">
       <div className="core-wrap">
-        <NeuralCore />
+        <NeoAvatar />
         <div className="core-label">
-          NEURAL CORE · <b>{sessionTitle}</b> ·{' '}
+          NEO · <b>{sessionTitle}</b> ·{' '}
           <span id="core-state">{sessionState === 'READY' ? 'IDLE' : 'ACTIVE'}</span>
         </div>
       </div>

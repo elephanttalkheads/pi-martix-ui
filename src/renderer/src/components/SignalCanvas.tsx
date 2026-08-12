@@ -1,10 +1,14 @@
 // 蠕虫入侵 —— 全屏字符虫（v4 规格 §6，招牌之三）
-// 神经核心 (#core) 释放 → L 形路径（先垂直后水平，每 8px 采样）爬向目标文件行
+// 从 Neo 头像嘴部（.neo-avatar × MOUTH 比例）释放 → L 形路径（先垂直后水平，每 8px 采样）爬向目标文件行
 // → 命中后文件名扰码解密（620ms 逐字符还原，`.` 保持不动）+ 行闪烁 900ms。
-// 触发源：编辑类工具调用（App 事件接线）。REDUCED 下跳过动画直接命中。
+// 触发源：编辑类工具调用（App 事件接线）；释放期间 Neo 张嘴（wormActive 计数）。REDUCED 下跳过动画直接命中。
 import { useEffect, useRef } from 'react';
 import { SND } from './SoundFx';
-import { CORE } from './NeuralCore';
+import { useFeed } from '../store';
+
+/** 嘴部在头像图片中的相对位置（neo-*.png 256×256 估算，可目测微调） */
+const MOUTH_X = 0.5;
+const MOUTH_Y = 0.63;
 
 const WORM_CHARS = 'ｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿ0123456789ABCDEF<>+*';
 const SCRAMBLE_CHARS = 'ｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿ0123456789ABCDEF#$%&@';
@@ -42,13 +46,19 @@ function intrudeRow(row: HTMLElement, done?: () => void) {
 }
 
 /**
- * 释放蠕虫：从神经核心中心沿 L 形路径爬向目标行。
+ * 释放蠕虫：从 Neo 头像嘴部沿 L 形路径爬向目标行。
  * targetEl 为目标行 DOM（文件树行 / 工具链块行）；null 时直接 done。
+ * 开始/结束（含所有提前返回路径）各调一次 wormStart/wormDone —— Neo 张嘴 = wormActive > 0。
  */
 export function releaseWorm(targetEl: HTMLElement | null, done?: () => void) {
+  useFeed.getState().wormStart();
+  const finish = () => {
+    useFeed.getState().wormDone();
+    done?.();
+  };
   const hit = () => {
-    if (targetEl) intrudeRow(targetEl, done);
-    else done?.();
+    if (targetEl) intrudeRow(targetEl, finish);
+    else finish();
   };
   if (REDUCED || !sigCv || !targetEl) {
     hit();
@@ -60,15 +70,15 @@ export function releaseWorm(targetEl: HTMLElement | null, done?: () => void) {
     return;
   }
 
-  // 起点：神经核心画布中心
-  const coreEl = document.getElementById('core');
-  if (!coreEl) {
+  // 起点：Neo 头像嘴部
+  const avatarEl = document.querySelector('.neo-avatar');
+  if (!avatarEl) {
     hit();
     return;
   }
-  const cr = coreEl.getBoundingClientRect();
-  const sx = cr.left + cr.width / 2;
-  const sy = cr.top + cr.height / 2;
+  const ar = avatarEl.getBoundingClientRect();
+  const sx = ar.left + ar.width * MOUTH_X;
+  const sy = ar.top + ar.height * MOUTH_Y;
 
   // 终点：目标行左边缘 +12px、垂直中心；可视区外先滚动侧栏居中
   const sidebar = document.querySelector('.sidebar');
@@ -99,7 +109,6 @@ export function releaseWorm(targetEl: HTMLElement | null, done?: () => void) {
     }
     pts.push({ x: TX, y: TY });
 
-    CORE.burst();
     SND.worm();
 
     const glyphs = pts.map(() => WORM_CHARS[(Math.random() * WORM_CHARS.length) | 0]);

@@ -2,7 +2,7 @@
 
 ## 目标与非目标
 
-**目标**：把 pi SDK 会话事件流渲染为 v4 极简黑客帝国 UI——四区布局 + 4 态会话状态机 + 三件装饰（单层数字雨 / 轻扫描线 / 蠕虫入侵+神经核心）+ WebAudio 程序化音效；会话列表、文件树、历史恢复、扩展对话框（`ctx.ui` 的 confirm/select/input → AskDialog 弹层）与扩展通知（notify → toast）走真实 IPC。
+**目标**：把 pi SDK 会话事件流渲染为 v4 极简黑客帝国 UI——四区布局 + 4 态会话状态机 + 三件装饰（单层数字雨 / 轻扫描线 / 蠕虫入侵+Neo 头像）+ WebAudio 程序化音效；会话列表、文件树、历史恢复、扩展对话框（`ctx.ui` 的 confirm/select/input → AskDialog 弹层）与扩展通知（notify → toast）走真实 IPC。
 
 **非目标**：不定义 IPC 契约（`src/shared/protocol.ts` 类型与主进程是事实源）；不提供 Node/凭据能力（隔离在 preload 白名单之后）；不做真实 context 统计（头部「上下文 12.4k / 128k」与「主控会话 #0047」为硬编码装饰）；不实现扩展对话框的 Promise 表/超时/AbortSignal 兜底（主进程 `src/main/uibridge.mjs` 是事实源）——本模块只消费 `UiAsk`/`UiNotify` 类型与 `uiAnswer`/`onUiAsk`/`onUiNotify` 桥面。
 
@@ -12,7 +12,7 @@
 
 **布局**（App.tsx）：氛围层（`#rain` / `#signal` / `.scanlines`，fixed）与 `#stage`（z-index 5，四区）同级。
 - 区1 标题栏 `.titlebar`（36px）：品牌 + 时钟
-- 区2 侧栏 `.sidebar`（232px）：神经核心 `#core` + 会话堆叠卡 `.deck` + 文件树 `#file-tree` + 底部信息
+- 区2 侧栏 `.sidebar`（232px）：Neo 头像 `.neo-avatar` + 会话堆叠卡 `.deck` + 文件树 `#file-tree` + 底部信息
 - 区3 对话区 `.console`：`.conv-head`（状态芯片）+ `#feed` + `.inputbar`
 - 区4 `.term` 日志抽屉（默认 height:0，展开 150px）+ `.statusbar`（26px，SND 开关 / 日志按钮）
 
@@ -25,7 +25,7 @@
 - `message_end` 中 `stopReason === 'error'` → READY + SND.abort（错误回合）
 - CANCELLING 由 InputBar 本地置位（中断按钮或生成中按 Enter，`setSessionState('CANCELLING')` + `markInterrupted` + `window.zion.abort()`），非事件驱动
 
-**FX 派生**：`setSessionState` 同步 `Object.assign` 到模块级 `fx` 对象（READY `{speed:1, energy:0.3}` / 忙碌 `{speed:2.2, energy:0.85}`）；RainCanvas（`90/fx.speed` 帧节流）与 NeuralCore（`rot += 0.006*fx.speed`，alpha 含 energy）直接读取，不触发 React 渲染。
+**FX 派生**：`setSessionState` 同步 `Object.assign` 到模块级 `fx` 对象（READY `{speed:1, energy:0.3}` / 忙碌 `{speed:2.2, energy:0.85}`）；仅 RainCanvas（`90/fx.speed` 帧节流）直接读取，不触发 React 渲染。侧栏顶部为 Vite import 的透明 Neo 双帧 PNG（120×120，容器无底板/描边）；张嘴仅由蠕虫释放驱动（store `wormActive` 计数 > 0，`releaseWorm` 开始 +1、done -1），CSS 以 300ms `steps(1,end)` 在闭嘴/张嘴间切换，释放瞬间附带 700ms 缩放脉冲，reduced-motion 下停在静态张嘴帧且不脉冲。
 
 **启动恢复**（App useEffect）：`getCurrentSession` → `listSessions` → 标题经 `deriveSessionTitle`（title.ts 纯函数，规则见「设计决策与权衡」）→ `applySession(id, title, items)` 以历史重建 feed（仅 user/assistant 文本，无工具卡）+ `setSessions`。
 
@@ -47,7 +47,7 @@
 **蠕虫入侵管线**（编辑类工具调用）：
 - `tool_execution_start` → `parseEditFromTool`：编辑工具集合 `edit/apply_patch/write/multi_edit/patch/batch_execute`；bash 走写操作启发式（echo/printf 提取文本；目标按重定向 `>>`/`>`（排除 2>&1）→ `sed -i` → `tee` → `cp` → `mv` → `touch` 顺序取，`/dev/null`、`nul` 排除）；`batch_execute` 取首个可解析命令。
 - 触发链：`triggerWorm`（同步路径，`wormedRef` 按 toolCallId 去重）→ `normPath`（`\`→`/`、去盘符）→ `matchTreeRow`（`.ft-row[data-path]` 精确或互为后缀）→ 未命中则 `scanTree` 刷新 → `openAncestors` 展开祖先 → 双 rAF 等渲染完成后重试 → 兜底 `.trace[data-toolcall=<id>]` 块行。
-- 动画（`releaseWorm`）：神经核心中心 → L 形路径（先垂直后水平，8px 采样）→ TAIL=18 字符尾随（head 每帧 +3，尾节 35% 概率突变 + 抖动）；目标行可视区外先滚动侧栏居中；`CORE.burst()` 700ms 增能。命中 `intrudeRow`：`.breached` 类 900ms 闪烁 + 文件名扰码 620ms 逐字符还原（`.` 不动）；done 回调 → SND.breach + 日志 + `revealEdit(toolCallId)`。
+- 动画（`releaseWorm`）：Neo 头像嘴部（`.neo-avatar` rect × `MOUTH_X/MOUTH_Y` 比例点）→ L 形路径（先垂直后水平，8px 采样）→ TAIL=18 字符尾随（head 每帧 +3，尾节 35% 概率突变 + 抖动）；目标行可视区外先滚动侧栏居中；开始/结束各调一次 `wormStart`/`wormDone`（含提前返回路径），释放期间 Neo 张嘴。命中 `intrudeRow`：`.breached` 类 900ms 闪烁 + 文件名扰码 620ms 逐字符还原（`.` 不动）；done 回调 → SND.breach + 日志 + `revealEdit(toolCallId)`。
 - **diff 卡 reveal-after-hit**：Feed ToolCard 的 DiffCard 渲染受 `revealedEdits` 门控（完整渲染条件见 AGENTS.md 硬约束 3），`glitchIn 0.5s steps(7)` 扫入——语义为"入侵成功后才解密显示"。
 - REDUCED：`releaseWorm` 直接命中，跳过动画，done 仍回调。
 

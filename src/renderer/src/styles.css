@@ -81,7 +81,36 @@ body {
   font-size: 13px; overflow-y: auto;
 }
 .core-wrap { flex: none; border-bottom: 1px solid var(--border); padding: 10px 0 6px; position: relative; }
-#core { display: block; width: 100%; height: 108px; }
+.core-visual { position: relative; width: 100%; height: 140px; }
+.neo-avatar {
+  position: absolute; left: 50%; top: 50%;
+  width: 120px; height: 120px;
+  transform: translate(-50%, -50%);
+  overflow: hidden; isolation: isolate;
+  background: transparent;
+  pointer-events: none; user-select: none;
+}
+.neo-frame {
+  position: absolute; inset: 0;
+  display: block; width: 100%; height: 100%;
+  object-fit: cover;
+  image-rendering: pixelated;
+}
+.neo-frame-talking { opacity: 0; }
+.neo-avatar.is-talking .neo-frame-talking {
+  animation: neo-mouth-talk 300ms steps(1, end) infinite;
+}
+@keyframes neo-mouth-talk {
+  0%, 48%, 100% { opacity: 0; }
+  49%, 82% { opacity: 1; }
+}
+/* 蠕虫释放瞬间的头像脉冲（700ms，随 is-talking/is-burst class 添加时播放一次） */
+.neo-avatar.is-burst { animation: neo-burst 700ms ease-out; }
+@keyframes neo-burst {
+  0% { transform: translate(-50%, -50%) scale(1); }
+  30% { transform: translate(-50%, -50%) scale(1.08); }
+  100% { transform: translate(-50%, -50%) scale(1); }
+}
 .core-label {
   text-align: center; font-size: 11px;
   letter-spacing: 0.28em; text-transform: uppercase;
@@ -422,6 +451,8 @@ body {
   .msg, .trace, .diff, .diff.reveal { animation: none; }
   .caret { animation: none; }
   .term { transition: none; }
+  .neo-avatar.is-talking .neo-frame-talking { animation: none; opacity: 1; }
+  .neo-avatar.is-burst { animation: none; }
 }
 
 /* ---------- 扩展 UI 桥：AskDialog + toast（v4 令牌） ---------- */
