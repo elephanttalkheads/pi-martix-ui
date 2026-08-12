@@ -3,7 +3,9 @@
 import { spawn } from 'node:child_process';
 import { execSync } from 'node:child_process';
 
-const PORT = 9222;
+// 注意：9222 可能落入 Windows 动态保留端口段（netsh … show excludedportrange，曾实测 9220–9319 被保留），
+// 故用 9633；若再遇 bind 失败先查保留段。
+const PORT = 9633;
 const APP_DIR = process.cwd();
 
 function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
@@ -48,11 +50,18 @@ try {
     ws.send(JSON.stringify({ id, method, params }));
   });
 
-  // 等页面加载
-  await sleep(2500);
+  // 等渲染层挂载（冷启动快慢不定，轮询 #rain 代替定长等待）
+  for (let i = 0; i < 30; i++) {
+    const r = await call('Runtime.evaluate', {
+      expression: `!!document.querySelector('#rain')`,
+      returnByValue: true,
+    });
+    if (r.result.value) break;
+    await sleep(500);
+  }
 
   const r1 = await call('Runtime.evaluate', {
-    expression: `JSON.stringify({ zion: !!window.zion, title: document.title, root: !!document.querySelector('#root'), feedEmpty: document.querySelector('.feed-empty')?.textContent || null, hasRain: !!document.querySelector('#rain'), hasScanlines: !!document.querySelector('.scanlines'), hasSignal: !!document.querySelector('#signal'), hasSidebar: !!document.querySelector('.sidebar'), hasCore: !!document.querySelector('#core') })`,
+    expression: `JSON.stringify({ zion: !!window.zion, title: document.title, root: !!document.querySelector('#root'), feedEmpty: document.querySelector('.feed-empty')?.textContent || null, hasRain: !!document.querySelector('#rain'), hasScanlines: !!document.querySelector('.scanlines'), hasSignal: !!document.querySelector('#signal'), hasSidebar: !!document.querySelector('.sidebar'), hasNeoAvatar: !!document.querySelector('.neo-avatar') })`,
     returnByValue: true, awaitPromise: true,
   });
   console.log('RENDER:', r1.result.value);
@@ -70,6 +79,9 @@ try {
 
   ws.close();
 } finally {
-  if (child) child.kill();
+  // Windows 下 child.kill() 只杀父进程，electron 子进程树会残留——用 taskkill /T 杀整棵树
+  if (child?.pid) {
+    try { execSync(`taskkill /PID ${child.pid} /T /F`, { stdio: 'ignore' }); } catch { /* 已退出 */ }
+  }
 }
 console.log('smoke done');
