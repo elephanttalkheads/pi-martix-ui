@@ -1,7 +1,9 @@
 // App —— v4 四区布局（标题栏 / 侧栏 / 对话区 / 日志抽屉+状态栏）
 // 事件接线：agent_start→RUNNING、tool_execution_start→RUNNING、message_update→STREAMING、
 // abort→CANCELLING、agent_end→READY；错误回合 → 红日志 + 中止音（状态机仍回 READY）。
-import { useEffect, useState } from 'react';
+// 蠕虫在 tool_execution_start 的同步路径触发（不依赖 React 渲染时序——bash 等快工具
+// 的 tool_end 可能先于 useEffect 到达，导致时序竞争漏触发）。
+import { useEffect, useRef, useState } from 'react';
 import type { AgentSessionEvent } from '../../shared/protocol';
 import RainCanvas from './components/RainCanvas';
 import SignalCanvas from './components/SignalCanvas';
@@ -10,7 +12,8 @@ import LogDrawer from './components/LogDrawer';
 import Feed from './components/Feed';
 import InputBar from './components/InputBar';
 import { SND, useSoundFx } from './components/SoundFx';
-import { useFeed, parseEditFromTool } from './store';
+import { useFeed, parseEditFromTool, normPath, matchTreeRow, openAncestors, type EditInfo } from './store';
+import { releaseWorm } from './components/SignalCanvas';
 
 function useAgentEvents() {
   const appendDelta = useFeed((s) => s.appendDelta);
@@ -18,10 +21,46 @@ function useAgentEvents() {
   const toolEnd = useFeed((s) => s.toolEnd);
   const setSessionState = useFeed((s) => s.setSessionState);
   const log = useFeed((s) => s.log);
+  const wormedRef = useRef(new Set<string>());
 
   useEffect(() => {
     if (!window.zion?.onAgentEvent) return;
     let replyScheduled = false;
+
+    // 蠕虫触发（同步路径）：定位文件树目标行 → 命中后登记 revealEdit（diff 卡延迟渲染）
+    const triggerWorm = (toolCallId: string, edit: EditInfo) => {
+      if (wormedRef.current.has(toolCallId)) return;
+      wormedRef.current.add(toolCallId);
+      log('warn', `[WORM] 神经核心释放蠕虫 → ${edit.file}`);
+      const fire = (target: HTMLElement | null) => {
+        const toolEl = document.querySelector<HTMLElement>(`.trace[data-toolcall="${toolCallId}"]`);
+        releaseWorm(target ?? toolEl, () => {
+          SND.breach();
+          log('warn', `[PWN] 蠕虫命中 · 取得写入权限`);
+          log('ok', `覆写扇区完成 → ${edit.file}`);
+          useFeed.getState().revealEdit(toolCallId);
+        });
+      };
+      const fileNorm = normPath(edit.file);
+      const hit = matchTreeRow(fileNorm);
+      if (hit) {
+        fire(hit);
+        return;
+      }
+      // 树中无匹配：刷新工作区树（新文件/目录结构变化）→ 展开祖先目录 → 等渲染完成再匹配
+      void window.zion
+        .scanTree()
+        .then((fresh) => {
+          useFeed.getState().setTree(fresh);
+          const expanded = openAncestors(useFeed.getState().tree, fileNorm);
+          if (expanded) useFeed.getState().setTree(expanded);
+          requestAnimationFrame(() =>
+            requestAnimationFrame(() => fire(matchTreeRow(fileNorm))),
+          );
+        })
+        .catch(() => fire(null));
+    };
+
     const handle = (ev: AgentSessionEvent) => {
       switch (ev.type) {
         case 'message_update': {
@@ -32,11 +71,14 @@ function useAgentEvents() {
           }
           break;
         }
-        case 'tool_execution_start':
-          toolStart(ev, parseEditFromTool(ev.toolName, ev.args));
+        case 'tool_execution_start': {
+          const edit = parseEditFromTool(ev.toolName, ev.args);
+          toolStart(ev, edit);
           setSessionState('RUNNING');
           log('dim', `[TOOL] ${ev.toolName} 开始`);
+          if (edit) triggerWorm(ev.toolCallId, edit);
           break;
+        }
         case 'tool_execution_end':
           toolEnd(ev.toolCallId, ev.isError, ev.result);
           if (ev.isError) {

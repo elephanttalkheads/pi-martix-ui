@@ -2,10 +2,7 @@
 // 行内 `code` / 【高亮词】 / 中断标记；工具调用渲染为细线角标工具链块；
 // 编辑类工具调用触发蠕虫入侵（目标=文件树行，缺省=工具链块行）。
 import { useEffect, useMemo, useRef } from 'react';
-import type { FileNode } from '../../../shared/protocol';
 import { useFeed, type FeedItem } from '../store';
-import { releaseWorm } from './SignalCanvas';
-import { SND } from './SoundFx';
 import DiffCard from './DiffCard';
 
 /** 工具链块描述：从 args 提取可读摘要 */
@@ -62,39 +59,11 @@ function ToolCard({ item, revealed }: { item: Extract<FeedItem, { kind: 'tool' }
         <span className="t-desc">{toolDesc(item.toolName, item.args)}</span>
         <span className="st">{stateText}</span>
       </div>
-      {item.edit && revealed && <DiffCard file={item.edit.file} rows={item.edit.rows} />}
+      {item.edit && revealed && item.edit.rows.length > 0 && (
+        <DiffCard file={item.edit.file} rows={item.edit.rows} />
+      )}
     </div>
   );
-}
-
-/** 归一化工具路径：反斜杠→正斜杠、去盘符、去前导斜杠 */
-function normPath(p: string): string {
-  return p.replace(/\\/g, '/').replace(/^[A-Za-z]:/, '').replace(/^\/+/, '');
-}
-
-/** 文件树行匹配：data-path 与归一化路径精确相等或互为后缀 */
-function matchTreeRow(fileNorm: string): HTMLElement | null {
-  const rows = document.querySelectorAll<HTMLElement>('.ft-row[data-path]');
-  for (const el of rows) {
-    const dp = el.dataset.path ?? '';
-    if (dp === fileNorm || dp.endsWith('/' + fileNorm) || fileNorm.endsWith('/' + dp)) return el;
-  }
-  return null;
-}
-
-/** 展开目标路径的全部祖先目录；有变化返回新树，否则 null */
-function openAncestors(tree: FileNode[], fileNorm: string): FileNode[] | null {
-  let changed = false;
-  const walk = (nodes: FileNode[], prefix: string): FileNode[] =>
-    nodes.map((n) => {
-      const p = prefix ? prefix + '/' + n.name : n.name;
-      if (!n.dir) return n;
-      const contains = fileNorm === p || fileNorm.startsWith(p + '/');
-      if (contains && !n.open) changed = true;
-      return { ...n, open: n.open || contains, children: walk(n.children ?? [], p) };
-    });
-  const next = walk(tree, '');
-  return changed ? next : null;
 }
 
 export default function Feed() {
@@ -102,59 +71,13 @@ export default function Feed() {
   const sessionState = useFeed((s) => s.sessionState);
   const activeAgent = useFeed((s) => s.activeAgent);
   const revealedEdits = useFeed((s) => s.revealedEdits);
-  const log = useFeed((s) => s.log);
-  const revealEdit = useFeed((s) => s.revealEdit);
-  const setTree = useFeed((s) => s.setTree);
   const feedRef = useRef<HTMLDivElement | null>(null);
-  const lastWormRef = useRef('');
 
   // 自动滚动到底
   useEffect(() => {
     const el = feedRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [items, sessionState]);
-
-  // 编辑类工具调用 → 蠕虫入侵（规格 §6：终点=文件树目标行：左缘+12px、垂直中心；
-  // 命中=文件名扰码解密 620ms + 行闪烁 900ms + breach 音）。
-  // 目标定位：路径归一化匹配树行；树中暂无（新写入文件/目录收起）→ 刷新树 + 展开祖先再匹配；
-  // 仍无 → 回落到该工具链块行（无文件名可扰码，仅高亮）。
-  useEffect(() => {
-    const last = items[items.length - 1];
-    if (!last || last.kind !== 'tool' || last.status !== 'run' || !last.edit) return;
-    if (lastWormRef.current === last.toolCallId) return;
-    lastWormRef.current = last.toolCallId;
-    const file = last.edit.file;
-    log('warn', `[WORM] 神经核心释放蠕虫 → ${file}`);
-    const toolEl = document.querySelector<HTMLElement>(`.trace[data-toolcall="${last.toolCallId}"]`);
-
-    const fire = (target: HTMLElement | null) => {
-      releaseWorm(target ?? toolEl, () => {
-        SND.breach();
-        log('warn', `[PWN] 蠕虫命中 · 取得写入权限`);
-        log('ok', `覆写扇区完成 → ${file}`);
-        revealEdit(last.toolCallId);
-      });
-    };
-
-    const fileNorm = normPath(file);
-    const hit = matchTreeRow(fileNorm);
-    if (hit) {
-      fire(hit);
-      return;
-    }
-    // 树中无匹配：刷新工作区树（新文件/目录结构变化）→ 展开祖先目录 → 等渲染完成再匹配
-    void window.zion
-      .scanTree()
-      .then((fresh) => {
-        setTree(fresh);
-        const expanded = openAncestors(useFeed.getState().tree, fileNorm);
-        if (expanded) setTree(expanded);
-        requestAnimationFrame(() =>
-          requestAnimationFrame(() => fire(matchTreeRow(fileNorm))),
-        );
-      })
-      .catch(() => fire(null));
-  }, [items, log, revealEdit, setTree]);
 
   const lastAssistant = items[items.length - 1];
   const streaming = sessionState === 'STREAMING' && lastAssistant?.kind === 'assistant';

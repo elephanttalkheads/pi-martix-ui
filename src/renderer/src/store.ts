@@ -195,6 +195,38 @@ export const useFeed = create<FeedState>()((set) => ({
   reset() { set({ items: [], sessionState: 'READY', tokenCount: 0 }); },
 }));
 
+/* ---------------- 蠕虫目标定位（事件层同步调用，不依赖 React 渲染时序） ---------------- */
+
+/** 归一化工具路径：反斜杠→正斜杠、去盘符、去前导斜杠 */
+export function normPath(p: string): string {
+  return p.replace(/\\/g, '/').replace(/^[A-Za-z]:/, '').replace(/^\/+/, '');
+}
+
+/** 文件树行匹配：data-path 与归一化路径精确相等或互为后缀 */
+export function matchTreeRow(fileNorm: string): HTMLElement | null {
+  const rows = document.querySelectorAll<HTMLElement>('.ft-row[data-path]');
+  for (const el of rows) {
+    const dp = el.dataset.path ?? '';
+    if (dp === fileNorm || dp.endsWith('/' + fileNorm) || fileNorm.endsWith('/' + dp)) return el;
+  }
+  return null;
+}
+
+/** 展开目标路径的全部祖先目录；有变化返回新树，否则 null */
+export function openAncestors(tree: FileNode[], fileNorm: string): FileNode[] | null {
+  let changed = false;
+  const walk = (nodes: FileNode[], prefix: string): FileNode[] =>
+    nodes.map((n) => {
+      const p = prefix ? prefix + '/' + n.name : n.name;
+      if (!n.dir) return n;
+      const contains = fileNorm === p || fileNorm.startsWith(p + '/');
+      if (contains && !n.open) changed = true;
+      return { ...n, open: n.open || contains, children: walk(n.children ?? [], p) };
+    });
+  const next = walk(tree, '');
+  return changed ? next : null;
+}
+
 /* ---------------- 编辑类工具调用 → diff 数据（事件层用） ---------------- */
 
 const EDIT_TOOLS = new Set(['edit', 'apply_patch', 'write', 'multi_edit', 'patch', 'batch_execute']);
@@ -205,6 +237,12 @@ const MAX_DIFF_ROWS = 200;
 /** 从工具调用事件解析 diff 卡数据；非编辑类/无可用数据时返回 undefined */
 export function parseEditFromTool(toolName: string, args: unknown): EditInfo | undefined {
   const a = (args ?? {}) as Record<string, unknown>;
+  if (toolName === 'bash') {
+    // bash 写操作启发式：重定向 / echo / tee / sed -i / cp / mv / touch
+    const command = typeof a.command === 'string' ? a.command : undefined;
+    if (!command) return undefined;
+    return parseBashEdit(command);
+  }
   if (toolName === 'batch_execute') {
     const cmds = Array.isArray(a.commands) ? a.commands : null;
     if (cmds) {
@@ -217,6 +255,32 @@ export function parseEditFromTool(toolName: string, args: unknown): EditInfo | u
   }
   if (!EDIT_TOOLS.has(toolName)) return undefined;
   return tryParseOne(a);
+}
+
+/** bash 写操作 → EditInfo：提取 echo/printf 文本作为新增行；无文本则仅头部（rows 空，不渲染 diff 卡） */
+function parseBashEdit(command: string): EditInfo | undefined {
+  const echoM = command.match(/echo\s+(["'])(.*?)\1/i);
+  const printfM = command.match(/printf\s+(["'])(.*?)\1/i);
+  const rawText = (echoM ?? printfM)?.[2];
+  // printf 的 \n 是转义换行：渲染为实际换行（去首尾换行）
+  const text = rawText === undefined ? undefined : rawText.replace(/\\n/g, '\n').replace(/\\t/g, '\t').replace(/^\n+|\n+$/g, '');
+  // 写入目标：重定向（>> / >，排除 2>&1）→ sed -i → tee → cp → mv → touch
+  let file: string | undefined;
+  const redir = command.match(/>>?\s*(['"]?)([^'"\s;|&<>]+)\1/);
+  if (redir) file = redir[2];
+  else {
+    const sedM = command.match(/sed\s+-i[^"']*?\s+([^\s;|&]+)\s*$/i);
+    const teeM = command.match(/\btee\s+([^\s;|&]+)/i);
+    const cpM = command.match(/\bcp\s+[^\s;|&]+\s+([^\s;|&]+)/i);
+    const mvM = command.match(/\bmv\s+[^\s;|&]+\s+([^\s;|&]+)/i);
+    const touchM = command.match(/\btouch\s+([^\s;|&]+)/i);
+    file = sedM?.[1] ?? teeM?.[1] ?? cpM?.[1] ?? mvM?.[1] ?? touchM?.[1];
+  }
+  if (!file) return undefined;
+  file = file.replace(/^['"]|['"]$/g, '');
+  if (file === '/dev/null' || file.toLowerCase() === 'nul') return undefined;
+  const rows: DiffRow[] = text ? [{ t: '+', n: null, c: text }] : [];
+  return { file, rows };
 }
 
 function tryParseOne(a: Record<string, unknown>): EditInfo | undefined {
