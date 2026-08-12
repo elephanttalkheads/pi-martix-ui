@@ -9,10 +9,10 @@ React 18 + TypeScript(strict) 渲染层：v4 四区 UI（标题栏 / 侧栏 / �
 - `src/renderer/index.html` — 唯一 HTML 入口：`#root` + `/src/main.tsx`（模块脚本）
 - `src/renderer/src/main.tsx` — ReactDOM root（StrictMode），引入 `styles.css`
 - `src/renderer/src/App.tsx` — 四区布局 + `useAgentEvents`（事件→store 单一订阅点）+ 启动会话恢复 + 点击焦点归还
-- `src/renderer/src/store.ts` — zustand store（`useFeed`）+ 模块级 `fx` 对象 + 纯函数（`normPath`/`matchTreeRow`/`openAncestors`/`parseEditFromTool`/`upgradeEditFromResult`/`deriveSessionTitle`（来自 `./title`））；状态含 `revealedEdits`、`expandedTools`（工具链块展开态，`toggleToolExpand` 切换）
+- `src/renderer/src/store.ts` — zustand store（`useFeed`）+ 模块级 `fx` 对象 + 纯函数（`normPath`/`matchTreeRow`/`openAncestors`/`parseEditFromTool`/`upgradeEditFromResult`/`deriveSessionTitle`（来自 `./title`））；状态含 `revealedEdits`、`expandedTools`（工具链块展开态，`toggleToolExpand` 切换）、`sessionTitle`（当前会话显示标题，重命名当前会话时经 `setSessionTitle` 就地更新）
 - `src/renderer/src/title.ts` — 会话标题推导纯函数 `deriveSessionTitle`（无依赖模块；store.ts re-export；node:test 直测）
 - `src/renderer/src/toolfmt.ts` — 工具参数格式化纯函数 `formatToolArgs`/`toolExpandTitle`（无依赖模块；Feed 工具链块展开区用；node:test 直测）
-- `src/renderer/src/components/` — `RainCanvas` / `SignalCanvas`(releaseWorm) / `NeuralCore`(CORE) / `Sidebar`(会话堆叠卡+文件树) / `LogDrawer` / `Feed`(工具链块 step 行可展开) / `DiffCard` / `InputBar`(快捷指令+命令面板：`/` 弹出 skills/命令 listbox，面板 state 全在组件本地) / `SoundFx`(SND + useSoundFx)
+- `src/renderer/src/components/` — `RainCanvas` / `SignalCanvas`(releaseWorm) / `NeuralCore`(CORE) / `Sidebar`(会话堆叠卡+悬停操作：✎ 重命名 / ✕ 两段删除确认+文件树) / `LogDrawer` / `Feed`(工具链块 step 行可展开) / `DiffCard` / `InputBar`(快捷指令+命令面板：`/` 弹出 skills/命令 listbox，面板 state 全在组件本地) / `SoundFx`(SND + useSoundFx)
 - `src/renderer/src/env.d.ts` — `window.zion` 全局声明（type-only import `ZionAPI`）
 - `src/renderer/src/styles.css` — 全部设计令牌与布局数值（令牌数值照 `ui-demo/index-v4.html`，勿改；顶部本地 `@font-face` 为刻意偏离，见 [DESIGN.md](DESIGN.md)「设计决策与权衡」）
 - `src/shared/protocol.ts` — IPC 契约类型（type-only，构建期擦除，无运行时依赖）

@@ -65,9 +65,16 @@ export default function Sidebar({ onSelectFile }: { onSelectFile: (path: string)
   const sessions = useFeed((s) => s.sessions);
   const currentSessionId = useFeed((s) => s.currentSessionId);
   const setSessions = useFeed((s) => s.setSessions);
+  const setSessionTitle = useFeed((s) => s.setSessionTitle);
   const applySession = useFeed((s) => s.applySession);
   const log = useFeed((s) => s.log);
   const [switching, setSwitching] = useState(false);
+  /** 重命名编辑态：编辑中的会话 id + 草稿 */
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [draft, setDraft] = useState('');
+  /** 删除确认态：待确认的会话 id（2.5s 自动复位） */
+  const [confirmId, setConfirmId] = useState<string | null>(null);
+  const confirmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const deckRef = useRef<HTMLDivElement | null>(null);
 
   // 初始：文件树 + 会话列表
@@ -124,6 +131,58 @@ export default function Sidebar({ onSelectFile }: { onSelectFile: (path: string)
     void window.zion.listSessions().then(setSessions).catch(() => {});
   };
 
+  // 删除两段确认：第一击进入确认态（2.5s 复位），确认态下再击执行
+  const askDelete = (s: SessionInfoLike) => {
+    if (confirmTimer.current) clearTimeout(confirmTimer.current);
+    if (confirmId === s.id) {
+      void doDelete(s);
+      return;
+    }
+    setConfirmId(s.id);
+    confirmTimer.current = setTimeout(() => setConfirmId(null), 2500);
+  };
+
+  const doDelete = async (s: SessionInfoLike) => {
+    if (switching) return;
+    setSwitching(true);
+    log('warn', `[SESS] 删除会话 → ${titleFor(s)}`);
+    try {
+      const list = await window.zion.deleteSession(s.id);
+      setSessions(list);
+      if (s.id === currentSessionId) {
+        // 当前会话被删：后端指针已落到最近会话，重新拉取当前
+        const cur = await window.zion.getCurrentSession();
+        const info = list.find((x) => x.id === cur.id);
+        applySession(cur.id, info ? titleFor(info) : `会话 ${cur.id.slice(0, 4)}`, cur.items);
+      }
+      log('ok', '[SESS] 已删除（移入 .trash 可恢复）');
+    } catch (e) {
+      log('err', `[SESS] 删除失败: ${String(e)}`);
+    }
+    setSwitching(false);
+    setConfirmId(null);
+  };
+
+  const startRename = (s: SessionInfoLike) => {
+    setDraft(titleFor(s));
+    setEditingId(s.id);
+  };
+
+  const commitRename = async (s: SessionInfoLike) => {
+    const name = draft.trim();
+    setEditingId(null);
+    if (!name || name === titleFor(s)) return;
+    log('dim', `[SESS] 重命名 → ${name}`);
+    try {
+      const list = await window.zion.renameSession(s.id, name);
+      setSessions(list);
+      if (s.id === currentSessionId) setSessionTitle(name);
+      log('ok', '[SESS] 重命名已持久化');
+    } catch (e) {
+      log('err', `[SESS] 重命名失败: ${String(e)}`);
+    }
+  };
+
   return (
     <aside className="sidebar" aria-label="侧栏">
       <div className="core-wrap">
@@ -154,10 +213,56 @@ export default function Sidebar({ onSelectFile }: { onSelectFile: (path: string)
                   }
                 }}
               >
-                <div className="s-title">{titleFor(s)}</div>
+                <div className="s-title-row">
+                  {editingId === s.id ? (
+                    <input
+                      className="s-title-edit"
+                      value={draft}
+                      autoFocus
+                      onChange={(e) => setDraft(e.target.value)}
+                      onClick={(e) => e.stopPropagation()}
+                      onKeyDown={(e) => {
+                        e.stopPropagation();
+                        if (e.key === 'Enter') { e.preventDefault(); void commitRename(s); }
+                        else if (e.key === 'Escape') setEditingId(null);
+                      }}
+                      onBlur={() => void commitRename(s)}
+                    />
+                  ) : (
+                    <div className="s-title">{titleFor(s)}</div>
+                  )}
+                </div>
                 <div className="s-summary">{s.firstMessage || '（空会话）'}</div>
                 <div className="s-meta">
-                  {s.messageCount} 条消息 · 上次活动 {fmtTime(s.modified)}
+                  <span className="s-meta-info">
+                    {s.messageCount} 条消息 · 上次活动 {fmtTime(s.modified)}
+                  </span>
+                  <span className="s-ops" onClick={(e) => e.stopPropagation()}>
+                    <button
+                      className={`s-op${confirmId === s.id ? ' danger' : ''}`}
+                      title="删除会话（.trash 可恢复）"
+                      aria-label={`删除会话 ${titleFor(s)}`}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        askDelete(s);
+                      }}
+                    >
+                      {confirmId === s.id ? '确认?' : '✕'}
+                    </button>
+                    <button
+                      className="s-op"
+                      title="重命名会话"
+                      aria-label={`重命名会话 ${titleFor(s)}`}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        startRename(s);
+                      }}
+                    >
+                      ✎
+                    </button>
+                  </span>
                 </div>
               </div>
             );

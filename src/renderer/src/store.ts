@@ -100,6 +100,8 @@ interface FeedState {
   toggleToolExpand(toolCallId: string): void;
   setTree(tree: FileNode[]): void;
   setSessions(sessions: SessionInfoLike[]): void;
+  /** 仅更新当前会话显示标题（不重置 feed；重命名当前会话时用） */
+  setSessionTitle(title: string): void;
   /** 切换/新建会话：设置当前会话 + 以历史重建 feed（清 token/状态机回 READY） */
   applySession(id: string, title: string, items: SessionHistoryItem[]): void;
   setSndOn(on: boolean): void;
@@ -208,6 +210,7 @@ export const useFeed = create<FeedState>()((set) => ({
     });
   },
   setSessions(sessions) { set({ sessions }); },
+  setSessionTitle(title) { set({ sessionTitle: title }); },
   setTree(tree) { set({ tree }); },
   applySession(id, title, items) {
     const feedItems: FeedItem[] = items.map((h) => ({
