@@ -50,7 +50,7 @@ function Body({ text }: { text: string }) {
   );
 }
 
-function ToolCard({ item }: { item: Extract<FeedItem, { kind: 'tool' }> }) {
+function ToolCard({ item, revealed }: { item: Extract<FeedItem, { kind: 'tool' }>; revealed: boolean }) {
   const stateText =
     item.status === 'run' ? '执行中…' : item.status === 'err' ? '失败' : `完成 · ${(item.dur ?? 0).toFixed(1)}s`;
   return (
@@ -61,7 +61,7 @@ function ToolCard({ item }: { item: Extract<FeedItem, { kind: 'tool' }> }) {
         <span className="t-desc">{toolDesc(item.toolName, item.args)}</span>
         <span className="st">{stateText}</span>
       </div>
-      {item.edit && <DiffCard file={item.edit.file} rows={item.edit.rows} />}
+      {item.edit && revealed && <DiffCard file={item.edit.file} rows={item.edit.rows} />}
     </div>
   );
 }
@@ -70,7 +70,9 @@ export default function Feed() {
   const items = useFeed((s) => s.items);
   const sessionState = useFeed((s) => s.sessionState);
   const activeAgent = useFeed((s) => s.activeAgent);
+  const revealedEdits = useFeed((s) => s.revealedEdits);
   const log = useFeed((s) => s.log);
+  const revealEdit = useFeed((s) => s.revealEdit);
   const feedRef = useRef<HTMLDivElement | null>(null);
   const lastWormRef = useRef('');
 
@@ -81,20 +83,24 @@ export default function Feed() {
   }, [items, sessionState]);
 
   // 编辑类工具调用 → 蠕虫入侵（目标行：文件树 data-path 匹配，缺省该 tool 卡）
+  // 命中完成后登记 revealedEdits → diff 卡才渲染（招牌叙事：trace → 蠕虫 → 命中 → diff 扫入）
   useEffect(() => {
     const last = items[items.length - 1];
     if (!last || last.kind !== 'tool' || last.status !== 'run' || !last.edit) return;
     if (lastWormRef.current === last.toolCallId) return;
     lastWormRef.current = last.toolCallId;
+    log('warn', `[WORM] 神经核心释放蠕虫 → ${last.edit.file}`);
     const target = last.edit
       ? document.querySelector<HTMLElement>(`.ft-row[data-path="${CSS.escape(last.edit.file)}"]`)
       : null;
     const toolEl = document.querySelector<HTMLElement>(`.trace[data-toolcall="${last.toolCallId}"]`);
     releaseWorm(target ?? toolEl, () => {
       SND.breach();
-      log('warn', `[PWN] 蠕虫命中 · 取得写入权限 → ${last.edit?.file ?? ''}`);
+      log('warn', `[PWN] 蠕虫命中 · 取得写入权限`);
+      log('ok', `覆写扇区完成 → ${last.edit?.file ?? ''}`);
+      revealEdit(last.toolCallId);
     });
-  }, [items, log]);
+  }, [items, log, revealEdit]);
 
   const lastAssistant = items[items.length - 1];
   const streaming = sessionState === 'STREAMING' && lastAssistant?.kind === 'assistant';
@@ -130,18 +136,8 @@ export default function Feed() {
                 </div>
               </div>
             );
-          case 'system':
-            return (
-              <div key={it.id} className="msg system">
-                <div className="msg-head">
-                  <span>SYSTEM</span>
-                  <span className="m-time">{it.time}</span>
-                </div>
-                <div className="msg-body">{it.text}</div>
-              </div>
-            );
           case 'tool':
-            return <ToolCard key={it.id} item={it} />;
+            return <ToolCard key={it.id} item={it} revealed={!!revealedEdits[it.toolCallId]} />;
           default:
             return null;
         }

@@ -140,7 +140,8 @@ body {
 .chip {
   border: 1px solid var(--border);
   padding: 2px 10px; font-size: 11px;
-  color: var(--text-secondary); letter-spacing: 0.08em;
+  color: var(--text-secondary); letter-spacing: 0.16em;
+  text-transform: uppercase;
 }
 .chip.on { color: var(--accent-muted); border-color: rgba(61, 255, 143, 0.35); }
 .chip.warn { color: var(--warning); border-color: rgba(255, 204, 0, 0.35); }

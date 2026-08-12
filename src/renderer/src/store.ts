@@ -21,7 +21,6 @@ export interface AgentInfo {
   state: string;
   online: boolean;
 }
-
 /** diff 卡行（与 ui-demo addDiffCard 的 rows 同构） */
 export interface DiffRow {
   /** '+' 新增 / '-' 删除 / ' ' 上下文 */
@@ -41,7 +40,6 @@ export interface EditInfo {
 export type FeedItem =
   | { id: string; kind: 'user'; text: string; time: string }
   | { id: string; kind: 'assistant'; text: string; time: string; interrupted?: boolean }
-  | { id: string; kind: 'system'; text: string; time: string }
   | {
       id: string;
       kind: 'tool';
@@ -79,9 +77,10 @@ interface FeedState {
   activeAgent: string;
   tokenCount: number;
   sndOn: boolean;
+  /** 蠕虫命中完成（releaseWorm done 回调）后登记的 toolCallId 集合——diff 卡延迟到命中后渲染 */
+  revealedEdits: Record<string, true>;
 
   pushUser(text: string): void;
-  pushSystem(text: string): void;
   /** 流式增量追加到末条 assistant 消息（无则新建）；每字符 token +2 */
   appendDelta(delta: string): void;
   /** 中断时给末条 assistant 消息追加红色中断标记 */
@@ -90,6 +89,7 @@ interface FeedState {
   toolEnd(toolCallId: string, isError: boolean, result?: unknown): void;
   setSessionState(state: SessionState): void;
   log(level: LogLine['level'], text: string): void;
+  revealEdit(toolCallId: string): void;
   setTree(tree: FileNode[]): void;
   setActiveAgent(name: string): void;
   setSndOn(on: boolean): void;
@@ -109,12 +109,10 @@ export const useFeed = create<FeedState>()((set) => ({
   activeAgent: 'NEO-7',
   tokenCount: 0,
   sndOn: localStorage.getItem('zion.snd') !== '0',
+  revealedEdits: {},
 
   pushUser(text) {
     set((s) => ({ items: [...s.items, { id: nid(), kind: 'user', text, time: msgTime() }] }));
-  },
-  pushSystem(text) {
-    set((s) => ({ items: [...s.items, { id: nid(), kind: 'system', text, time: msgTime() }] }));
   },
   appendDelta(delta) {
     if (!delta) return;
@@ -184,6 +182,9 @@ export const useFeed = create<FeedState>()((set) => ({
     set((s) => ({
       logs: [...s.logs, { time: logTime(), level, text }].slice(-LOG_MAX),
     }));
+  },
+  revealEdit(toolCallId) {
+    set((s) => ({ revealedEdits: { ...s.revealedEdits, [toolCallId]: true } }));
   },
   setTree(tree) { set({ tree }); },
   setActiveAgent(activeAgent) { set({ activeAgent }); },

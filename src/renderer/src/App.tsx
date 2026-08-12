@@ -109,6 +109,23 @@ export default function App() {
   const [bootAt] = useState(() => Date.now());
   const [now, setNow] = useState(() => new Date());
 
+  // SND 开关与 store 同步：挂载时用持久化值初始化内部 enabled
+  useEffect(() => {
+    SND.setEnabled(useFeed.getState().sndOn);
+  }, []);
+
+  // 点击页面任意处后焦点归还输入框（v4 规格 §7.5）
+  useEffect(() => {
+    const refocus = () => {
+      window.setTimeout(() => {
+        const el = document.getElementById('cmdline') as HTMLInputElement | null;
+        if (el && !el.disabled) el.focus();
+      }, 0);
+    };
+    document.addEventListener('mousedown', refocus);
+    return () => document.removeEventListener('mousedown', refocus);
+  }, []);
+
   useEffect(() => {
     const t = window.setInterval(() => setNow(new Date()), 1000);
     return () => window.clearInterval(t);
@@ -121,7 +138,7 @@ export default function App() {
     pushUser(`读取 ${path}`);
     log('dim', `[FILE] 读取 ${path}`);
     SND.send();
-    void window.zion.prompt(`读取 ${path} 并简要说明其作用`);
+    void window.zion.prompt(`读取 ${path}`);
   };
 
   return (

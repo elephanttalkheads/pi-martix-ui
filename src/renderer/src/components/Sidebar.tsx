@@ -28,15 +28,16 @@ function TreeRows({
           <div
             className="ft-row"
             data-path={n.path}
-            role={n.dir ? undefined : 'button'}
-            tabIndex={n.dir ? undefined : 0}
             onClick={() => (n.dir ? onToggleDir(n) : onSelectFile(n))}
             onKeyDown={(e) => {
-              if (!n.dir && (e.key === 'Enter' || e.key === ' ')) {
+              if (e.key === 'Enter' || e.key === ' ') {
                 e.preventDefault();
-                onSelectFile(n);
+                if (n.dir) onToggleDir(n);
+                else onSelectFile(n);
               }
             }}
+            role={n.dir ? 'button' : undefined}
+            tabIndex={n.dir ? 0 : undefined}
           >
             <span className="ft-caret">{n.dir ? '▸' : ''}</span>
             <span className="ft-name">{n.name}</span>
@@ -58,6 +59,7 @@ export default function Sidebar({ onSelectFile }: { onSelectFile: (path: string)
   const setTree = useFeed((s) => s.setTree);
   const activeAgent = useFeed((s) => s.activeAgent);
   const setActiveAgent = useFeed((s) => s.setActiveAgent);
+  const sessionState = useFeed((s) => s.sessionState);
   const log = useFeed((s) => s.log);
 
   useEffect(() => {
@@ -78,7 +80,8 @@ export default function Sidebar({ onSelectFile }: { onSelectFile: (path: string)
       <div className="core-wrap">
         <NeuralCore />
         <div className="core-label">
-          NEURAL CORE · <b>{activeAgent}</b> · <span id="core-state">IDLE</span>
+          NEURAL CORE · <b>{activeAgent}</b> ·{' '}
+          <span id="core-state">{sessionState === 'READY' ? 'IDLE' : 'ACTIVE'}</span>
         </div>
       </div>
 
