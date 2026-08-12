@@ -293,7 +293,7 @@ body {
 #signal { position: fixed; inset: 0; z-index: 60; pointer-events: none; }
 
 /* ---------- 输入区 ---------- */
-.inputbar { flex: none; border-top: 1px solid var(--border); background: var(--surface-2); padding: 10px 20px 8px; }
+.inputbar { flex: none; border-top: 1px solid var(--border); background: var(--surface-2); padding: 10px 20px 8px; position: relative; }
 .quick-cmds { display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
 .qcmd {
   font-family: var(--font); font-size: 12px; color: var(--text-tertiary);
@@ -329,6 +329,37 @@ body {
 .send-btn.stop { color: var(--danger); border-color: var(--danger); background: rgba(255, 85, 85, 0.07); }
 .send-btn.stop:hover { background: var(--danger); color: #000; }
 .input-hint { font-size: 11px; color: var(--text-tertiary); margin-top: 7px; letter-spacing: 0.06em; }
+
+/* 命令面板（/ 触发）：v4 令牌，上弹式 */
+.palette {
+  position: absolute;
+  bottom: calc(100% - 4px);
+  left: 20px;
+  right: 20px;
+  max-height: 320px;
+  overflow-y: auto;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-bottom: none;
+  box-shadow: 0 -6px 18px rgba(0, 0, 0, 0.45);
+  z-index: 30;
+}
+.palette-empty { padding: 10px 12px; font-size: 12px; color: var(--text-tertiary); letter-spacing: 0.08em; }
+.palette-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 7px 12px;
+  cursor: pointer;
+  font-size: 12px;
+}
+.palette-row:hover { background: rgba(61, 255, 143, 0.06); }
+.palette-row.active { background: rgba(61, 255, 143, 0.12); }
+.palette-row .p-kind { flex: none; font-size: 11px; letter-spacing: 0.1em; color: var(--accent-muted); }
+.palette-row .p-kind.command { color: var(--warning); }
+.palette-row .p-name { flex: none; min-width: 150px; color: var(--text-primary); letter-spacing: 0.04em; }
+.palette-row .p-desc { flex: 1; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.palette-row .p-src { flex: none; font-size: 10px; color: var(--text-tertiary); letter-spacing: 0.06em; }
 
 /* ---------- 日志抽屉（默认收起，不占主 Feed 高度） ---------- */
 .term {

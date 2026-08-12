@@ -16,6 +16,7 @@ const api = {
   steer: (text) => ipcRenderer.invoke('agent:steer', text),
   followUp: (text) => ipcRenderer.invoke('agent:followUp', text),
   scanTree: () => ipcRenderer.invoke('zion:scan-tree'),
+  listCommands: () => ipcRenderer.invoke('zion:list-commands'),
   listSessions: () => ipcRenderer.invoke('zion:list-sessions'),
   getCurrentSession: () => ipcRenderer.invoke('zion:get-current'),
   switchSession: (id) => ipcRenderer.invoke('zion:switch-session', id),

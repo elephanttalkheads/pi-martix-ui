@@ -53,6 +53,8 @@ export interface ZionAPI {
   followUp(text: string): Promise<boolean>;
   /** 扫描工作目录 → 文件树（目录递归，跳过 node_modules/.git 等） */
   scanTree(): Promise<FileNode[]>;
+  /** 命令面板：本机全部 skills + 命令清单（主进程聚合扫描） */
+  listCommands(): Promise<CommandItem[]>;
   /** 工作区会话列表（SessionManager.list 精简） */
   listSessions(): Promise<SessionInfoLike[]>;
   /** 当前会话（惰性确保：continueRecent 或新建）+ 其历史；返回会话信息与历史 */
@@ -76,4 +78,14 @@ export interface FileNode {
   /** 目录默认展开 */
   open?: boolean;
   children?: FileNode[];
+}
+
+/** 命令面板条目：skill 或 slash 命令 */
+export interface CommandItem {
+  /** 展示名（skill 名或命令名，不含斜杠） */
+  name: string;
+  description: string;
+  kind: 'skill' | 'command';
+  /** 来源标注（用户级/共享/扩展包/项目/内置/扩展） */
+  source: string;
 }

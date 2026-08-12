@@ -15,17 +15,19 @@
 
 ```
 renderer（import type，vite/esbuild 擦除）  ──┐
-                                               ├──►  src/shared/protocol.ts  ◄──  main.mjs / preload.cjs
-env.d.ts 声明 Window.zion: ZionAPI  ◄─────────┘                              （JSDoc @typedef/@type import）
+                                               ├──►  src/shared/protocol.ts  ◄──  main.mjs / preload.cjs / skillscan.mjs
+env.d.ts 声明 Window.zion: ZionAPI  ◄─────────┘                                （JSDoc @typedef/@type import）
 ```
 
 桥注入链（运行时，本契约约束的对象）：`preload.cjs` 构造符合 `ZionAPI` 的对象 → `contextBridge.exposeInMainWorld('zion', api)` → renderer 经 `window.zion.*` 调用。
 
 指令数据流：renderer `window.zion.prompt(text)` → `ipcRenderer.invoke('agent:prompt')` → main `ipcMain.handle` → pi SDK `session.prompt()` → `session.subscribe` 事件 → `win.webContents.send('agent:event')` → preload `ipcRenderer.on('agent:event')` 剥掉 `IpcRendererEvent` 后回调 → renderer `onAgentEvent(cb)`。仅当前会话的事件被转发（见「失败模式」）。
 
+命令面板数据流：renderer 的 InputBar 挂载时预取 `window.zion.listCommands()` → `ipcRenderer.invoke('zion:list-commands')` → main `collectCommands()`（`src/main/skillscan.mjs` 聚合，已按 kind:name 去重）→ `CommandItem[]`。
+
 ## 接口与依赖
 
-### ZionAPI（11 个方法）
+### ZionAPI（12 个方法）
 
 | 方法 | 通道 | 返回 |
 |---|---|---|
@@ -35,6 +37,7 @@ env.d.ts 声明 Window.zion: ZionAPI  ◄─────────┘         
 | steer(text) | `agent:steer`（invoke） | `boolean` |
 | followUp(text) | `agent:followUp`（invoke） | `boolean` |
 | scanTree() | `zion:scan-tree`（invoke） | `FileNode[]`：深度 ≤3，跳过 `node_modules`/`.git`/`dist`/`dist-renderer`/`graphify-out`/`.vite` 与点文件，目录在前 |
+| listCommands() | `zion:list-commands`（invoke） | `CommandItem[]`：本机全部 skills + 内置/扩展命令聚合（main 侧 `src/main/skillscan.mjs` 扫描） |
 | listSessions() | `zion:list-sessions`（invoke） | `SessionInfoLike[]`，按 modified 降序 |
 | getCurrentSession() | `zion:get-current`（invoke） | `{ id, items }`（惰性 ensureCurrentSession：continueRecent 或新建） |
 | switchSession(id) | `zion:switch-session`（invoke） | `{ id, items }`（懒创建实例，慢则秒级；id 不存在抛 `session not found`） |
@@ -46,6 +49,7 @@ env.d.ts 声明 Window.zion: ZionAPI  ◄─────────┘         
 - `SessionInfoLike`：`id` / `path` / `name?` / `firstMessage`（首条消息摘要，main 侧截断 80 字符）/ `messageCount` / `modified`（ISO 字符串）
 - `SessionHistoryItem`：`role: 'user' | 'assistant'` / `text` / `ts`（仅文本消息；main 侧 `historyFromSession` 跳过工具消息与空文本）
 - `FileNode`：`name` / `path`（相对工作目录的斜杠路径）/ `dir` / `size?`（人类可读字符串，目录无）/ `open?`（目录默认展开）/ `children?`
+- `CommandItem`：`name`（展示名，不含斜杠）/ `description` / `kind: 'skill' | 'command'` / `source`（来源标注：用户/共享/项目/settings/扩展·包名/内置/扩展）
 
 ### 类型依赖
 
@@ -75,7 +79,7 @@ env.d.ts 声明 Window.zion: ZionAPI  ◄─────────┘         
 
 ## 已知限制与技术债
 
-- `protocol.ts` 头部注释的通道清单不完整：只列了 6 个 invoke 通道，缺 `zion:scan-tree` / `zion:list-sessions` / `zion:get-current` / `zion:switch-session` / `zion:new-session`（会话管理功能后加时未更新注释）；实际 10 个 invoke + 1 个 send，以 `main.mjs` / `preload.cjs` 字面量为准
+- `protocol.ts` 头部注释的通道清单不完整：只列了 5 个 invoke + 1 个 send（`agent:event`），缺 `zion:scan-tree` / `zion:list-commands` / `zion:list-sessions` / `zion:get-current` / `zion:switch-session` / `zion:new-session`（会话管理、命令面板功能后加时未更新注释）；实际 11 个 invoke + 1 个 send，以 `main.mjs` / `preload.cjs` 字面量为准
 - 通道名无运行时单一来源；根治依赖 main 进程 TS 构建管线（仓库已列为后续步骤）
 - `FileNode.size` 是**人类可读字符串**（如 '1.2k'）而非字节数，需要比较/排序时应由 main 侧改进
 

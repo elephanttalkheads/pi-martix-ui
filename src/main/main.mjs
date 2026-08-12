@@ -5,8 +5,10 @@
 import { app, BrowserWindow, ipcMain } from 'electron';
 import path from 'node:path';
 import fs from 'node:fs';
+import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { createAgentSession, SessionManager } from '@earendil-works/pi-coding-agent';
+import { collectCommands } from './skillscan.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isDev = process.argv.includes('--dev');
@@ -180,6 +182,24 @@ function scanDir(dir, base, depth) {
   return out;
 }
 ipcMain.handle('zion:scan-tree', () => scanDir(WORKSPACE_DIR, WORKSPACE_DIR, 0));
+
+// 命令面板：聚合本机全部 skills + 命令（用户级/共享/项目/扩展包/settings.skills + 内置/扩展命令）
+ipcMain.handle('zion:list-commands', () => {
+  const home = os.homedir();
+  const npmRoot = path.join(home, '.pi', 'agent', 'npm', 'node_modules');
+  let settingsSkills = [];
+  try {
+    const settings = JSON.parse(fs.readFileSync(path.join(home, '.pi', 'agent', 'settings.json'), 'utf8'));
+    if (Array.isArray(settings.skills)) settingsSkills = settings.skills.map((/** @type {string} */ p) => p.replace(/^~/, home));
+  } catch { /* 无 settings 或解析失败 → 空 */ }
+  return collectCommands({
+    userSkillsDir: path.join(home, '.pi', 'agent', 'skills'),
+    sharedSkillsDir: path.join(home, '.agents', 'skills'),
+    projectSkillsDirs: [path.join(WORKSPACE_DIR, '.pi', 'skills'), path.join(WORKSPACE_DIR, '.agents', 'skills')],
+    packagesRoot: npmRoot,
+    settingsSkillPaths: settingsSkills,
+  });
+});
 
 ipcMain.handle('agent:prompt', async (_e, text) => {
   console.log('[zion] prompt received: len=' + (text ? text.length : -1) + ' head=' + JSON.stringify(String(text)).slice(0, 80));

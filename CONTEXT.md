@@ -28,6 +28,10 @@ _Avoid_: 状态、特效开关
 feed 中表示一次工具调用生命周期（开始→结束）的细线角标卡片：`[tag] 描述 …… 状态`，状态有执行中（琥珀）/完成（绿，含真实计时）/失败（红）。
 _Avoid_: 工具卡、命令卡片
 
+**命令面板（palette）**：
+输入栏以 `/` 开头触发的弹出清单，聚合本机全部 skills（用户级/共享/项目/扩展包/settings.skills）与命令（内置 21 个 + 扩展白名单），主进程 `skillscan.mjs` 扫描、`zion:list-commands` 传输；↑↓/Enter/Tab/Esc 操作，选中 skill 插入「运行技能 X：」、命令插入 `/name`（执行语义属宿主 TUI 层，面板只做插入）。
+_Avoid_: 快捷菜单、autocomplete
+
 **编辑类工具调用**：
 会对工作目录文件产生修改的工具调用（edit / batch_execute / write / apply_patch / bash 写操作[重定向/echo/printf/tee/sed -i/cp/mv/touch] 等）。它是蠕虫入侵与 diff 卡的触发源；bash 写入经启发式解析提取目标路径与内容。
 _Avoid_: 文件操作、命令执行

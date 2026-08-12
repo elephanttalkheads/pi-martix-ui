@@ -5,12 +5,14 @@
 **目标**
 - 进程内接入 pi SDK：`createAgentSession` 复用 `~/.pi/agent` 配置（auth/models/settings）；会话创建/恢复/列举/打开全部经 `SessionManager`，工作目录固定为 `WORKSPACE_DIR`（值见 AGENTS.md 硬约束）
 - 多会话并存：`Map<sessionId, AgentSession>` 懒创建 + `currentSession` 指针切换；事件流只转发当前会话
+- 命令面板数据源：`zion:list-commands` 聚合本机全部 skills（用户/共享/项目/扩展包/settings.skills）与命令（内置 + 扩展白名单），`skillscan.mjs` 实现
 - 渲染层零 Node 访问：preload 在 sandbox 下暴露 `window.zion` 白名单桥（安全配置事实归 `src/shared/DESIGN.md` 安全边界）
 
 **非目标 / 边界**
 - 不做 UI：渲染层在 `src/renderer`，只经 `window.zion` 与 `src/shared/protocol.ts` 契约交互
 - 不管理模型/凭据：SDK 直接读 `~/.pi/agent`
 - 不实现扩展 UI 桥与项目信任处理（见「已知限制与技术债」）
+- 不解释/执行命令与技能：面板只提供数据清单，插入与执行语义在渲染层/宿主 TUI
 - main 进程保持 `.mjs` + JSDoc + checkJs，不引入 TS 构建管线（当前定案）
 - IPC 契约本身（通道全集、`ZionAPI`、数据形状、stopReason 语义）不在此重复，见 `src/shared/DESIGN.md`
 
@@ -22,8 +24,9 @@
 src/renderer (React/TS)  ⇄  window.zion（preload.cjs, CJS, sandbox）
         │ 契约：src/shared/protocol.ts（ZionAPI / AgentSessionEvent）
         ▼
-main.mjs：ipcMain.handle ×10 + agent:event 转发
+main.mjs：ipcMain.handle ×11 + agent:event 转发
         │ sessions: Map<sessionId, AgentSession>；currentSession 指针
+        └─ skillscan.mjs：collectCommands（skills 扫描 + 命令清单，纯 Node）
         ▼
 @earendil-works/pi-coding-agent：createAgentSession / SessionManager / session.subscribe
 ```
@@ -44,9 +47,15 @@ main.mjs：ipcMain.handle ×10 + agent:event 转发
 - 深度上限 `SCAN_MAX_DEPTH = 3`，越界目录 `children: []`；目录 `open: depth < 2`（前两层默认展开）
 - 文件大小经 `humanSize`（b / k / M）；目录优先、按名排序；单条 readdir/stat 失败 try/catch 静默跳过，不中断整树
 
+**命令聚合**：`zion:list-commands` → `collectCommands`（skillscan.mjs，纯 Node 同步扫描）：
+- 来源（遵循 pi docs/skills.md 官方加载来源，按序扫描）：`~/.pi/agent/skills`（用户）→ `~/.agents/skills`（共享）→ `WORKSPACE_DIR/.pi/skills` + `.agents/skills`（项目）→ `~/.pi/agent/settings.json` 的 `skills` 数组（`~` 展开为 home，解析失败视为空）→ `~/.pi/agent/npm/node_modules` 各包 `skills/` 目录（扩展，递归支持 `@scope` 包）
+- 技能形态：`<dir>/SKILL.md`（frontmatter 无 name 时回退目录名）；根级 `.md`（带 name frontmatter）也计入；单文件损坏跳过
+- 去重：`kind:name` 先到先得（用户级先扫，优先于共享/项目/settings）；命令最后追加
+- 命令：`BUILTIN_COMMANDS`（21 个，pi 源码 `BUILTIN_SLASH_COMMANDS` 快照）+ `EXTENSION_COMMANDS`（/goal 白名单）；返回 `CommandItem[]`（形状归 shared 契约）
+
 ## 接口与依赖
 
-IPC 通道全集（10 invoke + 1 send）与返回形状见 `src/shared/DESIGN.md` 接口节（本模块是字面量与 handler 所在地）。契约未载明的实现侧行为：
+IPC 通道全集（11 invoke + 1 send）与返回形状见 `src/shared/DESIGN.md` 接口节（本模块是字面量与 handler 所在地）。契约未载明的实现侧行为：
 
 - `agent:prompt` 完整 await `s.prompt()`，返回 `stop ?? 'ok'`；不因模型/请求失败 reject（失败表现为末条消息 `stopReason: 'error'` + `errorMessage`，UI 必须查，语义见 shared）
 - `agent:abort` / `agent:steer` / `agent:followUp` **不 await** SDK 调用即返回 `true`（fire-and-forget）：返回不代表 agent 已 idle；无当前会话时静默 no-op
@@ -56,6 +65,7 @@ IPC 通道全集（10 invoke + 1 send）与返回形状见 `src/shared/DESIGN.md
 依赖：
 - `@earendil-works/pi-coding-agent`（^0.84.1）：`createAgentSession`、`AgentSession`（prompt/steer/followUp/abort/subscribe/state）、`SessionManager` static create/open/continueRecent/list
 - `electron`（^43.x）：app / BrowserWindow / ipcMain / webContents；`node:path` / `node:fs` / `node:url`
+- `skillscan.mjs` 仅依赖 `node:fs` / `node:path`（刻意不依赖 electron，保证 `node --test` 可直测）
 - 外部边界：`~/.pi/agent`（SDK 配置）；`WORKSPACE_DIR`（agent cwd + 会话归属）；SDK 默认会话目录 `~/.pi/agent/sessions/<encoded-cwd>/`（未显式传 sessionDir 时——`continueRecent`/`create`/`list` 均省略；`open` 第二参传 `undefined` 则 sessionDir 从会话文件父目录推导）
 
 ## 设计决策与权衡
@@ -69,6 +79,10 @@ IPC 通道全集（10 invoke + 1 send）与返回形状见 `src/shared/DESIGN.md
 - **历史只取 user/assistant 文本**：恢复 feed 的最小契约（`SessionHistoryItem` 无工具细节字段），工具消息与空文本排除
 - **scan-tree 同步 fs + 深度/跳过限制**：主进程阻塞式扫描换实现简单，深度上限 + 跳过集合（清单见 shared）把代价限制在可控范围
 - **abort/steer/followUp fire-and-forget**：与 prompt 的完整 await 不对称——主进程不维护回合状态，UI 交互即时返回；需要精确 idle 状态时 SDK 提供 `waitForIdle`
+- **命令清单 = 内置权威快照 + 扩展白名单**：扩展运行时注册的命令无法静态枚举，`EXTENSION_COMMANDS` 是唯一静态入口；`BUILTIN_COMMANDS` 从 pi 源码提取快照，SDK 升级需人工核对漂移
+- **skillscan 纯 Node、零 electron 依赖**：`node --test scripts/skillscan.test.mjs` 直接单测，不依赖 Electron 启动；同步 `readdirSync` 扫描仅限本机 skills 小目录，阻塞可接受（与 scan-tree 同步扫描同款权衡）
+- **扫描位置遵循 pi docs/skills.md**：与 pi 自身技能加载来源一致；项目级技能目录挂在 `WORKSPACE_DIR` 下（当前工作区），不是仓库目录
+- **去重先到先得**：按 `kind:name` 只保留首见条目，用户级先扫 → 用户技能优先于共享/项目/settings 同名技能（与 pi 的技能优先级一致）
 
 ## 不变量、安全边界与失败模式
 
@@ -90,6 +104,7 @@ IPC 通道全集（10 invoke + 1 send）与返回形状见 `src/shared/DESIGN.md
 - 窗口销毁后事件到达 → `win.isDestroyed()` 守卫丢弃，不 send
 - 扫描遇不可读目录/文件 → 静默跳过单条目，整树不中断
 - `continueRecent` 无历史 → 返回新会话 id，走正常创建路径
+- `zion:list-commands`：settings.json 缺失/解析失败 → `skills` 视为空数组，其余来源不受影响；单个 SKILL.md 不可读/损坏 → 跳过该条目，不中断整体
 
 ## 已知限制与技术债
 
@@ -97,6 +112,7 @@ IPC 通道全集（10 invoke + 1 send）与返回形状见 `src/shared/DESIGN.md
 - 项目信任未处理：headless 下 `ask` 会静默忽略项目资源
 - main 进程 TS 构建管线未做：`.mjs` + JSDoc + checkJs 是当前方案；通道名无运行时单一来源的根治依赖它（后果见 `src/shared/DESIGN.md` 已知限制）
 - abort/steer/followUp 为 fire-and-forget：`true` 不代表 agent 已 idle；若 UI 需要精确状态，后续应 await 或改用 SDK `waitForIdle`
+- 命令清单是静态快照：`BUILTIN_COMMANDS` 随 pi SDK 升级可能漂移（需人工核对）；新增扩展命令需手工追加 `EXTENSION_COMMANDS`，运行时注册的命令无法被发现
 - `sessions` Map 只增不减：会话数随 `zion:new-session` 增长，长期运行内存随之增长（当前无淘汰策略）
 
 ## 人工补充

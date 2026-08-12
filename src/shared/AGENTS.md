@@ -10,8 +10,8 @@
 - `src/shared/protocol.ts` —— 本模块唯一文件，全部契约
 - 消费方（仅类型引用，不产生运行时依赖）：
   - `src/renderer/src/env.d.ts` —— `import type { ZionAPI }` 声明 `window.zion`
-  - `src/renderer/src/store.ts`、`src/renderer/src/App.tsx`、`src/renderer/src/components/Sidebar.tsx` —— `import type` 引用业务类型
-  - `src/main/main.mjs`、`src/preload/preload.cjs` —— JSDoc `@typedef {import('../shared/protocol.ts').X}` 引用
+  - `src/renderer/src/store.ts`、`src/renderer/src/App.tsx`、`src/renderer/src/components/Sidebar.tsx`、`src/renderer/src/components/InputBar.tsx` —— `import type` 引用业务类型（InputBar 是命令面板，消费 `CommandItem`）
+  - `src/main/main.mjs`、`src/main/skillscan.mjs`、`src/preload/preload.cjs` —— JSDoc `@typedef {import('../shared/protocol.ts').X}` 引用（skillscan 消费 `CommandItem`）
 
 ## 命令
 
