@@ -423,3 +423,61 @@ body {
   .caret { animation: none; }
   .term { transition: none; }
 }
+
+/* ---------- 扩展 UI 桥：AskDialog + toast（v4 令牌） ---------- */
+.ask-mask {
+  position: fixed; inset: 0; z-index: 90;
+  background: rgba(0, 4, 2, 0.6);
+  display: flex; align-items: center; justify-content: center;
+}
+.ask-dialog {
+  min-width: 360px; max-width: 520px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  position: relative;
+  padding: 16px 18px 14px;
+}
+.ask-dialog::before, .ask-dialog::after {
+  content: ""; position: absolute; width: 8px; height: 8px; pointer-events: none;
+}
+.ask-dialog::before { left: -1px; top: -1px; border-left: 1px solid var(--accent-muted); border-top: 1px solid var(--accent-muted); }
+.ask-dialog::after { right: -1px; bottom: -1px; border-right: 1px solid var(--accent-muted); border-bottom: 1px solid var(--accent-muted); }
+.ask-title { font-size: 13px; letter-spacing: 0.1em; color: var(--text-primary); margin-bottom: 8px; }
+.ask-msg { font-size: 12px; line-height: 1.6; color: var(--text-secondary); margin-bottom: 12px; white-space: pre-wrap; word-break: break-all; }
+.ask-input {
+  width: 100%; background: none; border: 1px solid var(--border); color: var(--text-primary);
+  font-family: var(--font); font-size: 13px; padding: 6px 8px; outline: none; margin-bottom: 12px;
+}
+.ask-input:focus { border-color: var(--accent-muted); }
+.ask-options { max-height: 200px; overflow-y: auto; margin-bottom: 12px; }
+.ask-opt {
+  display: flex; gap: 8px; align-items: baseline; padding: 6px 8px; cursor: pointer;
+  font-size: 12px; color: var(--text-secondary);
+}
+.ask-opt:hover { background: rgba(61, 255, 143, 0.06); }
+.ask-opt.active { background: rgba(61, 255, 143, 0.12); color: var(--text-primary); }
+.ask-opt-mark { flex: none; width: 12px; text-align: center; color: var(--accent); }
+.ask-opt.empty { color: var(--text-tertiary); cursor: default; }
+.ask-actions { display: flex; gap: 10px; justify-content: flex-end; }
+.ask-btn {
+  background: none; border: 1px solid var(--border); color: var(--text-secondary); cursor: pointer;
+  font-family: var(--font); font-size: 12px; letter-spacing: 0.12em; padding: 5px 14px;
+}
+.ask-btn:hover { color: var(--text-primary); border-color: var(--accent-muted); }
+.ask-btn.primary { color: var(--accent); border-color: var(--accent-muted); background: rgba(0, 255, 65, 0.06); }
+.ask-btn.primary:hover { background: rgba(0, 255, 65, 0.12); }
+
+.toast-host {
+  position: fixed; right: 14px; top: 44px; z-index: 85;
+  display: flex; flex-direction: column; gap: 8px; max-width: 340px;
+}
+.toast {
+  display: flex; align-items: center; gap: 10px;
+  background: var(--surface-2); border: 1px solid var(--border); border-left: 3px solid var(--accent-muted);
+  padding: 8px 10px; font-size: 12px; color: var(--text-primary);
+}
+.toast.warning { border-left-color: var(--warning); }
+.toast.error { border-left-color: var(--danger); }
+.toast-msg { flex: 1; word-break: break-all; }
+.toast-x { background: none; border: none; color: var(--text-tertiary); cursor: pointer; font-size: 11px; padding: 2px; }
+.toast-x:hover { color: var(--text-primary); }

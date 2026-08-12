@@ -11,6 +11,7 @@ import Sidebar from './components/Sidebar';
 import LogDrawer from './components/LogDrawer';
 import Feed from './components/Feed';
 import InputBar from './components/InputBar';
+import AskDialog, { ToastHost } from './components/AskDialog';
 import { SND, useSoundFx } from './components/SoundFx';
 import { useFeed, parseEditFromTool, normPath, matchTreeRow, openAncestors, deriveSessionTitle, type EditInfo } from './store';
 import { releaseWorm } from './components/SignalCanvas';
@@ -121,6 +122,27 @@ function useAgentEvents() {
     };
     return window.zion.onAgentEvent(handle);
   }, [appendDelta, toolStart, toolEnd, setSessionState, log]);
+
+  // 扩展 UI 桥：对话框 + 通知订阅
+  const setUiAsk = useFeed((s) => s.setUiAsk);
+  const pushToast = useFeed((s) => s.pushToast);
+  const dismissToast = useFeed((s) => s.dismissToast);
+  useEffect(() => {
+    if (!window.zion?.onUiAsk) return;
+    const offAsk = window.zion.onUiAsk((ask) => setUiAsk(ask));
+    const offNotify = window.zion.onUiNotify((n) => {
+      pushToast(n);
+      // 3s 自动消失
+      window.setTimeout(() => {
+        const t = useFeed.getState().toasts.find((x) => x.message === n.message && x.type === n.type);
+        if (t) dismissToast(t.id);
+      }, 3000);
+    });
+    return () => {
+      offAsk();
+      offNotify();
+    };
+  }, [setUiAsk, pushToast, dismissToast]);
 }
 
 function Clock() {
@@ -210,6 +232,8 @@ export default function App() {
       <RainCanvas />
       <SignalCanvas />
       <div className="scanlines" aria-hidden="true" />
+      <AskDialog />
+      <ToastHost />
 
       <div id="stage">
         <header className="titlebar">

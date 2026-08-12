@@ -63,6 +63,12 @@ export interface ZionAPI {
   switchSession(id: string): Promise<{ id: string; items: SessionHistoryItem[] }>;
   /** 新建会话并切换 */
   newSession(): Promise<{ id: string; items: SessionHistoryItem[] }>;
+  /** 应答扩展对话框（结果回传 uiBridge；取消传 undefined） */
+  uiAnswer(id: string, result: string | boolean | undefined): Promise<void>;
+  /** 订阅扩展对话框请求（AskDialog 渲染）；返回取消订阅函数 */
+  onUiAsk(cb: (ask: UiAsk) => void): () => void;
+  /** 订阅扩展通知（toast 渲染）；返回取消订阅函数 */
+  onUiNotify(cb: (n: UiNotify) => void): () => void;
   /** 重命名会话（持久化显示名）；返回刷新后的会话列表 */
   renameSession(id: string, name: string): Promise<SessionInfoLike[]>;
   /** 删除会话（文件移入 .trash/ 回收目录）；返回刷新后的会话列表 */
@@ -92,4 +98,22 @@ export interface CommandItem {
   kind: 'skill' | 'command';
   /** 来源标注（用户级/共享/扩展包/项目/内置/扩展） */
   source: string;
+}
+
+/** 扩展对话框请求（main → renderer，经 uiBridge） */
+export interface UiAsk {
+  id: string;
+  kind: 'confirm' | 'input' | 'select';
+  title: string;
+  /** confirm 的消息 / input 的 placeholder */
+  message?: string;
+  /** select 的选项列表 */
+  options?: string[];
+  timeoutMs?: number;
+}
+
+/** 扩展通知（main → renderer 单向，toast） */
+export interface UiNotify {
+  message: string;
+  type?: 'info' | 'warning' | 'error';
 }

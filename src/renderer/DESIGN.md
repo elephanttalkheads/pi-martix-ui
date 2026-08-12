@@ -2,9 +2,9 @@
 
 ## 目标与非目标
 
-**目标**：把 pi SDK 会话事件流渲染为 v4 极简黑客帝国 UI——四区布局 + 4 态会话状态机 + 三件装饰（单层数字雨 / 轻扫描线 / 蠕虫入侵+神经核心）+ WebAudio 程序化音效；会话列表、文件树、历史恢复走真实 IPC。
+**目标**：把 pi SDK 会话事件流渲染为 v4 极简黑客帝国 UI——四区布局 + 4 态会话状态机 + 三件装饰（单层数字雨 / 轻扫描线 / 蠕虫入侵+神经核心）+ WebAudio 程序化音效；会话列表、文件树、历史恢复、扩展对话框（`ctx.ui` 的 confirm/select/input → AskDialog 弹层）与扩展通知（notify → toast）走真实 IPC。
 
-**非目标**：不定义 IPC 契约（`src/shared/protocol.ts` 类型与主进程是事实源）；不提供 Node/凭据能力（隔离在 preload 白名单之后）；不做真实 context 统计（头部「上下文 12.4k / 128k」与「主控会话 #0047」为硬编码装饰）。
+**非目标**：不定义 IPC 契约（`src/shared/protocol.ts` 类型与主进程是事实源）；不提供 Node/凭据能力（隔离在 preload 白名单之后）；不做真实 context 统计（头部「上下文 12.4k / 128k」与「主控会话 #0047」为硬编码装饰）；不实现扩展对话框的 Promise 表/超时/AbortSignal 兜底（主进程 `src/main/uibridge.mjs` 是事实源）——本模块只消费 `UiAsk`/`UiNotify` 类型与 `uiAnswer`/`onUiAsk`/`onUiNotify` 桥面。
 
 **边界**：渲染层只消费 `window.zion`（ZionAPI）；事件类型源 `@earendil-works/pi-coding-agent`（经 `shared/protocol.ts` re-export）。主进程/preload 为 JS（`main.mjs`/`preload.cjs`），经 `tsconfig.node.json` checkJs 校验，IPC 通道名字面量在 main/preload 三处，本模块不持有。
 
@@ -38,6 +38,12 @@
 - 插入与发送：skill → `运行技能 ${name}：`；command → `/name`。仅改输入框文本，随后与普通输入同路径 `send()` → `window.zion.prompt`。
 - 行交互：`role="listbox"/option` + `aria-selected`；↑↓ 循环移动、`onMouseEnter` 同步 active、`onMouseDown` preventDefault 防点击丢焦点；空态 `palette-empty`「无匹配 skill / 命令」。
 
+**扩展 UI 桥管线**（AskDialog.tsx + App.tsx 扩展订阅 effect）：
+- 订阅：`onUiAsk` → `setUiAsk`（store 单弹层槽 `uiAsk`，后到覆盖前）；`onUiNotify` → `pushToast` + 3s `setTimeout` 按 message+type 匹配当前队列后 `dismissToast`；effect cleanup 退订两通道。
+- 渲染（App 顶层 fragment，fixed 定位）：confirm = 消息 + 确认(`.primary`)/取消；input = placeholder=message，Enter 确定 / Esc 取消（取消=undefined），30ms 延迟聚焦；select = hover 移 active、点击选项即答、无选项显示「（无选项）」，仅取消按钮；遮罩 mousedown（`target===currentTarget`）＝取消。
+- 应答：`answer()` 成对执行 `window.zion.uiAnswer(ask.id, result)`（→ `zion:ui-answer` → 主进程 `handleAnswer` 按 id resolve 扩展 Promise）与 `setUiAsk(null)`；取消一律传 undefined。
+- 超时兜底在主进程（uibridge.mjs：Promise 表 + timeout/AbortSignal → resolve undefined；`dispatchUi` 于窗口创建时注入，闭包经 `win` 判空）——渲染层不持有任何超时逻辑。
+
 **蠕虫入侵管线**（编辑类工具调用）：
 - `tool_execution_start` → `parseEditFromTool`：编辑工具集合 `edit/apply_patch/write/multi_edit/patch/batch_execute`；bash 走写操作启发式（echo/printf 提取文本；目标按重定向 `>>`/`>`（排除 2>&1）→ `sed -i` → `tee` → `cp` → `mv` → `touch` 顺序取，`/dev/null`、`nul` 排除）；`batch_execute` 取首个可解析命令。
 - 触发链：`triggerWorm`（同步路径，`wormedRef` 按 toolCallId 去重）→ `normPath`（`\`→`/`、去盘符）→ `matchTreeRow`（`.ft-row[data-path]` 精确或互为后缀）→ 未命中则 `scanTree` 刷新 → `openAncestors` 展开祖先 → 双 rAF 等渲染完成后重试 → 兜底 `.trace[data-toolcall=<id>]` 块行。
@@ -56,7 +62,7 @@
 
 ## 接口与依赖
 
-**对外消费**（`window.zion`，ZionAPI，env.d.ts 声明）：`ping` / `prompt`（从不抛错，resolve 为 stopReason）/ `abort` / `steer` / `followUp` / `scanTree` / `listCommands`（命令面板数据，`CommandItem[]`）/ `listSessions` / `getCurrentSession` / `switchSession` / `newSession` / `renameSession` / `deleteSession`（rename/delete 均返回刷新后的完整会话列表）/ `onAgentEvent`（返回退订函数）。
+**对外消费**（`window.zion`，ZionAPI，env.d.ts 声明）：`ping` / `prompt`（从不抛错，resolve 为 stopReason）/ `abort` / `steer` / `followUp` / `scanTree` / `listCommands`（命令面板数据，`CommandItem[]`）/ `listSessions` / `getCurrentSession` / `switchSession` / `newSession` / `uiAnswer`（扩展对话框应答，取消传 undefined）/ `onUiAsk` / `onUiNotify`（订阅扩展对话框与通知，返回退订函数）/ `renameSession` / `deleteSession`（rename/delete 均返回刷新后的完整会话列表）/ `onAgentEvent`（返回退订函数）。
 
 **对外不提供**：无公共导出——本模块是终端 UI。
 
@@ -81,6 +87,8 @@
 - **command 优先 + 字母序**：面板 max-height 320px 截断时命令恒在可见区（命令少、skills 多），字母序给稳定预期。
 - **启动预取一次**：`listCommands` 主进程聚合扫描较重，仅 mount 调用一次，打开/过滤面板不再查主进程（代价见「已知限制与技术债」）。
 - **本地字体替代 Google Fonts**：styles.css 顶部 `@font-face` 引入 `assets/fonts/ShareTechMono-Regular.woff2`（latin 子集 13.5KB，来源 @fontsource/share-tech-mono，font-display: swap），替代 demo（index-v4.html）的 Google Fonts `@import`——离线/墙内可用，「离线字体」未做项闭环；`--font` 回退链不变，latin 子集无 CJK，中文文案走系统字体回退。
+- **弹层应答成对（uiAnswer + setUiAsk(null)）**：主进程 `handleAnswer` 按 id 在 Promise 表查找，只关弹层不应答会让扩展阻塞到超时兜底（undefined）才继续——`answer()` 封装了这一对操作，勿拆开。
+- **单弹层槽**：`uiAsk` 同时只容一个对话框，新 ask 直接覆盖旧 ask；被覆盖的旧 id 失去应答路径，只能等主进程 timeout 兜底。
 
 ## 不变量、安全边界与失败模式
 
@@ -89,11 +97,13 @@
 - 状态机终态恒为 READY：`agent_end` / `agent_settled` / `message_end` 错误 / `applySession` / `reset` 均回 READY；busy = `sessionState !== 'READY'`。
 - 同一 toolCallId 蠕虫只触发一次（`wormedRef`）；`revealedEdits` 单调累积、永不清空（依赖 toolCallId 全局唯一）。
 - `expandedTools` 随 `applySession` 清空（`reset` 不清——items 已清空，残留键不渲染、无害）。
+- `uiAsk`/`toasts` 不随 `applySession`/`reset` 清空：弹层与 toast 跨会话切换残留，直到应答/取消或计时器到期。
 - REDUCED 分支必须在动画路径早期返回且 done 仍执行（蠕虫直接命中）。
 - 渲染进程零 Node 访问：所有数据经 ZionAPI 白名单。
 
 **失败模式**：
-- 桥未注入（`window.zion` undefined）：`useAgentEvents` 直接 return（空界面）；smoke 经 `window.zion.ping` 自检——开发中先查 preload 注入。
+- 桥未注入（`window.zion` undefined）：`useAgentEvents` 与扩展 UI 订阅 effect 均直接 return（空界面、扩展对话框落空）；smoke 经 `window.zion.ping` 自检——开发中先查 preload 注入。
+- 主进程超时兜底不通知渲染层：timeout 只 resolve 扩展 Promise，弹层保持打开（残留）直到用户点取消/遮罩——无害但可见；单弹层槽被新 ask 覆盖后，旧 Promise 同样只能等超时。
 - prompt 错误回合：不抛错（SDK 语义），由 `message_end` stopReason 处理；InputBar 另有 catch 兜底日志。
 - `scanTree`/`listSessions`/`switchSession`/`newSession`/`renameSession`/`deleteSession` 失败：各自 catch → `log('err')`，UI 不崩（空列表占位文案）。
 - 启动恢复失败：静默 catch，停留在"会话就绪"空态。
@@ -104,7 +114,8 @@
 
 ## 已知限制与技术债
 
-- 单元测试仅覆盖纯函数层（`deriveSessionTitle`、`toolfmt`，node:test）；组件、事件管线、store 逻辑无测试（含命令面板键盘交互，smoke 不查 `.palette`），UI 回归依赖 typecheck + smoke + e2e。
+- 单元测试仅覆盖纯函数层（`deriveSessionTitle`、`toolfmt`，node:test）；组件、事件管线、store 逻辑无测试（含命令面板键盘交互、AskDialog 三形态与 toast 自动消失，smoke 不查 `.palette`/`.ask-dialog`），UI 回归依赖 typecheck + smoke + e2e。
+- AskDialog.tsx 头部注释与实现不完全一致：注释声称的「Esc 取消 / select ↑↓/Enter / confirm danger 强调」实际只有 input 形态的 Esc/Enter 真实存在——select 选项纯鼠标（hover/click，`role="listbox"` 仅是标记），confirm 主按钮为 `.primary`（accent 绿）而非 danger 色；改注释或补实现前先认清现状。
 - 会话历史恢复仅 user/assistant 文本，工具链块 / diff 卡不恢复。
 - conv-head「上下文 12.4k / 128k」、「主控会话 #0047」、状态栏「TLS 1.3」为硬编码装饰，非真实数据。
 - `AgentInfo` 类型保留但 Agent 卡片已移除（侧栏改为会话列表），注释注明供未来 agent 注册表。

@@ -31,6 +31,23 @@ const api = {
     ipcRenderer.on('agent:event', listener);
     return () => ipcRenderer.removeListener('agent:event', listener);
   },
+  uiAnswer: (id, result) => ipcRenderer.invoke('zion:ui-answer', id, result),
+  onUiAsk: (cb) => {
+    const listener = (
+      /** @type {import('electron').IpcRendererEvent} */ _e,
+      /** @type {import('../shared/protocol.ts').UiAsk} */ ask,
+    ) => cb(ask);
+    ipcRenderer.on('zion:ui-ask', listener);
+    return () => ipcRenderer.removeListener('zion:ui-ask', listener);
+  },
+  onUiNotify: (cb) => {
+    const listener = (
+      /** @type {import('electron').IpcRendererEvent} */ _e,
+      /** @type {import('../shared/protocol.ts').UiNotify} */ n,
+    ) => cb(n);
+    ipcRenderer.on('zion:ui-notify', listener);
+    return () => ipcRenderer.removeListener('zion:ui-notify', listener);
+  },
 };
 
 contextBridge.exposeInMainWorld('zion', api);

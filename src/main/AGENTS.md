@@ -1,6 +1,6 @@
 # src/main（Electron 主进程 + preload 安全桥）
 
-本模块是 ZION 的进程边界：主进程进程内接入 pi SDK（`createAgentSession`，复用 `~/.pi/agent` 配置），经 IPC 把 agent 会话管理与事件流暴露给渲染层；preload 在 sandbox 下实现渲染进程唯一入口 `window.zion`。不含 UI 逻辑，不管理模型/凭据配置。IPC 契约（通道清单、类型形状、stopReason 语义）由 `src/shared` 模块拥有，本模块是契约的实现方。
+本模块是 ZION 的进程边界：主进程进程内接入 pi SDK（`createAgentSession`，复用 `~/.pi/agent` 配置），经 IPC 把 agent 会话管理、事件流与扩展 UI 请求（dialog/notify）暴露给渲染层；preload 在 sandbox 下实现渲染进程唯一入口 `window.zion`。不含 UI 逻辑，不管理模型/凭据配置。IPC 契约（通道清单、类型形状、stopReason 语义）由 `src/shared` 模块拥有，本模块是契约的实现方。
 
 > 任务涉及本模块架构（会话模型、事件转发、扫描与命令聚合）、接口实现或设计决策时，先读 [DESIGN.md](DESIGN.md)；
 > 涉及 IPC 契约本身（通道名、`ZionAPI`、类型形状）时读 `src/shared/AGENTS.md` / `src/shared/DESIGN.md`；
@@ -8,7 +8,8 @@
 
 ## 关键入口
 
-- `src/main/main.mjs` —— 主进程全部逻辑：`sessions` Map + `currentSession` 指针、`ensureCurrentSession`/`ensureSessionFor`、13 组 `ipcMain.handle`（含 `zion:rename-session` / `zion:delete-session` / `zion:list-commands`）+ `agent:event` 转发（`wireSession`）、`historyFromSession`、`scanDir`
+- `src/main/main.mjs` —— 主进程全部逻辑：`sessions` Map + `currentSession` 指针、`ensureCurrentSession`/`ensureSessionFor`（会话创建后 `bindExtensions({ uiContext })` 注入 UI 桥）、14 组 `ipcMain.handle`（含 `zion:ui-answer` / `zion:rename-session` / `zion:delete-session` / `zion:list-commands`）+ `agent:event` / `zion:ui-ask` / `zion:ui-notify` 转发（`wireSession` / `dispatchUi`）、`historyFromSession`、`scanDir`
+- `src/main/uibridge.mjs` —— 扩展 UI 桥（纯 Node、无 electron 依赖）：`createUiBridge` 把 `select`/`confirm`/`input` 挂 Promise 表 → 经注入的 `dispatch` 派发 renderer；timeout/AbortSignal 兜底 resolve `undefined`；`notify` 单向派发；`handleAnswer` 回传应答；其余 `ExtensionUIContext` 方法为 TUI no-op 桩
 - `src/main/skillscan.mjs` —— 命令面板数据源（纯 Node、无 electron 依赖）：`parseSkillFrontmatter`/`scanSkillsDir`/`collectCommands` + `BUILTIN_COMMANDS`/`EXTENSION_COMMANDS`（命令清单维护规则见「本模块硬约束」）
 - `scripts/build-main.mjs` —— main/preload 产物构建：tsconfig.node.json typecheck 门禁 + 复制 JS 到 `dist-main/main` + `dist-main/preload`（源码即产物、无转译；package.json `main` 指向 `dist-main/main/main.mjs`）
 - `src/preload/preload.cjs` —— 安全桥实现：`contextBridge.exposeInMainWorld('zion', api)`；方法集合必须与 `ZionAPI`（`src/shared/protocol.ts`）一一对应
@@ -23,6 +24,7 @@
 - `npm run smoke` —— 构建 renderer + main 产物 + CDP 冒烟：验证 `window.zion` 注入、`zion:ping`、渲染基线（`scripts/smoke-cdp.mjs`）
 - `npm run e2e` —— 构建 + 真实 prompt 回归：`window.zion.prompt(...)` → deepseek → 事件流 → feed（`scripts/e2e-prompt.mjs`，约 12s）
 - `node --test scripts/skillscan.test.mjs` —— skillscan 单测（frontmatter 解析/目录扫描/聚合去重/内置清单完整性，6 用例；不依赖 Electron，改 skillscan.mjs 后跑）
+- `node --test scripts/uibridge.test.mjs` —— uiBridge 单测（Promise 回传/超时/signal/notify/重复应答，7 用例；不依赖 Electron，改 uibridge.mjs 后跑）
 - `npm run dev` —— build:main + vite + electron；main 以 `--dev` 参数加载 `http://127.0.0.1:5173`
 - `npm start` —— `electron .` 直跑产物（经 `dist-main/main/main.mjs` 加载 `dist-renderer/index.html`；需先 `npm run build:main` + `npm run build:renderer`）
 
@@ -32,6 +34,7 @@
 - **CJS `require('electron')` 返回 any**：解构前必须 `/** @type {typeof import('electron')} */` 注解（见 preload.cjs 顶部；坑 6）
 - **JSDoc 类型引用固定写法**：`import('../shared/protocol.ts')`（带 `.ts` 后缀，依赖 tsconfig.node.json 的 `allowImportingTsExtensions`）；不要在 `.mjs`/`.cjs` 里 require 该 TS 文件（规则详见 `src/shared/AGENTS.md` 硬约束；坑 5、8）
 - **IPC 通道名字符串散落两处字面量**（main.mjs 的 `handle`/`send` 与 preload.cjs 的 `invoke`/`on`，JS 无法共享运行时常量）：新增/改名通道必须两处同步，且同步更新 `ZionAPI`（契约归 `src/shared`，完整清单见其 DESIGN.md）
+- **扩展对话框形态三处同步**：`uibridge.mjs` 的 `ask()` kind、`src/shared/protocol.ts` 的 `UiAsk.kind`、`AskDialog.tsx` 渲染分支（confirm/input/select）必须一致；新增形态三处同改（形状契约归 `src/shared`）
 - **命令清单人工维护**：新增扩展命令必须追加 `skillscan.mjs` 的 `EXTENSION_COMMANDS`（运行时注册的命令无法静态枚举，漏加则面板不显示）；升级 pi SDK 后核对 `BUILTIN_COMMANDS` 是否漂移（快照来源见 DESIGN.md）
 - **会话工作目录固定 `D:\zion-workspace`**（main.mjs `WORKSPACE_DIR`，项目选择 UI 落地前的独立工作区，避免 agent 直接操作主目录）：改动会影响会话存储位置与 agent 实际操作目录
 - **`window.zion` 之外的渲染层通道不可新增**：渲染进程只能经该白名单触达主进程（`contextIsolation`/`sandbox` 等安全配置事实见 `src/shared/DESIGN.md` 安全边界，改动 `webPreferences` 前先读）

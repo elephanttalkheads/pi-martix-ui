@@ -9,6 +9,7 @@ import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { createAgentSession, SessionManager } from '@earendil-works/pi-coding-agent';
 import { collectCommands } from './skillscan.mjs';
+import { createUiBridge } from './uibridge.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isDev = process.argv.includes('--dev');
@@ -16,6 +17,18 @@ const RENDERER_DEV_URL = 'http://127.0.0.1:5173';
 
 // 初始会话工作目录（项目选择 UI 落地前先用独立工作区，避免 agent 直接操作主目录）
 const WORKSPACE_DIR = path.join('D:', 'zion-workspace');
+
+// 扩展 UI 桥：dialog 请求 → renderer 弹层（AskDialog）；uiContext + projectTrustContextFactory 双注入
+// （headless 默认无 UI——扩展 ask 与项目信任询问此前全部静默落空）
+const uiBridge = createUiBridge();
+
+/** 向渲染窗口派发 UI 事件（无窗口时 ask 已在桥层保持挂起，由 timeout 兜底） */
+function dispatchUi() {
+  uiBridge.setDispatch({
+    ask: (/** @type {import('../shared/protocol.ts').UiAsk} */ ask) => win?.webContents.send('zion:ui-ask', ask),
+    notify: (/** @type {import('../shared/protocol.ts').UiNotify} */ n) => win?.webContents.send('zion:ui-notify', n),
+  });
+}
 
 /** @type {import('electron').BrowserWindow | null} */
 let win = null;
@@ -25,6 +38,7 @@ const sessions = new Map();
 let currentSession = null;
 
 function createWindow() {
+  dispatchUi();
   const w = new BrowserWindow({
     width: 1440,
     height: 900,
@@ -99,6 +113,9 @@ async function ensureSessionFor(sessionManager, id) {
       cwd: WORKSPACE_DIR,
       sessionManager,
     });
+    // 扩展 UI 桥注入：bindExtensions 是官方路径（CreateAgentSessionOptions 无 uiContext 字段）——
+    // 注入后扩展的 ctx.ui.confirm/select/input/notify 真实弹窗，不再 headless 静默落空
+    await session.bindExtensions({ uiContext: uiBridge });
     sessions.set(id, session);
     currentSession = session;
     wireSession(session);
@@ -250,6 +267,13 @@ ipcMain.handle('zion:new-session', async () => {
   const s = await ensureSessionFor(sm, id);
   console.log('[zion] new session:', id);
   return { id: sm.getSessionId(), items: historyFromSession(s) };
+});
+
+// 扩展对话框应答（renderer → uiBridge → 扩展 Promise）
+ipcMain.handle('zion:ui-answer', (_e, id, result) => {
+  const handled = uiBridge.handleAnswer(id, result);
+  if (!handled) console.warn('[zion] ui-answer 未匹配 dialog:', id);
+  return { ok: handled };
 });
 
 // 会话重命名：appendSessionInfo 持久化显示名（session_info 条目，重启不丢）

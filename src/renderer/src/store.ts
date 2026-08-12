@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type { ToolExecutionStartEvent } from '@earendil-works/pi-coding-agent';
-import type { FileNode, SessionHistoryItem, SessionInfoLike } from '../../shared/protocol';
+import type { FileNode, SessionHistoryItem, SessionInfoLike, UiAsk, UiNotify } from '../../shared/protocol';
 
 export type ToolStatus = 'run' | 'ok' | 'err';
 
@@ -86,6 +86,10 @@ interface FeedState {
   revealedEdits: Record<string, true>;
   /** 工具链块展开态（trace 行点击展开完整参数） */
   expandedTools: Record<string, true>;
+  /** 当前扩展对话框（null=无；AskDialog 渲染） */
+  uiAsk: UiAsk | null;
+  /** 扩展通知队列（toast） */
+  toasts: { id: number; message: string; type?: UiNotify['type'] }[];
 
   pushUser(text: string): void;
   /** 流式增量追加到末条 assistant 消息（无则新建）；每字符 token +2 */
@@ -98,6 +102,9 @@ interface FeedState {
   log(level: LogLine['level'], text: string): void;
   revealEdit(toolCallId: string): void;
   toggleToolExpand(toolCallId: string): void;
+  setUiAsk(ask: UiAsk | null): void;
+  pushToast(n: UiNotify): void;
+  dismissToast(id: number): void;
   setTree(tree: FileNode[]): void;
   setSessions(sessions: SessionInfoLike[]): void;
   /** 仅更新当前会话显示标题（不重置 feed；重命名当前会话时用） */
@@ -125,6 +132,8 @@ export const useFeed = create<FeedState>()((set) => ({
   sndOn: localStorage.getItem('zion.snd') !== '0',
   revealedEdits: {},
   expandedTools: {},
+  uiAsk: null,
+  toasts: [],
 
   pushUser(text) {
     set((s) => ({ items: [...s.items, { id: nid(), kind: 'user', text, time: msgTime() }] }));
@@ -208,6 +217,13 @@ export const useFeed = create<FeedState>()((set) => ({
       else next[toolCallId] = true;
       return { expandedTools: next };
     });
+  },
+  setUiAsk(ask) { set({ uiAsk: ask }); },
+  pushToast(n) {
+    set((s) => ({ toasts: [...s.toasts, { id: s.toasts.length ? s.toasts[s.toasts.length - 1].id + 1 : 1, message: n.message, type: n.type }] }));
+  },
+  dismissToast(id) {
+    set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) }));
   },
   setSessions(sessions) { set({ sessions }); },
   setSessionTitle(title) { set({ sessionTitle: title }); },
