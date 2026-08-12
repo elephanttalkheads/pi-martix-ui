@@ -142,12 +142,14 @@ export default function App() {
   };
 
   return (
-    <div id="stage">
+    <>
+      {/* 氛围层在 #stage 之外（与 demo 结构一致）：fixed 定位，与主舞台同级比较 z-index */}
       <RainCanvas />
       <SignalCanvas />
       <div className="scanlines" aria-hidden="true" />
 
-      <header className="titlebar">
+      <div id="stage">
+        <header className="titlebar">
         <div className="window-controls" aria-hidden="true">
           <span className="dot close" />
           <span className="dot min" />
@@ -212,6 +214,7 @@ export default function App() {
           </span>
         </div>
       </footer>
-    </div>
+      </div>
+    </>
   );
 }

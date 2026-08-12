@@ -29,8 +29,10 @@ body {
 
 :focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
 
-/* ---------- 环境层：低对比数字雨 + 极轻扫描线，不可交互 ---------- */
-#rain { position: fixed; inset: 0; z-index: 0; }
+/* ---------- 环境层：低对比数字雨 + 极轻扫描线，不可交互 ----------
+   #rain 用负 z-index：即使主舞台 (#stage) 的层叠上下文在任何异常环境下失效，
+   数字雨也永远排在所有 UI 之下（修复：界面被数字雨完全挡住的问题） */
+#rain { position: fixed; inset: 0; z-index: -1; }
 .scanlines {
   position: fixed; inset: 0; z-index: 40; pointer-events: none;
   background: repeating-linear-gradient(0deg,
