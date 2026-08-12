@@ -63,6 +63,10 @@ export interface ZionAPI {
   switchSession(id: string): Promise<{ id: string; items: SessionHistoryItem[] }>;
   /** 新建会话并切换 */
   newSession(): Promise<{ id: string; items: SessionHistoryItem[] }>;
+  /** 重命名会话（持久化显示名）；返回刷新后的会话列表 */
+  renameSession(id: string, name: string): Promise<SessionInfoLike[]>;
+  /** 删除会话（文件移入 .trash/ 回收目录）；返回刷新后的会话列表 */
+  deleteSession(id: string): Promise<SessionInfoLike[]>;
   /** 订阅主进程转发的 agent 事件流；返回取消订阅函数（App 卸载时调用） */
   onAgentEvent(cb: (event: AgentSessionEvent) => void): () => void;
 }

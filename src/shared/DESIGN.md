@@ -27,7 +27,7 @@ env.d.ts 声明 Window.zion: ZionAPI  ◄─────────┘         
 
 ## 接口与依赖
 
-### ZionAPI（12 个方法）
+### ZionAPI（14 个方法）
 
 | 方法 | 通道 | 返回 |
 |---|---|---|
@@ -42,7 +42,14 @@ env.d.ts 声明 Window.zion: ZionAPI  ◄─────────┘         
 | getCurrentSession() | `zion:get-current`（invoke） | `{ id, items }`（惰性 ensureCurrentSession：continueRecent 或新建） |
 | switchSession(id) | `zion:switch-session`（invoke） | `{ id, items }`（懒创建实例，慢则秒级；id 不存在抛 `session not found`） |
 | newSession() | `zion:new-session`（invoke） | `{ id, items }` |
+| renameSession(id, name) | `zion:rename-session`（invoke） | `SessionInfoLike[]`：刷新后的会话列表 |
+| deleteSession(id) | `zion:delete-session`（invoke） | `SessionInfoLike[]`：刷新后的会话列表 |
 | onAgentEvent(cb) | `agent:event`（send） | 退订函数 `() => void` |
+
+**会话重命名/删除语义**（main.mjs 实现）：
+- `renameSession`：`SessionManager.open(info.path, undefined, WORKSPACE_DIR)` + `appendSessionInfo(name)` —— 向会话 JSONL 追加 `session_info` 条目持久化显示名（重启不丢，`listSessionInfos` 直接映射 `name`）；SDK 会清洗名字（换行折叠为空格 + trim，空名清除标题）
+- `deleteSession`：非硬删 —— 释放 `sessions` Map 实例；若删的是当前会话则清 `currentSession` 指针（下次 `ensureCurrentSession` 经 continueRecent 自动落回最近会话）；会话文件改名移入 `<会话目录>/.trash/<原名>.<时间戳>.jsonl`（可恢复）
+- 渲染层尚未接线这两个方法（Sidebar 会话卡暂无重命名/删除入口）：桥面与主进程已就绪，返回的刷新列表即 UI 列表更新源
 
 ### 数据形状
 
@@ -67,19 +74,20 @@ env.d.ts 声明 Window.zion: ZionAPI  ◄─────────┘         
 **不变量**：
 - `window.zion` 的形状 === `ZionAPI`：preload 以 `/** @type {ZionAPI} */` 注解 api 对象，`tsc -p tsconfig.node.json`（checkJs）强制校验；renderer 侧 `env.d.ts` 声明同一类型
 - `protocol.ts` 不产生任何运行时导出
+- 会话列表条目都是真实落盘文件：SDK 只在出现首条 assistant 消息后才写会话文件（no-assistant 守卫），空会话（只有用户消息或纯新建）不落盘、不会出现在 `listSessions` 中 —— 因此 rename/delete 只作用于真实存在的会话
 
 **安全边界**：renderer 零 Node 访问 —— `contextIsolation: true` + `sandbox: true` + `nodeIntegration: false`（`main.mjs` createWindow 的 webPreferences）；`window.zion` 是唯一 IPC 出口，凭据只留主进程。
 
 **失败模式（renderer 的处理依据）**：
 - `prompt()` 从不因模型/请求失败抛错：须检查 resolve 的 stopReason，'error' 时按失败展示
 - `stopReason` 只存在于 LLM 助手消息分支（`AgentMessage` 联合其他成员没有）→ 必须 `'stopReason' in msg` 守卫后再取
-- 会话懒创建：首次 `getCurrentSession` / `switchSession` 可能长达 45s（main 侧 `ensureSessionFor` 超时保护，超时 reject `agent init timeout`）；`switchSession` 传未知 id 抛 `session not found: <id>`
+- 会话懒创建：首次 `getCurrentSession` / `switchSession` 可能长达 45s（main 侧 `ensureSessionFor` 超时保护，超时 reject `agent init timeout`）；`switchSession` / `renameSession` / `deleteSession` 传未知 id 抛 `session not found: <id>`
 - `window.zion` 可能为 undefined（preload 注入失败）→ renderer 需可选链 `window.zion?.` 或显式判空（见 App.tsx / Sidebar.tsx 现有用法）
 - `onAgentEvent` 返回退订函数：组件卸载时必须调用，否则 preload 的 `ipcRenderer.on` listener 泄漏
 
 ## 已知限制与技术债
 
-- `protocol.ts` 头部注释的通道清单不完整：只列了 5 个 invoke + 1 个 send（`agent:event`），缺 `zion:scan-tree` / `zion:list-commands` / `zion:list-sessions` / `zion:get-current` / `zion:switch-session` / `zion:new-session`（会话管理、命令面板功能后加时未更新注释）；实际 11 个 invoke + 1 个 send，以 `main.mjs` / `preload.cjs` 字面量为准
+- `protocol.ts` 头部注释的通道清单不完整：只列了 5 个 invoke + 1 个 send（`agent:event`），缺 `zion:scan-tree` / `zion:list-commands` / `zion:list-sessions` / `zion:get-current` / `zion:switch-session` / `zion:new-session` / `zion:rename-session` / `zion:delete-session`（会话管理、命令面板功能后加时未更新注释）；实际 13 个 invoke + 1 个 send，以 `main.mjs` / `preload.cjs` 字面量为准
 - 通道名无运行时单一来源；根治依赖 main 进程 TS 构建管线（仓库已列为后续步骤）
 - `FileNode.size` 是**人类可读字符串**（如 '1.2k'）而非字节数，需要比较/排序时应由 main 侧改进
 

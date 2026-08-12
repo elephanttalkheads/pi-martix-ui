@@ -3,7 +3,7 @@
 ## 目标与非目标
 
 **目标**
-- 进程内接入 pi SDK：`createAgentSession` 复用 `~/.pi/agent` 配置（auth/models/settings）；会话创建/恢复/列举/打开全部经 `SessionManager`，工作目录固定为 `WORKSPACE_DIR`（值见 AGENTS.md 硬约束）
+- 进程内接入 pi SDK：`createAgentSession` 复用 `~/.pi/agent` 配置（auth/models/settings）；会话创建/恢复/列举/打开/重命名/删除全部经 `SessionManager`，工作目录固定为 `WORKSPACE_DIR`（值见 AGENTS.md 硬约束）
 - 多会话并存：`Map<sessionId, AgentSession>` 懒创建 + `currentSession` 指针切换；事件流只转发当前会话
 - 命令面板数据源：`zion:list-commands` 聚合本机全部 skills（用户/共享/项目/扩展包/settings.skills）与命令（内置 + 扩展白名单），`skillscan.mjs` 实现
 - 渲染层零 Node 访问：preload 在 sandbox 下暴露 `window.zion` 白名单桥（安全配置事实归 `src/shared/DESIGN.md` 安全边界）
@@ -13,7 +13,7 @@
 - 不管理模型/凭据：SDK 直接读 `~/.pi/agent`
 - 不实现扩展 UI 桥与项目信任处理（见「已知限制与技术债」）
 - 不解释/执行命令与技能：面板只提供数据清单，插入与执行语义在渲染层/宿主 TUI
-- main 进程保持 `.mjs` + JSDoc + checkJs，不引入 TS 构建管线（当前定案）
+- main 进程保持 `.mjs` + JSDoc + checkJs：`build:main` 只做 typecheck 门禁 + 复制（源码即产物），无 TS 转译管线（迁移方案见「已知限制与技术债」）
 - IPC 契约本身（通道全集、`ZionAPI`、数据形状、stopReason 语义）不在此重复，见 `src/shared/DESIGN.md`
 
 ## 架构与主要流程
@@ -24,19 +24,20 @@
 src/renderer (React/TS)  ⇄  window.zion（preload.cjs, CJS, sandbox）
         │ 契约：src/shared/protocol.ts（ZionAPI / AgentSessionEvent）
         ▼
-main.mjs：ipcMain.handle ×11 + agent:event 转发
+main.mjs：ipcMain.handle ×13 + agent:event 转发
         │ sessions: Map<sessionId, AgentSession>；currentSession 指针
         └─ skillscan.mjs：collectCommands（skills 扫描 + 命令清单，纯 Node）
         ▼
 @earendil-works/pi-coding-agent：createAgentSession / SessionManager / session.subscribe
 ```
 
-**启动**：`app.whenReady` → `createWindow()`（1440×900、黑底、`autoHideMenuBar`、preload=`../preload/preload.cjs`）；存在 `--dev` argv 时加载 `http://127.0.0.1:5173`，否则 `dist-renderer/index.html`；`did-finish-load` 后 `executeJavaScript('Boolean(window.zion)')` 自检注入并打日志（smoke 脚本同款检查）。
+**启动**：`app.whenReady` → `createWindow()`（1440×900、黑底、`autoHideMenuBar`、preload=`../preload/preload.cjs`）；存在 `--dev` argv 时加载 `http://127.0.0.1:5173`，否则 `dist-renderer/index.html`；`did-finish-load` 后 `executeJavaScript('Boolean(window.zion)')` 自检注入并打日志（smoke 脚本同款检查）。产物侧：`scripts/build-main.mjs` 以 tsconfig.node.json typecheck 为门禁，把 `src/main`/`src/preload` 的 JS 复制到 `dist-main/main` + `dist-main/preload`（package.json `main` 指向 `dist-main/main/main.mjs`，dev/smoke/e2e/start 全走产物；复制保持 `../preload/preload.cjs`、`../../dist-renderer` 相对路径在 dist-main 布局下依旧成立）。
 
 **会话生命周期**：
 - `ensureCurrentSession()`：无当前会话 → `fs.mkdirSync(WORKSPACE_DIR, { recursive: true })` → `SessionManager.continueRecent(WORKSPACE_DIR)` → `ensureSessionFor(sm, id)`
 - `ensureSessionFor(sm, id)`：Map 命中 → 置 `currentSession` 直接返回；未命中 → `createAgentSession({ cwd: WORKSPACE_DIR, sessionManager })` 与 **45s 超时**（`Promise.race`，超时 reject `'agent init timeout'`）竞争 → 成功则 `sessions.set`、置指针、`wireSession(s)`；超时失败不入 Map，下次调用可重试
 - 切换：`zion:switch-session` 先用 `SessionManager.list` 结果校验 id（未知 id 抛 `'session not found: <id>'`）→ `SessionManager.open(info.path, undefined, WORKSPACE_DIR)` → `ensureSessionFor`；`zion:new-session` → `SessionManager.create(WORKSPACE_DIR)`；`zion:get-current` → `ensureCurrentSession`；三者返回 `{ id, items }`（`items` 来自 `historyFromSession`）
+- 重命名/删除：`zion:rename-session` / `zion:delete-session` 同 switch 的 id 校验；重命名 = `SessionManager.open` + `appendSessionInfo(name)` 持久化显示名（不加载 AgentSession 实例，见接口节）；删除 = 释放 Map 实例 + 删的是当前会话则清指针 + 会话文件移入 `<会话文件目录>/.trash/`（时间戳后缀，可恢复）。SDK 事实：空会话不落盘（无 assistant 消息 → 无 `.jsonl` 文件），rename/delete 只对真实列出的已持久化会话有效（新建即空的会话在列表外）
 
 **prompt 主流程**：`agent:prompt` → `ensureCurrentSession` → `s.prompt(text)` → 取末条消息 stopReason（仅 LLM 助手消息分支有该字段，守卫规则见 `src/shared/DESIGN.md` 失败模式）→ 返回 `stop ?? 'ok'`。SDK 事件：`s.subscribe` 回调 → 过滤（`win` 未销毁且 `s === currentSession`）→ `win.webContents.send('agent:event', event)` → preload `ipcRenderer.on('agent:event')` 剥掉 `IpcRendererEvent` → `onAgentEvent` 回调（返回退订函数）。过滤是转发期判断而非订阅期判断：`wireSession` 每会话只订阅一次，切换会话不重订阅，旧会话事件被过滤不污染当前 feed。
 
@@ -55,22 +56,25 @@ main.mjs：ipcMain.handle ×11 + agent:event 转发
 
 ## 接口与依赖
 
-IPC 通道全集（11 invoke + 1 send）与返回形状见 `src/shared/DESIGN.md` 接口节（本模块是字面量与 handler 所在地）。契约未载明的实现侧行为：
+IPC 通道全集（13 invoke + 1 send）与返回形状见 `src/shared/DESIGN.md` 接口节（本模块是字面量与 handler 所在地）。契约未载明的实现侧行为：
 
 - `agent:prompt` 完整 await `s.prompt()`，返回 `stop ?? 'ok'`；不因模型/请求失败 reject（失败表现为末条消息 `stopReason: 'error'` + `errorMessage`，UI 必须查，语义见 shared）
 - `agent:abort` / `agent:steer` / `agent:followUp` **不 await** SDK 调用即返回 `true`（fire-and-forget）：返回不代表 agent 已 idle；无当前会话时静默 no-op
 - `zion:switch-session` / `zion:new-session` / `zion:get-current` 的 `{ id, items }` 中 `id` 来自 `sessionManager.getSessionId()`
 - `zion:list-sessions` 映射 `SessionManager.list` 结果：`firstMessage` 截 80 字符、`modified` 转 ISO、按 modified 倒序
+- `zion:rename-session` 校验 id 后 `SessionManager.open` + `appendSessionInfo`，**不加载 AgentSession 实例**（不入 `sessions` Map、不动 `currentSession` 指针），返回 `listSessionInfos()`
+- `zion:delete-session` **先断引用后移文件**：`sessions.delete(id)`、当前会话则 `currentSession = null`，再 `mkdirSync` + `renameSync` 移入 `<会话文件目录>/.trash/<原名>.<时间戳>.jsonl`；不 abort 被删会话可能的后台任务（引用已断，事件无转发资格），返回 `listSessionInfos()`
 
 依赖：
-- `@earendil-works/pi-coding-agent`（^0.84.1）：`createAgentSession`、`AgentSession`（prompt/steer/followUp/abort/subscribe/state）、`SessionManager` static create/open/continueRecent/list
+- `@earendil-works/pi-coding-agent`（^0.84.1）：`createAgentSession`、`AgentSession`（prompt/steer/followUp/abort/subscribe/state）、`SessionManager` static create/open/continueRecent/list + 实例方法 `appendSessionInfo`（重命名持久化）
 - `electron`（^43.x）：app / BrowserWindow / ipcMain / webContents；`node:path` / `node:fs` / `node:url`
 - `skillscan.mjs` 仅依赖 `node:fs` / `node:path`（刻意不依赖 electron，保证 `node --test` 可直测）
 - 外部边界：`~/.pi/agent`（SDK 配置）；`WORKSPACE_DIR`（agent cwd + 会话归属）；SDK 默认会话目录 `~/.pi/agent/sessions/<encoded-cwd>/`（未显式传 sessionDir 时——`continueRecent`/`create`/`list` 均省略；`open` 第二参传 `undefined` 则 sessionDir 从会话文件父目录推导）
 
 ## 设计决策与权衡
 
-- **多会话 Map + 当前指针而非单例**：会话懒创建（首次进入秒级），切换后实例保留在 Map 避免重复初始化；代价是旧会话后台任务仍可能运行（其事件被转发过滤，UI 无感知）
+- **多会话 Map + 当前指针而非单例**：会话懒创建（首次进入秒级），切换后实例保留在 Map 避免重复初始化；代价是旧会话后台任务仍可能运行（其事件被转发过滤，UI 无感知）；`delete-session` 是唯一显式释放路径
+- **重命名走 SDK 的 `appendSessionInfo`、删除走 `.trash` 回收而非硬删**：显示名写进会话 JSONL 的 `session_info` 条目（重启不丢、与 pi 自身命名一致）；删除用 `renameSync` 移入 `<会话文件目录>/.trash/` 加时间戳后缀（误删可手动移回恢复）。代价：`.trash` 只进不出需人工清理（见技术债）
 - **转发期过滤而非按会话路由**：`wireSession` 每会话订阅一次，转发时判 `s === currentSession`；切换无需重订阅，且保证任意时刻至多一个会话的事件到达渲染层
 - **45s init 超时**：SDK 的 ModelRuntime 目录刷新可能挂（root AGENTS.md「关键 SDK 行为」），超时保护避免 UI 永久等待；失败会话不入 Map，可重试
 - **prompt 不抛错 → IPC 返回 stopReason**：主进程不维护回合状态机，错误检测责任交给渲染层（shared 契约明示）
@@ -87,14 +91,14 @@ IPC 通道全集（11 invoke + 1 send）与返回形状见 `src/shared/DESIGN.md
 ## 不变量、安全边界与失败模式
 
 **不变量**：
-- 任意时刻至多一个会话（`currentSession`）的事件被转发；`sessions` Map 实例在进程生命周期内不销毁（切换不丢上下文，也没有淘汰策略）
+- 任意时刻至多一个会话（`currentSession`）的事件被转发；`sessions` Map 实例仅被 `zion:delete-session` 显式释放（切换不丢上下文，无自动淘汰策略）
 - `window.zion` 方法集合与 `ZionAPI` 一一对应（preload 以 `/** @type {ZionAPI} */` 注解，checkJs 强制）
 - `agent:prompt` 不因模型/请求失败 reject；abort/steer/followUp 无会话时返回 `true`
 - 所有 IPC 返回均为可序列化 JSON
 
 **安全边界**：
 - 渲染层零 Node 访问的配置事实归 shared（`main.mjs` createWindow 的 webPreferences）；本模块侧责任是：preload 不得暴露白名单之外的 API，main 不得把 Node 能力经其他通道传出
-- `switch-session` 的 id 必须先经 `SessionManager.list` 结果校验（防任意路径打开会话文件）
+- `switch-session` / `rename-session` / `delete-session` 的 id 必须先经 `SessionManager.list` 结果校验（防任意路径打开/移动会话文件）
 - 渲染层输入（prompt/steer/followUp 文本、会话 id）不做信任校验，但 agent 的 cwd 固定在 `WORKSPACE_DIR`，影响范围受限
 
 **失败模式**：
@@ -104,15 +108,17 @@ IPC 通道全集（11 invoke + 1 send）与返回形状见 `src/shared/DESIGN.md
 - 窗口销毁后事件到达 → `win.isDestroyed()` 守卫丢弃，不 send
 - 扫描遇不可读目录/文件 → 静默跳过单条目，整树不中断
 - `continueRecent` 无历史 → 返回新会话 id，走正常创建路径
+- rename/delete 未知 id → 同 switch 抛 `'session not found: <id>'`（校验不通过，不触碰任何文件）
+- `zion:delete-session` 先断引用后移文件：`fs.renameSync` 失败（权限/占用）→ IPC reject，但 Map 实例与指针已清、文件仍在原目录（半完成状态，可重试或手动恢复）
 - `zion:list-commands`：settings.json 缺失/解析失败 → `skills` 视为空数组，其余来源不受影响；单个 SKILL.md 不可读/损坏 → 跳过该条目，不中断整体
 
 ## 已知限制与技术债
 
 - 扩展 UI 桥未实现：`createAgentSession` 未传 ExtensionUIContext（SDK `ctx.ui` 默认 headless），agent 侧 UI 能力（如 ask）不可用
 - 项目信任未处理：headless 下 `ask` 会静默忽略项目资源
-- main 进程 TS 构建管线未做：`.mjs` + JSDoc + checkJs 是当前方案；通道名无运行时单一来源的根治依赖它（后果见 `src/shared/DESIGN.md` 已知限制）
+- main 仍是 JS：`build:main` 只做 typecheck 门禁 + 复制（源码即产物），无 tsc emit；通道名无运行时单一来源的问题仍在——未来迁 TS 时把 build:main 复制步骤替换为 tsc emit（dist-main 布局不变，见 `scripts/build-main.mjs` 注释）
 - abort/steer/followUp 为 fire-and-forget：`true` 不代表 agent 已 idle；若 UI 需要精确状态，后续应 await 或改用 SDK `waitForIdle`
 - 命令清单是静态快照：`BUILTIN_COMMANDS` 随 pi SDK 升级可能漂移（需人工核对）；新增扩展命令需手工追加 `EXTENSION_COMMANDS`，运行时注册的命令无法被发现
-- `sessions` Map 只增不减：会话数随 `zion:new-session` 增长，长期运行内存随之增长（当前无淘汰策略）
+- `sessions` Map 无自动淘汰：会话数随 `zion:new-session` 增长，仅 `zion:delete-session` 显式释放；`.trash` 回收目录只进不出，需人工清理（恢复 = 把文件移回原会话目录）
 
 ## 人工补充

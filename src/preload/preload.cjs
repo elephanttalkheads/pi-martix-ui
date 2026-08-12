@@ -21,6 +21,8 @@ const api = {
   getCurrentSession: () => ipcRenderer.invoke('zion:get-current'),
   switchSession: (id) => ipcRenderer.invoke('zion:switch-session', id),
   newSession: () => ipcRenderer.invoke('zion:new-session'),
+  renameSession: (id, name) => ipcRenderer.invoke('zion:rename-session', id, name),
+  deleteSession: (id) => ipcRenderer.invoke('zion:delete-session', id),
   onAgentEvent: (cb) => {
     const listener = (
       /** @type {import('electron').IpcRendererEvent} */ _e,

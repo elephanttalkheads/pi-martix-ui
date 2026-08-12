@@ -8,8 +8,9 @@
 
 ## 关键入口
 
-- `src/main/main.mjs` —— 主进程全部逻辑：`sessions` Map + `currentSession` 指针、`ensureCurrentSession`/`ensureSessionFor`、11 组 `ipcMain.handle`（含 `zion:list-commands`）+ `agent:event` 转发（`wireSession`）、`historyFromSession`、`scanDir`
+- `src/main/main.mjs` —— 主进程全部逻辑：`sessions` Map + `currentSession` 指针、`ensureCurrentSession`/`ensureSessionFor`、13 组 `ipcMain.handle`（含 `zion:rename-session` / `zion:delete-session` / `zion:list-commands`）+ `agent:event` 转发（`wireSession`）、`historyFromSession`、`scanDir`
 - `src/main/skillscan.mjs` —— 命令面板数据源（纯 Node、无 electron 依赖）：`parseSkillFrontmatter`/`scanSkillsDir`/`collectCommands` + `BUILTIN_COMMANDS`/`EXTENSION_COMMANDS`（命令清单维护规则见「本模块硬约束」）
+- `scripts/build-main.mjs` —— main/preload 产物构建：tsconfig.node.json typecheck 门禁 + 复制 JS 到 `dist-main/main` + `dist-main/preload`（源码即产物、无转译；package.json `main` 指向 `dist-main/main/main.mjs`）
 - `src/preload/preload.cjs` —— 安全桥实现：`contextBridge.exposeInMainWorld('zion', api)`；方法集合必须与 `ZionAPI`（`src/shared/protocol.ts`）一一对应
 - `src/shared/protocol.ts` —— 契约单一事实源（属 `src/shared` 模块，本模块只做 JSDoc 类型引用；`CommandItem` 形状归它）
 - `tsconfig.node.json` —— main/preload 的 checkJs 配置（include `src/main` + `src/preload` + `src/shared`）
@@ -18,11 +19,12 @@
 
 改动本模块后必须跑 `npm run typecheck`（双配置 `tsc --noEmit`；main/preload 的 JSDoc 类型错误由 tsconfig.node.json 暴露）。
 
-- `npm run smoke` —— 构建 renderer + CDP 冒烟：验证 `window.zion` 注入、`zion:ping`、渲染基线（`scripts/smoke-cdp.mjs`）
+- `npm run build:main` —— main/preload 产物构建：tsconfig.node.json typecheck 门禁 + 复制 JS 到 `dist-main/main` + `dist-main/preload`（dev/smoke/e2e 会自动先跑，`npm start` 不会）
+- `npm run smoke` —— 构建 renderer + main 产物 + CDP 冒烟：验证 `window.zion` 注入、`zion:ping`、渲染基线（`scripts/smoke-cdp.mjs`）
 - `npm run e2e` —— 构建 + 真实 prompt 回归：`window.zion.prompt(...)` → deepseek → 事件流 → feed（`scripts/e2e-prompt.mjs`，约 12s）
 - `node --test scripts/skillscan.test.mjs` —— skillscan 单测（frontmatter 解析/目录扫描/聚合去重/内置清单完整性，6 用例；不依赖 Electron，改 skillscan.mjs 后跑）
-- `npm run dev` —— vite + electron；main 以 `--dev` 参数加载 `http://127.0.0.1:5173`
-- `npm start` —— `electron .` 直跑（加载 `dist-renderer/index.html`，需先 `npm run build:renderer`）
+- `npm run dev` —— build:main + vite + electron；main 以 `--dev` 参数加载 `http://127.0.0.1:5173`
+- `npm start` —— `electron .` 直跑产物（经 `dist-main/main/main.mjs` 加载 `dist-renderer/index.html`；需先 `npm run build:main` + `npm run build:renderer`）
 
 ## 本模块硬约束
 
@@ -33,5 +35,6 @@
 - **命令清单人工维护**：新增扩展命令必须追加 `skillscan.mjs` 的 `EXTENSION_COMMANDS`（运行时注册的命令无法静态枚举，漏加则面板不显示）；升级 pi SDK 后核对 `BUILTIN_COMMANDS` 是否漂移（快照来源见 DESIGN.md）
 - **会话工作目录固定 `D:\zion-workspace`**（main.mjs `WORKSPACE_DIR`，项目选择 UI 落地前的独立工作区，避免 agent 直接操作主目录）：改动会影响会话存储位置与 agent 实际操作目录
 - **`window.zion` 之外的渲染层通道不可新增**：渲染进程只能经该白名单触达主进程（`contextIsolation`/`sandbox` 等安全配置事实见 `src/shared/DESIGN.md` 安全边界，改动 `webPreferences` 前先读）
+- **改 `src/main` / `src/preload` 后必须 `npm run build:main` 再验证**：运行时加载的是 `dist-main/` 产物（dev/smoke/e2e 自动先构建；`npm start` 不会，直接跑旧产物）
 
 ## 人工补充

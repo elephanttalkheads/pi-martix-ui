@@ -252,6 +252,31 @@ ipcMain.handle('zion:new-session', async () => {
   return { id: sm.getSessionId(), items: historyFromSession(s) };
 });
 
+// 会话重命名：appendSessionInfo 持久化显示名（session_info 条目，重启不丢）
+ipcMain.handle('zion:rename-session', async (_e, id, name) => {
+  const info = (await listSessionInfos()).find((i) => i.id === id);
+  if (!info) throw new Error('session not found: ' + id);
+  const sm = SessionManager.open(info.path, undefined, WORKSPACE_DIR);
+  sm.appendSessionInfo(name);
+  console.log('[zion] renamed session:', id, '→', name);
+  return listSessionInfos();
+});
+
+// 会话删除：释放实例 + 会话文件移入 .trash/ 回收目录（可恢复，非硬删）；
+// 当前会话被删时清指针，下次 ensureCurrentSession 自动落到最近会话
+ipcMain.handle('zion:delete-session', async (_e, id) => {
+  const info = (await listSessionInfos()).find((i) => i.id === id);
+  if (!info) throw new Error('session not found: ' + id);
+  if (sessions.has(id)) sessions.delete(id);
+  if (currentSession && currentSession.sessionManager.getSessionId() === id) currentSession = null;
+  const trashDir = path.join(path.dirname(info.path), '.trash');
+  fs.mkdirSync(trashDir, { recursive: true });
+  const target = path.join(trashDir, path.basename(info.path) + '.' + Date.now() + '.jsonl');
+  fs.renameSync(info.path, target);
+  console.log('[zion] deleted session:', id, '→', target);
+  return listSessionInfos();
+});
+
 app.whenReady().then(() => {
   createWindow();
   app.on('activate', () => {
