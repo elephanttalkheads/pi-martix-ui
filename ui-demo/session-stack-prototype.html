@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>会话列表堆叠 UI 原型 · variant=A</title>
+<!-- 三变体：?variant=A 抽屉堆叠 / B 斜错位卡堆 / C 平铺折叠列表 -->
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
+:root {
+  --bg: #010a04;
+  --surface: rgba(2, 18, 9, 0.92);
+  --surface-2: rgba(3, 26, 13, 0.94);
+  --text-primary: #3dff8f;
+  --text-secondary: #23c468;
+  --text-tertiary: #1da754;
+  --accent: #00ff41;
+  --accent-muted: #14b850;
+  --bright: #c2ffd9;
+  --warning: #ffb000;
+  --danger: #ff5555;
+  --border: rgba(61, 255, 143, 0.18);
+  --font: "Share Tech Mono", ui-monospace, "Courier New", monospace;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: var(--bg); color: var(--text-primary); font-family: var(--font); height: 100vh; overflow: hidden; }
+.demo-frame { display: flex; height: 100vh; }
+/* 左侧：真实侧栏比例（232px） */
+.sidebar { width: 232px; flex: none; background: var(--surface-2); border-right: 1px solid var(--border); display: flex; flex-direction: column; overflow-y: auto; }
+.side-head { flex: none; padding: 14px 12px 8px; border-bottom: 1px solid var(--border); }
+.side-head h3 { color: var(--text-tertiary); font-size: 11px; font-weight: normal; text-transform: uppercase; letter-spacing: 0.18em; }
+.side-note { margin-top: 6px; font-size: 10px; color: rgba(29, 167, 84, 0.6); letter-spacing: 0.05em; }
+/* 右侧：留白说明区 */
+.stage { flex: 1; display: flex; align-items: center; justify-content: center; }
+.stage .hint { font-size: 12px; color: var(--text-tertiary); letter-spacing: 0.1em; text-align: center; line-height: 2; }
+
+/* ========== 会话数据（mock，模拟真实 firstMessage 摘要） ========== */
+/* 每卡：标题 + 摘要全文 + meta；折叠态由变体 CSS 控制显示量 */
+
+/* ---------- 变体 A：抽屉堆叠（负 margin 覆盖，露头部） ---------- */
+.deck { padding: 10px 10px 4px; position: relative; }
+/* 折叠态只露头部区（标题 + 2 行摘要 ≈ 72px），卡片完整高度由 --h 决定，
+   下一张卡以负 margin 盖住剩余部分；hover/选中时 z 提升 → 完整内容可见 */
+.deck .card {
+  position: relative;
+  background: rgba(2, 18, 9, 0.97);
+  border: 1px solid var(--border);
+  padding: 10px 12px;
+  margin-bottom: calc(88px - var(--h, 140px));
+  transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s;
+  cursor: pointer;
+}
+.deck .card:hover { z-index: 10; transform: translateY(-4px); border-color: var(--accent-muted); box-shadow: 0 10px 24px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(20, 184, 80, 0.35); }
+.deck .card.active { border-color: rgba(20, 184, 80, 0.45); }
+.deck .card.active::after { content: '● 当前'; position: absolute; top: 8px; right: 10px; font-size: 10px; color: var(--accent-muted); letter-spacing: 0.08em; }
+.deck .c-title { font-size: 13px; color: var(--text-primary); letter-spacing: 0.04em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 40px; }
+.deck .c-summary { font-size: 12px; color: var(--text-secondary); line-height: 1.55; margin-top: 4px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.deck .c-meta { font-size: 11px; color: var(--text-tertiary); margin-top: 6px; letter-spacing: 0.06em; opacity: 0; transition: opacity 0.2s; }
+.deck .card:hover .c-meta { opacity: 1; }
+.deck .new-btn { margin-top: 14px; width: 100%; background: none; border: 1px solid var(--border); color: var(--text-tertiary); font-family: var(--font); font-size: 12px; padding: 6px 0; cursor: pointer; letter-spacing: 0.1em; }
+.deck .new-btn:hover { color: var(--text-primary); border-color: rgba(61, 255, 143, 0.4); }
+
+/* ---------- 变体 B：斜错位卡堆（旋转交错，hover 拉直展开） ---------- */
+.deckB { padding: 12px 14px 4px; position: relative; }
+.deckB .cardB {
+  position: relative; background: rgba(2, 18, 9, 0.97);
+  border: 1px solid var(--border);
+  padding: 10px 12px;
+  cursor: pointer;
+  max-height: 52px; overflow: hidden;
+  transform-origin: center;
+  transition: max-height 0.3s cubic-bezier(0.22, 1, 0.36, 1), transform 0.3s, border-color 0.2s, box-shadow 0.2s;
+}
+.deckB .cardB:nth-child(odd) { transform: rotate(-1.2deg) translateX(-2px); }
+.deckB .cardB:nth-child(even) { transform: rotate(1.1deg) translateX(2px); }
+.deckB .cardB + .cardB { margin-top: -30px; }
+.deckB .cardB:hover { max-height: 400px; transform: rotate(0deg) translateX(0) scale(1.02); z-index: 10; border-color: var(--accent-muted); box-shadow: 0 8px 22px rgba(0, 0, 0, 0.55); background: rgba(4, 26, 13, 0.99); }
+.deckB .cardB.active { border-color: rgba(20, 184, 80, 0.45); }
+.deckB .cardB.active::before { content: '● 当前'; position: absolute; top: 8px; right: 10px; font-size: 10px; color: var(--accent-muted); letter-spacing: 0.08em; z-index: 2; }
+.deckB .c-title { font-size: 13px; color: var(--text-primary); letter-spacing: 0.04em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 40px; }
+.deckB .c-summary { font-size: 12px; color: var(--text-secondary); line-height: 1.55; margin-top: 4px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.deckB .cardB:hover .c-summary, .deckB .cardB.active .c-summary { -webkit-line-clamp: unset; display: block; }
+.deckB .c-meta { font-size: 11px; color: var(--text-tertiary); margin-top: 6px; letter-spacing: 0.06em; opacity: 0; transition: opacity 0.2s; }
+.deckB .cardB:hover .c-meta, .deckB .cardB.active .c-meta { opacity: 1; }
+.deckB .new-btn { margin-top: 16px; width: 100%; background: none; border: 1px solid var(--border); color: var(--text-tertiary); font-family: var(--font); font-size: 12px; padding: 6px 0; cursor: pointer; letter-spacing: 0.1em; }
+.deckB .new-btn:hover { color: var(--text-primary); border-color: rgba(61, 255, 143, 0.4); }
+
+/* ---------- 变体 C：平铺折叠列表（对照组，无堆叠） ---------- */
+.deckC { padding: 10px 10px 4px; }
+.deckC .cardC {
+  background: rgba(2, 18, 9, 0.97); border: 1px solid var(--border);
+  padding: 10px 12px; margin-bottom: 8px; cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+}
+.deckC .cardC:hover, .deckC .cardC.active { border-color: var(--accent-muted); background: rgba(4, 26, 13, 0.99); }
+.deckC .cardC.active::after { content: '● 当前'; float: right; font-size: 10px; color: var(--accent-muted); letter-spacing: 0.08em; }
+.deckC .c-title { font-size: 13px; color: var(--text-primary); letter-spacing: 0.04em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.deckC .c-summary { font-size: 12px; color: var(--text-secondary); line-height: 1.55; margin-top: 4px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.deckC .cardC:hover .c-summary { -webkit-line-clamp: unset; display: block; }
+.deckC .c-meta { font-size: 11px; color: var(--text-tertiary); margin-top: 6px; letter-spacing: 0.06em; opacity: 0; transition: opacity 0.2s; }
+.deckC .cardC:hover .c-meta { opacity: 1; }
+.deckC .new-btn { margin-top: 6px; width: 100%; background: none; border: 1px solid var(--border); color: var(--text-tertiary); font-family: var(--font); font-size: 12px; padding: 6px 0; cursor: pointer; letter-spacing: 0.1em; }
+.deckC .new-btn:hover { color: var(--text-primary); border-color: rgba(61, 255, 143, 0.4); }
+
+/* ---------- 浮动变体切换条 ---------- */
+.switcher {
+  position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%);
+  display: flex; align-items: center; gap: 14px;
+  background: rgba(0, 8, 2, 0.92); border: 1px solid var(--border);
+  padding: 6px 16px; z-index: 999;
+  font-size: 12px; color: var(--text-secondary); letter-spacing: 0.1em;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.6);
+}
+.switcher button { background: none; border: 1px solid var(--border); color: var(--accent); font-family: var(--font); font-size: 14px; width: 26px; height: 24px; cursor: pointer; }
+.switcher button:hover { border-color: var(--accent-muted); }
+.switcher .label b { color: var(--bright); }
+</style>
+</head>
+<body>
+<div class="demo-frame">
+  <aside class="sidebar">
+    <div class="side-head">
+      <h3>会话</h3>
+      <div class="side-note">PROTOTYPE · 堆叠列表演示</div>
+    </div>
+    <div id="deck-slot"></div>
+  </aside>
+  <main class="stage">
+    <div class="hint">将鼠标移到会话卡上查看完整内容<br/>← → 或底部按钮切换变体</div>
+  </main>
+</div>
+
+<div class="switcher">
+  <button id="prev" title="上一变体">←</button>
+  <span class="label" id="sw-label">A — 抽屉堆叠</span>
+  <button id="next" title="下一变体">→</button>
+</div>
+
+<script>
+// mock 会话数据（模拟真实 firstMessage 摘要 + 消息统计）
+const SESSIONS = [
+  { title: '为 zion-worm-target.txt 添加一行 hello', summary: '用户要求向工作区文件追加内容。模型选择 bash 重定向完成写入（echo >> 与 printf 两种形态），随后 read 工具读回确认。修复：bash 写操作纳入编辑类工具解析，蠕虫动画同步触发。', meta: '12 条消息 · 05:28' },
+  { title: '数字雨层叠防御修复', summary: '界面被全屏数字雨遮挡。根因排查：残留 vite 进程占用 5173 导致 electron 加载非预期实例；防御性修复：氛围层移出 #stage、rain 负 z-index，任何层叠异常下雨都位于 UI 之下。', meta: '8 条消息 · 05:22' },
+  { title: 'v4 收敛：蠕虫入侵复刻', summary: '终点定位到文件树目标行（路径归一化 + 刷新树 + 祖先展开）；扰码解密 620ms 逐字符还原、点号锚点保持；diff 卡延迟至命中后渲染，招牌叙事时序对齐规格。', meta: '6 条消息 · 05:21' },
+  { title: '侧栏改为会话列表', summary: 'Agent 卡替换为真实 SDK 会话列表：多实例懒创建 + 当前指针切换 + 历史恢复 + 新建会话。E2E 验证列表/切换/历史全链路。', meta: '6 条消息 · 05:20' },
+  { title: 'UI 整体调亮', summary: '背景从纯黑改为暗绿黑、面板与边框提亮、扫描线/暗角减弱让内容透出、数字雨字形更亮。', meta: '4 条消息 · 04:12' },
+];
+
+const VARIANTS = [
+  { key: 'A', name: 'A — 抽屉堆叠', render: renderDeck },
+  { key: 'B', name: 'B — 斜错位卡堆', render: renderDeckB },
+  { key: 'C', name: 'C — 平铺折叠列表', render: renderDeckC },
+];
+
+function cardHtml(cls, s, idx) {
+  return `<div class="${cls}" data-i="${idx}" tabindex="0" role="button">
+    <div class="c-title">${s.title}</div>
+    <div class="c-summary">${s.summary}</div>
+    <div class="c-meta">${s.meta}</div>
+  </div>`;
+}
+
+// 变体 A：渲染后测量每卡完整高度 → --h（负 margin 覆盖量 = 完整高 - 露出区 88px）
+// 露出区 88px：覆盖量 ≤ 10px（padding-top 缓冲），保证下一卡标题与 2 行摘要完整可见
+function measureDeck(root) {
+  root.querySelectorAll('.deck .card').forEach((el) => {
+    const h = el.scrollHeight + 2;
+    el.style.setProperty('--h', h + 'px');
+  });
+}
+
+function renderDeck() {
+  return `<div class="deck">${SESSIONS.map((s, i) => cardHtml('card' + (i === 0 ? ' active' : ''), s, i)).join('')}
+    <button class="new-btn">＋ 新建会话</button></div>`;
+}
+function renderDeckB() {
+  return `<div class="deckB">${SESSIONS.map((s, i) => cardHtml('cardB' + (i === 0 ? ' active' : ''), s, i)).join('')}
+    <button class="new-btn">＋ 新建会话</button></div>`;
+}
+function renderDeckC() {
+  return `<div class="deckC">${SESSIONS.map((s, i) => cardHtml('cardC' + (i === 0 ? ' active' : ''), s, i)).join('')}
+    <button class="new-btn">＋ 新建会话</button></div>`;
+}
+
+// 选中态切换（demo：点击卡=选中；真实实现里为切换会话）
+function bindSelect(root) {
+  root.querySelectorAll('[data-i]').forEach((el) => {
+    el.addEventListener('click', () => {
+      root.querySelectorAll('[data-i]').forEach((x) => x.classList.remove('active'));
+      el.classList.add('active');
+    });
+    el.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); el.click(); }
+    });
+  });
+}
+
+function current() {
+  const v = new URLSearchParams(location.search).get('variant') || 'A';
+  return VARIANTS.find((x) => x.key === v) ?? VARIANTS[0];
+}
+function apply(v, push) {
+  const slot = document.getElementById('deck-slot');
+  slot.innerHTML = v.render();
+  bindSelect(slot);
+  if (v.key === 'A') measureDeck(slot);
+  document.getElementById('sw-label').innerHTML = `<b>${v.key}</b> — ${v.name.slice(4)}`;
+  document.title = '会话列表堆叠 UI 原型 · variant=' + v.key;
+  if (push) history.replaceState(null, '', '?variant=' + v.key);
+}
+
+let idx = VARIANTS.indexOf(current());
+apply(VARIANTS[idx], false);
+document.getElementById('prev').onclick = () => { idx = (idx + VARIANTS.length - 1) % VARIANTS.length; apply(VARIANTS[idx], true); };
+document.getElementById('next').onclick = () => { idx = (idx + 1) % VARIANTS.length; apply(VARIANTS[idx], true); };
+document.addEventListener('keydown', (e) => {
+  if (e.target.matches('input, textarea, [contenteditable]')) return;
+  if (e.key === 'ArrowLeft') { idx = (idx + VARIANTS.length - 1) % VARIANTS.length; apply(VARIANTS[idx], true); }
+  if (e.key === 'ArrowRight') { idx = (idx + 1) % VARIANTS.length; apply(VARIANTS[idx], true); }
+});
+</script>
+</body>
+</html>
