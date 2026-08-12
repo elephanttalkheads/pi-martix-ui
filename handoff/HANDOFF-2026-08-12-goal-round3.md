@@ -54,10 +54,26 @@
 
 ### 6.1 新机冷启动（一次性）
 
-1. **复制用户配置**：`~/.pi/agent/` 整目录到新机同路径（含 auth.json 凭据、settings.json、`skills/`、`agents/`（vision.md）、`extensions/`、`pi-goal.json`）——这是唯一手动步骤（详见 `handoff/HANDOFF-2026-08-11-next.md`）
+1. **检测 `~/.pi/agent/` 配置完整性**（每台新机逐项核对，缺失即补）：
+
+   | 配置项 | 用途 | 缺失时 |
+   |---|---|---|
+   | `auth.json` | 模型/Provider 凭据（唯一真正敏感文件） | **从旧机复制**（唯一手动步骤，详见 `handoff/HANDOFF-2026-08-11-next.md`） |
+   | `settings.json` | shellPath/主题/默认模型/compaction 等 | 复制旧机或手动重建（含 `compaction: { reserveTokens: 550000 }` 等本机值） |
+   | `pi-goal.json` | goal 扩展：`automaticTurns: 100` 是自主推进关键 | 重建（模板见下方 6.1.1） |
+   | `skills/`（27 个） | grill-with-docs/to-spec/to-tickets/implement/code-review 等核心链 | 从旧机复制整目录 |
+   | `agents/`（vision.md） | 视觉子代理（图像任务必须） | 从旧机复制（完整内容见知识库笔记） |
+   | `extensions/`（vision-switch 等） | 扩展运行时 | 复制旧机后 `pi reload` |
+   | `npm/`（扩展包） | pi-mcp-adapter/pi-subagents/pi-goal 等包体 | `pi install npm:...` 重装（清单见 `settings.json` 的 `packages` 数组） |
+   | `mcp.json` | GitHub/Gitee MCP 服务器（token 用环境变量占位） | 从旧机复制或按知识库重建 |
+   | `trust.json` / `sessions/` / `models-store.json` | 信任决策/会话历史/模型缓存（可缺省，自动重建） | 可忽略 |
+   | `packages.json` | 非必需（本机亦无） | 可忽略 |
+
+   **本机现状实测**（2026-08-12）：auth.json / settings.json / models-store.json / pi-goal.json / skills(27) / agents / extensions / npm / mcp.json / trust.json / sessions 全部存在；packages.json 不存在（非必需）。
+
 2. 安装 pi-goal 扩展：`pi install npm:@narumitw/pi-goal`（依赖 pi ≥0.80.6）
 3. clone 本仓库（GitHub `elephanttalkheads/pi-martix-ui`）
-4. 若缺失，重建 `~/.pi/agent/pi-goal.json`（本机现值，automaticTurns 100 是自主推进关键）：
+4. 若缺失，重建 `~/.pi/agent/pi-goal.json`（automaticTurns 100 是自主推进关键）：
    ```json
    { "toolVisibility": "after-first-goal", "experimental": { "goals": false }, "rpc": { "enabled": false }, "continuationLimits": { "automaticTurns": 100, "noProgressTurns": 3 } }
    ```
