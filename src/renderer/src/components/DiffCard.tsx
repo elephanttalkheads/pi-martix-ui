@@ -1,27 +1,34 @@
+// diff 卡 —— v4 规格 §5.8：行号列 + 红删/绿增符号列 + 代码列，glitchIn 分段扫入
+// 增删是符号 + 颜色双编码；行号未知（null）时留空。
 import type { DiffRow } from '../store';
 
-// diff 卡 —— 移植自 ui-demo addDiffCard：行号列 + 红删/绿增 + 代码列，逐行扫入（40ms/行）。
-// 数据卡走 DOM（ADR-0001）；React 自动转义，无需 demo 的 esc()。
-
 export default function DiffCard({ file, rows }: { file: string; rows: DiffRow[] }) {
+  let plus = 0;
+  let minus = 0;
+  for (const r of rows) {
+    if (r.t === '+') plus++;
+    else if (r.t === '-') minus++;
+  }
+  const dFile = file.startsWith('✎ ') ? file : `✎ ${file}`;
+
   return (
-    <div className="diff">
+    <div className="diff reveal">
       <div className="diff-head">
-        <span className="d-file">✎ {file}</span>
+        <span className="d-file">{dFile}</span>
+        <span className="d-stat">
+          <span className="plus">+{plus}</span> <span className="minus">−{minus}</span>
+        </span>
         <span className="d-op">modified</span>
       </div>
       <div className="diff-body">
-        {rows.map((r, i) => {
-          const cls = r.t === '+' ? 'add' : r.t === '-' ? 'del' : 'ctx';
-          const sign = r.t === '+' ? '+' : r.t === '-' ? '-' : '·';
-          return (
-            <div key={i} className={`diff-line ${cls} reveal`} style={{ animationDelay: `${i * 40}ms` }}>
-              <span className="ln">{r.n ?? ''}</span>
-              <span className="sign">{sign}</span>
-              <span className="code">{r.c}</span>
-            </div>
-          );
-        })}
+        {rows.length === 0 && <div className="diff-line ctx"><span className="ln" /><span className="sign" /><span className="code">（无内容变更）</span></div>}
+        {rows.map((r, i) => (
+          <div key={i} className={`diff-line ${r.t === '+' ? 'add' : r.t === '-' ? 'del' : 'ctx'}`}>
+            <span className="ln">{r.n ?? ''}</span>
+            <span className="sign">{r.t === '+' ? '+' : r.t === '-' ? '−' : ''}</span>
+            <span className="code">{r.c}</span>
+          </div>
+        ))}
       </div>
     </div>
   );

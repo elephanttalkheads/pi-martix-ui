@@ -1,58 +1,75 @@
+// App —— v4 四区布局（标题栏 / 侧栏 / 对话区 / 日志抽屉+状态栏）
+// 事件接线：agent_start→RUNNING、tool_execution_start→RUNNING、message_update→STREAMING、
+// abort→CANCELLING、agent_end→READY；错误回合 → 红日志 + 中止音（状态机仍回 READY）。
 import { useEffect, useState } from 'react';
 import type { AgentSessionEvent } from '../../shared/protocol';
-import MatrixBg from './components/MatrixBg';
-import CrtOverlay from './components/CrtOverlay';
-import WormLayer from './components/WormLayer';
+import RainCanvas from './components/RainCanvas';
+import SignalCanvas from './components/SignalCanvas';
+import Sidebar from './components/Sidebar';
+import LogDrawer from './components/LogDrawer';
 import Feed from './components/Feed';
 import InputBar from './components/InputBar';
 import { SND, useSoundFx } from './components/SoundFx';
 import { useFeed, parseEditFromTool } from './store';
 
-// 主进程推来的 agent 事件 → feed 状态 + FX 折算 + 音效挂钩
-// FX 折算规则（CONTEXT.md）：agent_start → busy+FX 抬升；tool start → load 脉冲（SND.step）；
-// tool end ok → blip；agent_end → 回复音；错误回合 → 中止音 + 状态栏红脉冲。
 function useAgentEvents() {
   const appendDelta = useFeed((s) => s.appendDelta);
   const toolStart = useFeed((s) => s.toolStart);
   const toolEnd = useFeed((s) => s.toolEnd);
-  const setBusy = useFeed((s) => s.setBusy);
-  const setError = useFeed((s) => s.setError);
+  const setSessionState = useFeed((s) => s.setSessionState);
+  const log = useFeed((s) => s.log);
 
   useEffect(() => {
     if (!window.zion?.onAgentEvent) return;
+    let replyScheduled = false;
     const handle = (ev: AgentSessionEvent) => {
       switch (ev.type) {
         case 'message_update': {
           const e = ev.assistantMessageEvent;
-          if (e.type === 'text_delta' || e.type === 'thinking_delta') appendDelta(e.delta);
+          if (e.type === 'text_delta' || e.type === 'thinking_delta') {
+            appendDelta(e.delta);
+            setSessionState('STREAMING');
+          }
           break;
         }
         case 'tool_execution_start':
           toolStart(ev, parseEditFromTool(ev.toolName, ev.args));
-          SND.step();
+          setSessionState('RUNNING');
+          log('dim', `[TOOL] ${ev.toolName} 开始`);
           break;
         case 'tool_execution_end':
           toolEnd(ev.toolCallId, ev.isError, ev.result);
-          if (ev.isError) SND.abort();
-          else SND.blip();
+          if (ev.isError) {
+            SND.abort();
+            log('err', `[TOOL] ${ev.toolName} 失败`);
+          } else {
+            SND.step();
+            log('ok', `[TOOL] ${ev.toolName} 完成`);
+          }
           break;
         case 'agent_start':
-          setBusy(true);
+          setSessionState('RUNNING');
+          replyScheduled = false;
           break;
         case 'agent_end':
-          setBusy(false);
-          SND.reply();
+          setSessionState('READY');
+          if (!replyScheduled) {
+            replyScheduled = true;
+            SND.reply();
+            log('ok', '[TURN] 回复完成');
+          }
           break;
         case 'agent_settled':
-          setBusy(false);
+          setSessionState('READY');
           break;
         case 'message_end': {
           // stopReason 只存在于 LLM 助手消息分支（AgentMessage 联合的其他成员没有）；
           // 用 in 守卫按运行时语义判定，其余消息类型自动跳过。
           const stop = ev.message as { stopReason?: string } | null;
           if (stop?.stopReason === 'error') {
-            setError('agent 回合以错误结束（见末尾消息）');
+            setSessionState('READY');
             SND.abort();
+            log('err', '[TURN] 回合以错误结束（模型/请求失败）');
           }
           break;
         }
@@ -61,7 +78,7 @@ function useAgentEvents() {
       }
     };
     return window.zion.onAgentEvent(handle);
-  }, [appendDelta, toolStart, toolEnd, setBusy, setError]);
+  }, [appendDelta, toolStart, toolEnd, setSessionState, log]);
 }
 
 function Clock() {
@@ -81,52 +98,101 @@ function Clock() {
 export default function App() {
   useAgentEvents();
   useSoundFx();
-  const busy = useFeed((s) => s.busy);
-  const error = useFeed((s) => s.error);
+  const sessionState = useFeed((s) => s.sessionState);
+  const activeAgent = useFeed((s) => s.activeAgent);
   const sndOn = useFeed((s) => s.sndOn);
   const setSndOn = useFeed((s) => s.setSndOn);
+  const tokenCount = useFeed((s) => s.tokenCount);
+  const pushUser = useFeed((s) => s.pushUser);
+  const log = useFeed((s) => s.log);
+  const [termOpen, setTermOpen] = useState(false);
+  const [bootAt] = useState(() => Date.now());
+  const [now, setNow] = useState(() => new Date());
 
-  const state = error ? 'ERROR' : busy ? 'STREAMING' : 'READY';
+  useEffect(() => {
+    const t = window.setInterval(() => setNow(new Date()), 1000);
+    return () => window.clearInterval(t);
+  }, []);
+
+  const p = (n: number) => String(n).padStart(2, '0');
+  const up = Math.floor((now.getTime() - bootAt) / 1000);
+
+  const selectFile = (path: string) => {
+    pushUser(`读取 ${path}`);
+    log('dim', `[FILE] 读取 ${path}`);
+    SND.send();
+    void window.zion.prompt(`读取 ${path} 并简要说明其作用`);
+  };
 
   return (
-    <div className="app">
-      <MatrixBg />
-      <WormLayer />
-      <CrtOverlay />
+    <div id="stage">
+      <RainCanvas />
+      <SignalCanvas />
+      <div className="scanlines" aria-hidden="true" />
+
       <header className="titlebar">
-        <div className="brand" data-text="ZION://agent-console">
-          ZION://agent-console <span className="proto">v0.3.0</span>
+        <div className="window-controls" aria-hidden="true">
+          <span className="dot close" />
+          <span className="dot min" />
+          <span className="dot max" />
         </div>
-        <div className="title-right">
-          <span className="status-chip">MODEL: ~/.pi/agent</span>
-          <Clock />
+        <div className="brand">
+          ZION://agent-console <span className="proto">v4.0-minimal</span>
         </div>
+        <Clock />
       </header>
-      <main className="main">
+
+      <div className="main">
+        <Sidebar onSelectFile={selectFile} />
         <section className="console">
           <div className="conv-head">
-            <span className="c-title">OPERATOR CONSOLE</span>
-            <span className={`chip ${busy ? 'on' : ''}`}>{state}</span>
+            <span className="c-title">主控会话 #0047</span>
+            <span className="chip on">MODEL: {activeAgent}</span>
+            <span id="chip-state" className={`chip ${sessionState === 'READY' ? 'on' : 'warn'}`}>
+              {sessionState}
+            </span>
             <span className="spacer" />
-            <span className="chip">{sndOn ? 'SND: ON' : 'SND: OFF'}</span>
+            <span className="chip st-dim">上下文 12.4k / 128k</span>
           </div>
           <Feed />
           <InputBar />
         </section>
-      </main>
-      <footer className={`statusbar ${error ? 'err' : ''}`}>
-        <span id="st-state" className={busy ? 'warn' : error ? 'err' : ''}>
-          {state}
-        </span>
+      </div>
+
+      <LogDrawer open={termOpen} />
+
+      <footer className="statusbar">
         <div className="s-group">
+          <span>
+            <span className="st-acc">●</span> 已连接 zion 主网
+          </span>
+          <span className="st-dim">TLS 1.3</span>
+        </div>
+        <div className="s-group">
+          <span className="st-dim">tokens: {tokenCount.toLocaleString()}</span>
+          <span className="st-dim">
+            uptime: {p(Math.floor(up / 60))}:{p(up % 60)}
+          </span>
           <button
-            className="snd-toggle"
+            className="st-btn"
+            aria-expanded={termOpen}
+            onClick={() => {
+              setTermOpen(!termOpen);
+              log('dim', `[LOG] 日志抽屉 ${termOpen ? '收起' : '展开'}`);
+            }}
+          >
+            日志 {termOpen ? '▴' : '▾'}
+          </button>
+          <button
+            className="st-btn"
             onClick={() => setSndOn(SND.toggle())}
             title="切换 UI 音效"
           >
             SND: {sndOn ? 'ON' : 'OFF'}
           </button>
-          <span className="st-dim">ZION v0.3.0</span>
+          <span id="st-state" className={sessionState === 'READY' ? 'ready' : 'run'}>
+            {sessionState}
+          </span>
         </div>
       </footer>
     </div>

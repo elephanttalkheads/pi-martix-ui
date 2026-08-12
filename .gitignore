@@ -7,3 +7,6 @@ out/
 .gh-staging/
 graphify-out/
 .codex/
+
+# subagent 运行时产物
+.pi-subagents/

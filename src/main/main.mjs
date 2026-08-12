@@ -67,6 +67,54 @@ async function ensureSession() {
 // ---- IPC ----
 ipcMain.handle('zion:ping', () => ({ ok: true, pid: process.pid }));
 
+// 文件树扫描：工作目录递归（深度 ≤3，跳过产物/依赖目录）
+const SCAN_MAX_DEPTH = 3;
+const SCAN_SKIP = new Set(['node_modules', '.git', 'dist', 'dist-renderer', 'graphify-out', '.vite']);
+/** @param {number} bytes */
+function humanSize(bytes) {
+  if (bytes < 1024) return bytes + 'b';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + 'k';
+  return (bytes / 1024 / 1024).toFixed(1) + 'M';
+}
+/**
+ * @param {string} dir
+ * @param {string} base
+ * @param {number} depth
+ */
+function scanDir(dir, base, depth) {
+  /** @type {import('../shared/protocol.ts').FileNode[]} */
+  const out = [];
+  let entries = [];
+  try {
+    entries = fs.readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return out;
+  }
+  for (const e of entries) {
+    if (SCAN_SKIP.has(e.name) || e.name.startsWith('.')) continue;
+    const full = path.join(dir, e.name);
+    const rel = path.relative(base, full).split(path.sep).join('/');
+    if (e.isDirectory()) {
+      out.push({
+        name: e.name,
+        path: rel,
+        dir: true,
+        open: depth < 2,
+        children: depth < SCAN_MAX_DEPTH ? scanDir(full, base, depth + 1) : [],
+      });
+    } else if (e.isFile()) {
+      try {
+        out.push({ name: e.name, path: rel, dir: false, size: humanSize(fs.statSync(full).size) });
+      } catch {
+        /* 忽略无法 stat 的文件 */
+      }
+    }
+  }
+  out.sort((a, b) => (a.dir === b.dir ? a.name.localeCompare(b.name) : a.dir ? -1 : 1));
+  return out;
+}
+ipcMain.handle('zion:scan-tree', () => scanDir(WORKSPACE_DIR, WORKSPACE_DIR, 0));
+
 ipcMain.handle('agent:prompt', async (_e, text) => {
   console.log('[zion] prompt received: len=' + (text ? text.length : -1) + ' head=' + JSON.stringify(String(text)).slice(0, 80));
   const s = await ensureSession();

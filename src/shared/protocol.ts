@@ -33,6 +33,21 @@ export interface ZionAPI {
   steer(text: string): Promise<boolean>;
   /** 追加 follow-up 指令 */
   followUp(text: string): Promise<boolean>;
+  /** 扫描工作目录 → 文件树（目录递归，跳过 node_modules/.git 等） */
+  scanTree(): Promise<FileNode[]>;
   /** 订阅主进程转发的 agent 事件流；返回取消订阅函数（App 卸载时调用） */
   onAgentEvent(cb: (event: AgentSessionEvent) => void): () => void;
+}
+
+/** 文件树节点（主进程扫描工作目录返回） */
+export interface FileNode {
+  name: string;
+  /** 相对工作目录的斜杠路径（如 src/core/neural-core.js） */
+  path: string;
+  dir: boolean;
+  /** 人类可读大小（目录无此字段） */
+  size?: string;
+  /** 目录默认展开 */
+  open?: boolean;
+  children?: FileNode[];
 }

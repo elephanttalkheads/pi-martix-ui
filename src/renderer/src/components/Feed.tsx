@@ -1,52 +1,65 @@
-import { useEffect, useRef, type ReactNode } from 'react';
+// Feed —— v4 消息流：用户消息右对齐（OPERATOR），agent 消息头 accent-muted，
+// 行内 `code` / 【高亮词】 / 中断标记；工具调用渲染为细线角标工具链块；
+// 编辑类工具调用触发蠕虫入侵（目标=文件树行，缺省=工具链块行）。
+import { useEffect, useMemo, useRef } from 'react';
 import { useFeed, type FeedItem } from '../store';
+import { releaseWorm } from './SignalCanvas';
+import { SND } from './SoundFx';
 import DiffCard from './DiffCard';
-import { releaseWorm } from './WormLayer';
 
-// 轻量 inline 高亮：【…】→ 高亮段；`code` → code 元素（React 渲染，天然转义）
-function renderInline(text: string): ReactNode[] {
-  const parts = text.split(/(【[^】]+】|`[^`]+`)/g);
-  return parts.map((p, i) => {
-    if (p.startsWith('【') && p.endsWith('】')) return <span key={i} className="hl">{p.slice(1, -1)}</span>;
-    if (p.startsWith('`') && p.endsWith('`')) return <code key={i}>{p.slice(1, -1)}</code>;
-    return p;
-  });
+/** 工具链块描述：从 args 提取可读摘要 */
+function toolDesc(toolName: string, args: unknown): string {
+  const a = (args ?? {}) as Record<string, unknown>;
+  if (typeof a.file === 'string') return a.file;
+  if (typeof a.path === 'string') return a.path;
+  if (typeof a.command === 'string') return a.command.slice(0, 60);
+  if (typeof a.text === 'string') return a.text.slice(0, 60);
+  if (typeof a.question === 'string') return a.question.slice(0, 60);
+  return toolName;
 }
 
-function AssistantText({ text }: { text: string }) {
+/** 行内样式：`code` / 【高亮词】 */
+function Body({ text }: { text: string }) {
+  const parts = useMemo(() => {
+    const out: { k: 't' | 'c' | 'h'; v: string }[] = [];
+    const re = /(`[^`]+`|【[^】]+】)/g;
+    let last = 0;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(text))) {
+      if (m.index > last) out.push({ k: 't', v: text.slice(last, m.index) });
+      out.push({ k: m[0][0] === '`' ? 'c' : 'h', v: m[0] });
+      last = m.index + m[0].length;
+    }
+    if (last < text.length) out.push({ k: 't', v: text.slice(last) });
+    return out;
+  }, [text]);
   return (
-    <div className="msg-body">
-      {text.split('\n').map((l, i) => (
-        <span key={i}>
-          {renderInline(l)}
-          {i < text.split('\n').length - 1 && <br />}
-        </span>
-      ))}
-    </div>
+    <>
+      {parts.map((p, i) =>
+        p.k === 'c' ? (
+          <code key={i}>{p.v.slice(1, -1)}</code>
+        ) : p.k === 'h' ? (
+          <span key={i} className="hl">
+            {p.v.slice(1, -1)}
+          </span>
+        ) : (
+          <span key={i}>{p.v}</span>
+        ),
+      )}
+    </>
   );
 }
 
-const TOOL_LABEL: Record<string, string> = {
-  edit: '修改文件',
-  apply_patch: '应用补丁',
-  write: '写入文件',
-  multi_edit: '批量修改',
-  patch: '应用补丁',
-  batch_execute: '批量执行',
-};
-
-function ToolRow({ item }: { item: Extract<FeedItem, { kind: 'tool' }> }) {
-  const args = item.args === undefined ? '' : JSON.stringify(item.args).slice(0, 160);
-  const label = TOOL_LABEL[item.toolName] ?? item.toolName;
+function ToolCard({ item }: { item: Extract<FeedItem, { kind: 'tool' }> }) {
+  const stateText =
+    item.status === 'run' ? '执行中…' : item.status === 'err' ? '失败' : `完成 · ${(item.dur ?? 0).toFixed(1)}s`;
   return (
-    <div className={`trace tool-row ${item.status}`} data-tool-id={item.id}>
-      <div className={`step ${item.status === 'run' ? 'run' : 'done'}`}>
-        <span className="tag">▶</span>
-        <span className="label">{label}</span>
-        {args && <span className="t-args">{args}</span>}
-        <span className="st">
-          {item.status === 'run' ? '执行中…' : item.status === 'ok' ? '完成' : '失败'}
-        </span>
+    <div className="trace" data-toolcall={item.toolCallId}>
+      <div className="t-head">工具链 · 1 步</div>
+      <div className={`step ${item.status === 'run' ? 'run' : item.status === 'ok' ? 'done' : 'err'}`}>
+        <span className="tag">[{item.toolName}]</span>
+        <span className="t-desc">{toolDesc(item.toolName, item.args)}</span>
+        <span className="st">{stateText}</span>
       </div>
       {item.edit && <DiffCard file={item.edit.file} rows={item.edit.rows} />}
     </div>
@@ -55,31 +68,40 @@ function ToolRow({ item }: { item: Extract<FeedItem, { kind: 'tool' }> }) {
 
 export default function Feed() {
   const items = useFeed((s) => s.items);
-  const busy = useFeed((s) => s.busy);
+  const sessionState = useFeed((s) => s.sessionState);
+  const activeAgent = useFeed((s) => s.activeAgent);
+  const log = useFeed((s) => s.log);
   const feedRef = useRef<HTMLDivElement | null>(null);
-  const wormedRef = useRef<string | null>(null);
+  const lastWormRef = useRef('');
 
   // 自动滚动到底
   useEffect(() => {
     const el = feedRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [items]);
+  }, [items, sessionState]);
 
-  // 编辑类工具调用 → 蠕虫从输入区爬向新出现的 tool 行（渲染完成后再触发）
+  // 编辑类工具调用 → 蠕虫入侵（目标行：文件树 data-path 匹配，缺省该 tool 卡）
   useEffect(() => {
     const last = items[items.length - 1];
-    if (!last || last.kind !== 'tool' || !last.edit || last.status !== 'run') return;
-    if (wormedRef.current === last.id) return;
-    wormedRef.current = last.id;
-    const el = feedRef.current?.querySelector(`[data-tool-id="${last.id}"]`);
-    if (el instanceof HTMLElement) releaseWorm(el);
-  }, [items]);
+    if (!last || last.kind !== 'tool' || last.status !== 'run' || !last.edit) return;
+    if (lastWormRef.current === last.toolCallId) return;
+    lastWormRef.current = last.toolCallId;
+    const target = last.edit
+      ? document.querySelector<HTMLElement>(`.ft-row[data-path="${CSS.escape(last.edit.file)}"]`)
+      : null;
+    const toolEl = document.querySelector<HTMLElement>(`.trace[data-toolcall="${last.toolCallId}"]`);
+    releaseWorm(target ?? toolEl, () => {
+      SND.breach();
+      log('warn', `[PWN] 蠕虫命中 · 取得写入权限 → ${last.edit?.file ?? ''}`);
+    });
+  }, [items, log]);
+
+  const lastAssistant = items[items.length - 1];
+  const streaming = sessionState === 'STREAMING' && lastAssistant?.kind === 'assistant';
 
   return (
-    <div className="feed" id="feed" ref={feedRef}>
-      {items.length === 0 && !busy && (
-        <div className="feed-empty">ZION :: 会话就绪。输入指令开始。</div>
-      )}
+    <div id="feed" ref={feedRef} aria-live="polite">
+      {items.length === 0 && <div className="feed-empty">ZION :: 会话就绪。输入指令开始。</div>}
       {items.map((it) => {
         switch (it.kind) {
           case 'user':
@@ -89,7 +111,23 @@ export default function Feed() {
                   <span>OPERATOR</span>
                   <span className="m-time">{it.time}</span>
                 </div>
-                <div className="msg-body">{it.text}</div>
+                <div className="msg-body">
+                  <Body text={it.text} />
+                </div>
+              </div>
+            );
+          case 'assistant':
+            return (
+              <div key={it.id} className="msg agent">
+                <div className="msg-head">
+                  <span>{activeAgent}</span>
+                  <span className="m-time">{it.time}</span>
+                </div>
+                <div className="msg-body">
+                  <Body text={it.text} />
+                  {it.interrupted && <span className="aborted"> [已被操作员中断]</span>}
+                  {streaming && it.id === lastAssistant?.id && <span className="caret" />}
+                </div>
               </div>
             );
           case 'system':
@@ -103,17 +141,9 @@ export default function Feed() {
               </div>
             );
           case 'tool':
-            return <ToolRow key={it.id} item={it} />;
-          case 'assistant':
-            return (
-              <div key={it.id} className="msg agent">
-                <div className="msg-head">
-                  <span>ZION</span>
-                  <span className="m-time">{it.time}</span>
-                </div>
-                <AssistantText text={it.text} />
-              </div>
-            );
+            return <ToolCard key={it.id} item={it} />;
+          default:
+            return null;
         }
       })}
     </div>

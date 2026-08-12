@@ -1,7 +1,26 @@
 import { create } from 'zustand';
 import type { ToolExecutionStartEvent } from '@earendil-works/pi-coding-agent';
+import type { FileNode } from '../../shared/protocol';
 
 export type ToolStatus = 'run' | 'ok' | 'err';
+
+/** 会话状态机（v4 四态，见 docs/adr/0002-v4-convergence.md） */
+export type SessionState = 'READY' | 'RUNNING' | 'STREAMING' | 'CANCELLING';
+
+/** 日志行（日志抽屉，前端自收集） */
+export interface LogLine {
+  time: string; // HH:MM:SS
+  level: 'ok' | 'err' | 'warn' | 'dim';
+  text: string;
+}
+
+/** 侧栏 Agent 卡片（静态 demo 数据；真实 agent 注册表是后续工作） */
+export interface AgentInfo {
+  name: string;
+  desc: string;
+  state: string;
+  online: boolean;
+}
 
 /** diff 卡行（与 ui-demo addDiffCard 的 rows 同构） */
 export interface DiffRow {
@@ -21,7 +40,7 @@ export interface EditInfo {
 /** feed 消息项 —— 渲染层数据模型（与 SDK 事件解耦，只保留 UI 所需字段） */
 export type FeedItem =
   | { id: string; kind: 'user'; text: string; time: string }
-  | { id: string; kind: 'assistant'; text: string; time: string }
+  | { id: string; kind: 'assistant'; text: string; time: string; interrupted?: boolean }
   | { id: string; kind: 'system'; text: string; time: string }
   | {
       id: string;
@@ -31,68 +50,92 @@ export type FeedItem =
       args?: unknown;
       status: ToolStatus;
       time: string;
+      /** 开始时刻（performance.now()，用于「完成 · X.Xs」真实计时） */
+      startAt: number;
+      /** 耗时秒数（tool_execution_end 时写入） */
+      dur?: number;
       /** 编辑类工具调用时携带，渲染为 diff 卡；tool_execution_end 可用 result.patch 升级 */
       edit?: EditInfo;
     };
 
-/** FX 氛围负载状态（target 值；氛围层 rAF 内做指数插值逼近） */
+/** 派生信号 FX（v4：模块级对象广播，不进 React 渲染路径；组件直接 import fx 读取） */
 export interface FxState {
   speed: number;
-  glow: number;
-  load: number;
+  energy: number;
 }
+export const FX_IDLE: FxState = { speed: 1, energy: 0.3 };
+const FX_BUSY: FxState = { speed: 2.2, energy: 0.85 };
 
-/** 空闲基线（agent_settled 后衰减回此值） */
-export const FX_IDLE: FxState = { speed: 1, glow: 0.55, load: 0.25 };
-/** 回合进行中（agent_start → 结束） */
-const FX_BUSY: FxState = { speed: 3.2, glow: 1, load: 0.95 };
+/** 氛围层共享引用（setSessionState 时同步改写） */
+export const fx: FxState = { ...FX_IDLE };
+
+const LOG_MAX = 120;
 
 interface FeedState {
   items: FeedItem[];
-  busy: boolean;
-  error: string | null;
-  fx: FxState;
+  sessionState: SessionState;
+  logs: LogLine[];
+  tree: FileNode[];
+  activeAgent: string;
+  tokenCount: number;
   sndOn: boolean;
 
   pushUser(text: string): void;
   pushSystem(text: string): void;
-  /** 流式增量追加到末条 assistant 消息（无则新建） */
+  /** 流式增量追加到末条 assistant 消息（无则新建）；每字符 token +2 */
   appendDelta(delta: string): void;
+  /** 中断时给末条 assistant 消息追加红色中断标记 */
+  markInterrupted(): void;
   toolStart(ev: Pick<ToolExecutionStartEvent, 'toolCallId' | 'toolName' | 'args'>, edit?: EditInfo): void;
   toolEnd(toolCallId: string, isError: boolean, result?: unknown): void;
-  setBusy(busy: boolean): void;
-  setError(error: string | null): void;
+  setSessionState(state: SessionState): void;
+  log(level: LogLine['level'], text: string): void;
+  setTree(tree: FileNode[]): void;
+  setActiveAgent(name: string): void;
   setSndOn(on: boolean): void;
   reset(): void;
 }
 
 let id = 0;
 const nid = () => `i${++id}`;
-const nowStr = () =>
-  new Date().toLocaleTimeString('zh-CN', { hour12: false });
+const msgTime = () => new Date().toLocaleTimeString('zh-CN', { hour12: false, hour: '2-digit', minute: '2-digit' });
+const logTime = () => new Date().toLocaleTimeString('zh-CN', { hour12: false });
 
 export const useFeed = create<FeedState>()((set) => ({
   items: [],
-  busy: false,
-  error: null,
-  fx: FX_IDLE,
-  sndOn: true,
+  sessionState: 'READY',
+  logs: [],
+  tree: [],
+  activeAgent: 'NEO-7',
+  tokenCount: 0,
+  sndOn: localStorage.getItem('zion.snd') !== '0',
 
   pushUser(text) {
-    set((s) => ({ items: [...s.items, { id: nid(), kind: 'user', text, time: nowStr() }] }));
+    set((s) => ({ items: [...s.items, { id: nid(), kind: 'user', text, time: msgTime() }] }));
   },
   pushSystem(text) {
-    set((s) => ({ items: [...s.items, { id: nid(), kind: 'system', text, time: nowStr() }] }));
+    set((s) => ({ items: [...s.items, { id: nid(), kind: 'system', text, time: msgTime() }] }));
   },
   appendDelta(delta) {
+    if (!delta) return;
     set((s) => {
       const items = [...s.items];
       const last = items[items.length - 1];
       if (last && last.kind === 'assistant') {
         items[items.length - 1] = { ...last, text: last.text + delta };
-        return { items };
+      } else {
+        items.push({ id: nid(), kind: 'assistant', text: delta, time: msgTime() });
       }
-      items.push({ id: nid(), kind: 'assistant', text: delta, time: nowStr() });
+      return { items, tokenCount: s.tokenCount + delta.length * 2 };
+    });
+  },
+  markInterrupted() {
+    set((s) => {
+      const items = [...s.items];
+      const last = items[items.length - 1];
+      if (last && last.kind === 'assistant') {
+        items[items.length - 1] = { ...last, interrupted: true };
+      }
       return { items };
     });
   },
@@ -107,8 +150,9 @@ export const useFeed = create<FeedState>()((set) => ({
           toolName: ev.toolName,
           args: ev.args,
           status: 'run',
+          time: msgTime(),
+          startAt: performance.now(),
           edit,
-          time: nowStr(),
         },
       ],
     }));
@@ -120,19 +164,34 @@ export const useFeed = create<FeedState>()((set) => ({
         const it = items[i];
         if (it.kind === 'tool' && it.toolCallId === toolCallId && it.status === 'run') {
           const upgrade = upgradeEditFromResult(it, result);
-          items[i] = { ...it, status: isError ? 'err' : 'ok', edit: upgrade ?? it.edit };
+          items[i] = {
+            ...it,
+            status: isError ? 'err' : 'ok',
+            dur: (performance.now() - it.startAt) / 1000,
+            edit: upgrade ?? it.edit,
+          };
           break;
         }
       }
       return { items };
     });
   },
-  setBusy(busy) {
-    set({ busy, fx: busy ? FX_BUSY : FX_IDLE });
+  setSessionState(sessionState) {
+    Object.assign(fx, sessionState === 'READY' ? FX_IDLE : FX_BUSY);
+    set({ sessionState });
   },
-  setError(error) { set({ error }); },
-  setSndOn(sndOn) { set({ sndOn }); },
-  reset() { set({ items: [], busy: false, error: null, fx: FX_IDLE }); },
+  log(level, text) {
+    set((s) => ({
+      logs: [...s.logs, { time: logTime(), level, text }].slice(-LOG_MAX),
+    }));
+  },
+  setTree(tree) { set({ tree }); },
+  setActiveAgent(activeAgent) { set({ activeAgent }); },
+  setSndOn(sndOn) {
+    localStorage.setItem('zion.snd', sndOn ? '1' : '0');
+    set({ sndOn });
+  },
+  reset() { set({ items: [], sessionState: 'READY', tokenCount: 0 }); },
 }));
 
 /* ---------------- 编辑类工具调用 → diff 数据（事件层用） ---------------- */

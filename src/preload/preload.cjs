@@ -15,6 +15,7 @@ const api = {
   abort: () => ipcRenderer.invoke('agent:abort'),
   steer: (text) => ipcRenderer.invoke('agent:steer', text),
   followUp: (text) => ipcRenderer.invoke('agent:followUp', text),
+  scanTree: () => ipcRenderer.invoke('zion:scan-tree'),
   onAgentEvent: (cb) => {
     const listener = (
       /** @type {import('electron').IpcRendererEvent} */ _e,
