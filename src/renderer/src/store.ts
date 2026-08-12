@@ -84,6 +84,8 @@ interface FeedState {
   sndOn: boolean;
   /** 蠕虫命中完成（releaseWorm done 回调）后登记的 toolCallId 集合——diff 卡延迟到命中后渲染 */
   revealedEdits: Record<string, true>;
+  /** 工具链块展开态（trace 行点击展开完整参数） */
+  expandedTools: Record<string, true>;
 
   pushUser(text: string): void;
   /** 流式增量追加到末条 assistant 消息（无则新建）；每字符 token +2 */
@@ -95,6 +97,7 @@ interface FeedState {
   setSessionState(state: SessionState): void;
   log(level: LogLine['level'], text: string): void;
   revealEdit(toolCallId: string): void;
+  toggleToolExpand(toolCallId: string): void;
   setTree(tree: FileNode[]): void;
   setSessions(sessions: SessionInfoLike[]): void;
   /** 切换/新建会话：设置当前会话 + 以历史重建 feed（清 token/状态机回 READY） */
@@ -119,6 +122,7 @@ export const useFeed = create<FeedState>()((set) => ({
   tokenCount: 0,
   sndOn: localStorage.getItem('zion.snd') !== '0',
   revealedEdits: {},
+  expandedTools: {},
 
   pushUser(text) {
     set((s) => ({ items: [...s.items, { id: nid(), kind: 'user', text, time: msgTime() }] }));
@@ -195,6 +199,14 @@ export const useFeed = create<FeedState>()((set) => ({
   revealEdit(toolCallId) {
     set((s) => ({ revealedEdits: { ...s.revealedEdits, [toolCallId]: true } }));
   },
+  toggleToolExpand(toolCallId) {
+    set((s) => {
+      const next = { ...s.expandedTools };
+      if (next[toolCallId]) delete next[toolCallId];
+      else next[toolCallId] = true;
+      return { expandedTools: next };
+    });
+  },
   setSessions(sessions) { set({ sessions }); },
   setTree(tree) { set({ tree }); },
   applySession(id, title, items) {
@@ -204,7 +216,7 @@ export const useFeed = create<FeedState>()((set) => ({
       text: h.text,
       time: h.ts ? new Date(h.ts).toLocaleTimeString('zh-CN', { hour12: false, hour: '2-digit', minute: '2-digit' }) : msgTime(),
     }));
-    set({ currentSessionId: id, sessionTitle: title, items: feedItems, sessionState: 'READY', tokenCount: 0 });
+    set({ currentSessionId: id, sessionTitle: title, items: feedItems, sessionState: 'READY', tokenCount: 0, expandedTools: {} });
   },
   setSndOn(sndOn) {
     localStorage.setItem('zion.snd', sndOn ? '1' : '0');

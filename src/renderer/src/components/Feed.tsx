@@ -3,6 +3,7 @@
 // 编辑类工具调用触发蠕虫入侵（目标=文件树行，缺省=工具链块行）。
 import { useEffect, useMemo, useRef } from 'react';
 import { useFeed, type FeedItem } from '../store';
+import { formatToolArgs, toolExpandTitle } from '../toolfmt';
 import DiffCard from './DiffCard';
 
 /** 工具链块描述：从 args 提取可读摘要 */
@@ -49,16 +50,38 @@ function Body({ text }: { text: string }) {
 }
 
 function ToolCard({ item, revealed }: { item: Extract<FeedItem, { kind: 'tool' }>; revealed: boolean }) {
+  const expanded = useFeed((s) => !!s.expandedTools[item.toolCallId]);
+  const toggleToolExpand = useFeed((s) => s.toggleToolExpand);
   const stateText =
     item.status === 'run' ? '执行中…' : item.status === 'err' ? '失败' : `完成 · ${(item.dur ?? 0).toFixed(1)}s`;
+  const onToggle = () => toggleToolExpand(item.toolCallId);
+  const detail = item.args === undefined ? '' : formatToolArgs(item.toolName, item.args);
   return (
     <div className="trace" data-toolcall={item.toolCallId}>
       <div className="t-head">工具链 · 1 步</div>
-      <div className={`step ${item.status === 'run' ? 'run' : item.status === 'ok' ? 'done' : 'err'}`}>
+      <div
+        className={`step ${item.status === 'run' ? 'run' : item.status === 'ok' ? 'done' : 'err'}${expanded ? ' open' : ''}`}
+        role="button"
+        tabIndex={0}
+        aria-expanded={expanded}
+        onClick={onToggle}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            onToggle();
+          }
+        }}
+      >
         <span className="tag">[{item.toolName}]</span>
         <span className="t-desc">{toolDesc(item.toolName, item.args)}</span>
         <span className="st">{stateText}</span>
       </div>
+      {expanded && detail && (
+        <div className="trace-expand">
+          <div className="te-title">{toolExpandTitle(item.toolName, item.args)}</div>
+          <pre>{detail}</pre>
+        </div>
+      )}
       {item.edit && revealed && item.edit.rows.length > 0 && (
         <DiffCard file={item.edit.file} rows={item.edit.rows} />
       )}

@@ -43,6 +43,10 @@
 - `upgradeEditFromResult`：仅当该 tool item 已有 `edit` 时生效，`result.patch` 优先于 `result.diff`。
 - `MAX_DIFF_ROWS = 200` 截断，防大文件撑爆 feed。
 
+**工具链块参数展开**（toolfmt.ts 纯函数，Feed ToolCard 消费）：
+- `.step` 行 `role="button"` + `tabIndex=0` + `aria-expanded`，点击或 Enter/Space 切换 `toggleToolExpand`（store `expandedTools`，toolCallId 键）。
+- 展开渲染 `.trace-expand`：`te-title` = `toolExpandTitle`（args.file/path → `工具名 → 路径`，否则仅工具名）+ `<pre>` 全文 = `formatToolArgs`（bash → `command` 全文不截断；batch_execute → `commands[]` 逐行拼接；其余 → JSON 美化 `slice(0, 2000)`）。`pre` 限高 240px 内滚动、`pre-wrap` 防超宽行撑破卡片。
+
 ## 接口与依赖
 
 **对外消费**（`window.zion`，ZionAPI，env.d.ts 声明）：`ping` / `prompt`（从不抛错，resolve 为 stopReason）/ `abort` / `steer` / `followUp` / `scanTree` / `listSessions` / `getCurrentSession` / `switchSession` / `newSession` / `onAgentEvent`（返回退订函数）。
@@ -72,6 +76,7 @@
 - `#rain` 负 z-index 的用途：即使 `#stage` 层叠上下文失效，雨幕也恒在 UI 之下；氛围层均 pointer-events:none，不拦截交互（层级数值见 AGENTS.md 硬约束 6）。
 - 状态机终态恒为 READY：`agent_end` / `agent_settled` / `message_end` 错误 / `applySession` / `reset` 均回 READY；busy = `sessionState !== 'READY'`。
 - 同一 toolCallId 蠕虫只触发一次（`wormedRef`）；`revealedEdits` 单调累积、永不清空（依赖 toolCallId 全局唯一）。
+- `expandedTools` 随 `applySession` 清空（`reset` 不清——items 已清空，残留键不渲染、无害）。
 - REDUCED 分支必须在动画路径早期返回且 done 仍执行（蠕虫直接命中）。
 - 渲染进程零 Node 访问：所有数据经 ZionAPI 白名单。
 
@@ -87,7 +92,7 @@
 
 ## 已知限制与技术债
 
-- 单元测试仅覆盖纯函数层（`deriveSessionTitle`，node:test）；组件、事件管线、store 逻辑无测试，UI 回归依赖 typecheck + smoke + e2e。
+- 单元测试仅覆盖纯函数层（`deriveSessionTitle`、`toolfmt`，node:test）；组件、事件管线、store 逻辑无测试，UI 回归依赖 typecheck + smoke + e2e。
 - 会话历史恢复仅 user/assistant 文本，工具链块 / diff 卡不恢复。
 - conv-head「上下文 12.4k / 128k」、「主控会话 #0047」、状态栏「TLS 1.3」为硬编码装饰，非真实数据。
 - `AgentInfo` 类型保留但 Agent 卡片已移除（侧栏改为会话列表），注释注明供未来 agent 注册表。

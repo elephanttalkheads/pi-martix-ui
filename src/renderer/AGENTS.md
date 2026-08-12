@@ -9,9 +9,10 @@ React 18 + TypeScript(strict) 渲染层：v4 四区 UI（标题栏 / 侧栏 / �
 - `src/renderer/index.html` — 唯一 HTML 入口：`#root` + `/src/main.tsx`（模块脚本）
 - `src/renderer/src/main.tsx` — ReactDOM root（StrictMode），引入 `styles.css`
 - `src/renderer/src/App.tsx` — 四区布局 + `useAgentEvents`（事件→store 单一订阅点）+ 启动会话恢复 + 点击焦点归还
-- `src/renderer/src/store.ts` — zustand store（`useFeed`）+ 模块级 `fx` 对象 + 纯函数（`normPath`/`matchTreeRow`/`openAncestors`/`parseEditFromTool`/`upgradeEditFromResult`/`deriveSessionTitle`（来自 `./title`））
+- `src/renderer/src/store.ts` — zustand store（`useFeed`）+ 模块级 `fx` 对象 + 纯函数（`normPath`/`matchTreeRow`/`openAncestors`/`parseEditFromTool`/`upgradeEditFromResult`/`deriveSessionTitle`（来自 `./title`））；状态含 `revealedEdits`、`expandedTools`（工具链块展开态，`toggleToolExpand` 切换）
 - `src/renderer/src/title.ts` — 会话标题推导纯函数 `deriveSessionTitle`（无依赖模块；store.ts re-export；node:test 直测）
-- `src/renderer/src/components/` — `RainCanvas` / `SignalCanvas`(releaseWorm) / `NeuralCore`(CORE) / `Sidebar`(会话堆叠卡+文件树) / `LogDrawer` / `Feed` / `DiffCard` / `InputBar` / `SoundFx`(SND + useSoundFx)
+- `src/renderer/src/toolfmt.ts` — 工具参数格式化纯函数 `formatToolArgs`/`toolExpandTitle`（无依赖模块；Feed 工具链块展开区用；node:test 直测）
+- `src/renderer/src/components/` — `RainCanvas` / `SignalCanvas`(releaseWorm) / `NeuralCore`(CORE) / `Sidebar`(会话堆叠卡+文件树) / `LogDrawer` / `Feed`(工具链块 step 行可展开) / `DiffCard` / `InputBar` / `SoundFx`(SND + useSoundFx)
 - `src/renderer/src/env.d.ts` — `window.zion` 全局声明（type-only import `ZionAPI`）
 - `src/renderer/src/styles.css` — 全部设计令牌与布局数值（令牌数值照 `ui-demo/index-v4.html`，勿改；顶部本地 `@font-face` 为刻意偏离，见 [DESIGN.md](DESIGN.md)「设计决策与权衡」）
 - `src/shared/protocol.ts` — IPC 契约类型（type-only，构建期擦除，无运行时依赖）
@@ -25,7 +26,7 @@ npm run build:renderer # vite build → dist-renderer/
 npm run typecheck      # 渲染层半边：tsc --noEmit -p tsconfig.json（include: src/renderer/src + src/shared）
 npm run smoke          # build:renderer + CDP 冒烟：断言 #rain/.scanlines/#signal/.sidebar/#core 与桥注入
 npm run e2e            # build:renderer + 真实 prompt E2E（deepseek → 事件流 → feed）
-node --test scripts/derive-title.test.mjs # deriveSessionTitle 单测；不在 package.json，node:test 直跑（Node ≥23.6 原生 TS type-stripping，.ts 免构建）
+node --test scripts/derive-title.test.mjs scripts/toolfmt.test.mjs # 纯函数单测（deriveSessionTitle / toolfmt）；不在 package.json，node:test 直跑（Node ≥23.6 原生 TS type-stripping，.ts 免构建）
 ```
 
 ## 本模块硬约束
