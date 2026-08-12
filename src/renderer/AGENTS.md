@@ -12,7 +12,7 @@ React 18 + TypeScript(strict) 渲染层：v4 四区 UI（标题栏 / 侧栏 / �
 - `src/renderer/src/store.ts` — zustand store（`useFeed`）+ 模块级 `fx` 对象 + 纯函数（`normPath`/`matchTreeRow`/`openAncestors`/`parseEditFromTool`/`upgradeEditFromResult`）
 - `src/renderer/src/components/` — `RainCanvas` / `SignalCanvas`(releaseWorm) / `NeuralCore`(CORE) / `Sidebar`(会话堆叠卡+文件树) / `LogDrawer` / `Feed` / `DiffCard` / `InputBar` / `SoundFx`(SND + useSoundFx)
 - `src/renderer/src/env.d.ts` — `window.zion` 全局声明（type-only import `ZionAPI`）
-- `src/renderer/src/styles.css` — 全部设计令牌与布局数值（照 `ui-demo/index-v4.html`，勿改）
+- `src/renderer/src/styles.css` — 全部设计令牌与布局数值（令牌数值照 `ui-demo/index-v4.html`，勿改；顶部本地 `@font-face` 为刻意偏离，见 [DESIGN.md](DESIGN.md)「设计决策与权衡」）
 - `src/shared/protocol.ts` — IPC 契约类型（type-only，构建期擦除，无运行时依赖）
 - 规格基线：`ui-demo/index-v4.html` + `ui-demo/react/agent-ui-design-spec.md` + `docs/adr/0002-v4-convergence.md`
 

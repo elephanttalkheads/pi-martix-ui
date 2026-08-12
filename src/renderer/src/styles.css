@@ -1,5 +1,12 @@
 /* ZION v4 —— 极简 × 黑客帝国 × Pip-Boy（令牌照 ui-demo/index-v4.html，勿改数值） */
-@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
+/* 本地字体：Share Tech Mono latin 子集（离线/墙内可用），来源 @fontsource/share-tech-mono */
+@font-face {
+  font-family: "Share Tech Mono";
+  src: url("./assets/fonts/ShareTechMono-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
 
 :root {
   --bg: #010a04;

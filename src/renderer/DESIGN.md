@@ -63,6 +63,7 @@
 - **会话堆叠卡 `--h` 测量**（Sidebar effect，deps `[sessions, currentSessionId]`）：每张 `.scard` 置 `--h = scrollHeight + 2`；CSS `margin-bottom: calc(80px - var(--h, 140px))` 使每卡恒定露出 80px 头部（标题 + 2 行摘要），hover 拉直旋转（`rotate(0) translateY(-4px)`）+ 展开摘要/meta。注意：Sidebar.tsx 注释"露出区 88px"与 CSS 实际 80px 不一致（注释过时，行为以 CSS 为准）。
 - **日志前端自收集**：`store.logs` 上限 120 行（LOG_MAX），`role="log"`，收起时 `aria-hidden`。
 - **交互细节**：mousedown 全局焦点归还 `#cmdline`（v4 §7.5）；Enter 在 STREAMING/CANCELLING 时切换为中断而非发送。
+- **本地字体替代 Google Fonts**：styles.css 顶部 `@font-face` 引入 `assets/fonts/ShareTechMono-Regular.woff2`（latin 子集 13.5KB，来源 @fontsource/share-tech-mono，font-display: swap），替代 demo（index-v4.html）的 Google Fonts `@import`——离线/墙内可用，「离线字体」未做项闭环；`--font` 回退链不变，latin 子集无 CJK，中文文案走系统字体回退。
 
 ## 不变量、安全边界与失败模式
 
@@ -81,7 +82,7 @@
 - 快速连续工具：`wormedRef` 去重；Feed 每次 items/状态变化自动滚动到底（用户上翻阅读时位置会被拉回）。
 - AudioContext 未解锁：`tone()` 静默 no-op，首次手势后恢复。
 - 目标行不可见（侧栏 `<900px` 隐藏时）：蠕虫落 `.trace` 兜底行。
-- 字体离线：Google Fonts `@import` 失败回退 ui-monospace/Courier New（离线字体为已知未做项）。
+- 本地字体加载失败：styles.css 顶部 `@font-face` 引用的 `assets/fonts/ShareTechMono-Regular.woff2` 缺失/损坏时，按 `--font` 回退链走 ui-monospace/Courier New；字体声明只在 styles.css 一处，组件一律 `var(--font)`。
 
 ## 已知限制与技术债
 
