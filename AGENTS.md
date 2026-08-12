@@ -40,9 +40,12 @@ src/renderer/src/        React + TS 应用：store.ts(zustand) / App.tsx / env.d
 tsconfig.json            renderer 类型检查（moduleResolution: bundler，strict，noEmit）
 tsconfig.node.json       main/preload checkJs（bundler 解析 + allowImportingTsExtensions，noEmit）
 scripts/                 smoke-cdp.mjs（冒烟）/ e2e-prompt.mjs（真实 prompt 回归）
-ui-demo/                 index-v3.html = 最新视觉参考（含蠕虫定位动画 releaseWorm、diff 修改卡 addDiffCard、
-                         WebAudio 音效 SND、CRT 层、深度分层数字雨）；index-v2.html = 稳定基线；
-                         brand-spec.md 设计系统
+ui-demo/                 index-v4.html = 最新视觉参考：极简方向（按 design-doc/agent-ui-reference-design.md
+                         收敛 v3 的过度装饰——去 boot/CRT/视差/glitch，绿色语义化，日志改抽屉，
+                         蠕虫简化为一次性写入信号脉冲）；index-v3.html = 重度氛围版（含 releaseWorm、
+                         addDiffCard、SND、CRT 层、深度分层数字雨）；index-v2.html = 稳定基线；
+                         brand-spec.md 设计系统；react/agent-ui-design-spec.md = v4 纯文本复刻规格
+                         （供无多模态模型按文字复刻 demo 为真实 Agent UI，含令牌/算法/mock 替换点）
 research/                技术调研（壳层 / pi-SDK / pi-RPC）；matrix-style-references.md = 黑客帝国风格
                          参考作品调研（数字雨/电影 UI/CRT 还原，含 6 项优化清单及完成状态）
 pi-matrix-demo-handoff.md demo → 正式 UI 交接文档：v3 模块清单、mock→真实实现映射表。
