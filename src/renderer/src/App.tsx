@@ -12,7 +12,7 @@ import LogDrawer from './components/LogDrawer';
 import Feed from './components/Feed';
 import InputBar from './components/InputBar';
 import { SND, useSoundFx } from './components/SoundFx';
-import { useFeed, parseEditFromTool, normPath, matchTreeRow, openAncestors, type EditInfo } from './store';
+import { useFeed, parseEditFromTool, normPath, matchTreeRow, openAncestors, deriveSessionTitle, type EditInfo } from './store';
 import { releaseWorm } from './components/SignalCanvas';
 
 function useAgentEvents() {
@@ -162,7 +162,7 @@ export default function App() {
         const sessions = await window.zion.listSessions().catch(() => []);
         if (!alive) return;
         const info = sessions.find((s) => s.id === id);
-        const title = info?.name ?? (info?.firstMessage ? info.firstMessage.slice(0, 22) : `会话 ${id.slice(0, 4)}`);
+        const title = deriveSessionTitle(info?.name, info?.firstMessage, id);
         applySession(id, title, items);
         useFeed.getState().setSessions(sessions);
       })

@@ -3,14 +3,13 @@
 // 「新建会话」按钮。文件树行带 data-path 供蠕虫定位；点击文件行发读取指令。
 import { useEffect, useRef, useState } from 'react';
 import type { FileNode, SessionInfoLike } from '../../../shared/protocol';
-import { useFeed } from '../store';
+import { useFeed, deriveSessionTitle } from '../store';
 import NeuralCore from './NeuralCore';
 
-/** 会话显示标题：name → firstMessage 摘要 → 会话短码 */
+/** 会话显示标题：name → firstMessage 摘要 → 会话短码（统一 deriveSessionTitle，store.ts 单测覆盖） */
 function titleFor(s: SessionInfoLike): string {
-  if (s.name) return s.name;
-  if (s.firstMessage) return s.firstMessage.length > 22 ? s.firstMessage.slice(0, 22) + '…' : s.firstMessage;
-  return `会话 ${s.id.slice(0, 4)}`;
+  if (s.name) return deriveSessionTitle(s.name, undefined, s.id);
+  return deriveSessionTitle(undefined, s.firstMessage, s.id);
 }
 
 const fmtTime = (iso: string) =>

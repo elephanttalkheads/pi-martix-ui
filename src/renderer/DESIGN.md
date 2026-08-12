@@ -27,7 +27,7 @@
 
 **FX 派生**：`setSessionState` 同步 `Object.assign` 到模块级 `fx` 对象（READY `{speed:1, energy:0.3}` / 忙碌 `{speed:2.2, energy:0.85}`）；RainCanvas（`90/fx.speed` 帧节流）与 NeuralCore（`rot += 0.006*fx.speed`，alpha 含 energy）直接读取，不触发 React 渲染。
 
-**启动恢复**（App useEffect）：`getCurrentSession` → `listSessions`（标题取 name → firstMessage 前 22 字 → 短 id）→ `applySession(id, title, items)` 以历史重建 feed（仅 user/assistant 文本，无工具卡）+ `setSessions`。
+**启动恢复**（App useEffect）：`getCurrentSession` → `listSessions` → 标题经 `deriveSessionTitle`（title.ts 纯函数，规则见「设计决策与权衡」）→ `applySession(id, title, items)` 以历史重建 feed（仅 user/assistant 文本，无工具卡）+ `setSessions`。
 
 **会话切换/新建**（Sidebar）：`selectSession` → `switchSession`（主进程懒创建实例，可能秒级；`switching` 锁防并发）→ `applySession`；`newSession` 同理；失败走 `log('err')`。点文件树行 → `pushUser` + `window.zion.prompt('读取 <path>')`（真实 prompt，无假动画）。
 
@@ -60,6 +60,7 @@
 - **bash 写操作启发式**：正则提取目标与文本——复杂链式命令可能漏判、纯 echo 到屏幕可能误判，是权衡而非精确解析。
 - **stopReason 运行时判定**：strict 下 AgentMessage 联合无法静态收窄到助手分支，用 cast + 可选链按运行时语义读取。
 - **tokenCount 近似**：delta 字符数 ×2，非真实 token；`applySession`/`reset` 归零。
+- **标题推导收敛为纯函数**（`title.ts` → store re-export 的 `deriveSessionTitle`，App 启动恢复与 Sidebar 会话卡共用）：两处原为各自内联 `slice(0,22)` 截断且行为不一致（App 不补省略号、不清引号），现统一为 name → firstMessage 智能摘要 → `会话 <id 前 4 位>` 兜底。摘要规则：取首行 → 剥含路径/命令特征的内嵌引号对（消除 `为"D:\\...\\..."` 残尾）与成对包裹引号 → 去前导符号（`- # > * · / \`）→ 22 字符截断 + '…'。改规则只动 `title.ts`（node:test 覆盖）。
 - **会话堆叠卡 `--h` 测量**（Sidebar effect，deps `[sessions, currentSessionId]`）：每张 `.scard` 置 `--h = scrollHeight + 2`；CSS `margin-bottom: calc(80px - var(--h, 140px))` 使每卡恒定露出 80px 头部（标题 + 2 行摘要），hover 拉直旋转（`rotate(0) translateY(-4px)`）+ 展开摘要/meta。注意：Sidebar.tsx 注释"露出区 88px"与 CSS 实际 80px 不一致（注释过时，行为以 CSS 为准）。
 - **日志前端自收集**：`store.logs` 上限 120 行（LOG_MAX），`role="log"`，收起时 `aria-hidden`。
 - **交互细节**：mousedown 全局焦点归还 `#cmdline`（v4 §7.5）；Enter 在 STREAMING/CANCELLING 时切换为中断而非发送。
@@ -86,7 +87,7 @@
 
 ## 已知限制与技术债
 
-- 渲染层无单元测试——回归依赖 typecheck + smoke + e2e。
+- 单元测试仅覆盖纯函数层（`deriveSessionTitle`，node:test）；组件、事件管线、store 逻辑无测试，UI 回归依赖 typecheck + smoke + e2e。
 - 会话历史恢复仅 user/assistant 文本，工具链块 / diff 卡不恢复。
 - conv-head「上下文 12.4k / 128k」、「主控会话 #0047」、状态栏「TLS 1.3」为硬编码装饰，非真实数据。
 - `AgentInfo` 类型保留但 Agent 卡片已移除（侧栏改为会话列表），注释注明供未来 agent 注册表。

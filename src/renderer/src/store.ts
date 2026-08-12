@@ -215,6 +215,9 @@ export const useFeed = create<FeedState>()((set) => ({
 
 /* ---------------- 蠕虫目标定位（事件层同步调用，不依赖 React 渲染时序） ---------------- */
 
+/** 会话显示标题（纯函数，见 title.ts）：name → firstMessage 智能摘要 → 会话短码 */
+export { deriveSessionTitle } from './title';
+
 /** 归一化工具路径：反斜杠→正斜杠、去盘符、去前导斜杠 */
 export function normPath(p: string): string {
   return p.replace(/\\/g, '/').replace(/^[A-Za-z]:/, '').replace(/^\/+/, '');
