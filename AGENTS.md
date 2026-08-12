@@ -123,3 +123,11 @@ Rules:
 - If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
 - Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
 - After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
+
+<!-- ett:doc-sync:start -->
+## ETT 文档同步
+
+在执行任何 `git commit` 前,必须先运行本工具的 doc-update 文档同步 Skill(不带参数;Claude Code 中为 `/ett:doc-update`,Kimi Code 与 pi 中为 `/skill:ett-doc-update`)检查并同步模块文档。只有该 Skill 完成且未报告文档同步阻断时,才能检查文档差异、暂存并提交;不得让 doc-update Skill 执行 `git add` 或 `git commit`。
+
+阅读任何模块的代码或内容前,先阅读该模块的 `AGENTS.md`(任务涉及架构、接口或设计决策时再阅读 `DESIGN.md`)。
+<!-- ett:doc-sync:end -->
