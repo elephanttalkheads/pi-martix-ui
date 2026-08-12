@@ -1,7 +1,7 @@
 // 侧栏 —— 神经核心 + 会话列表（真实 SDK 会话）+ 文件树 + 底部信息
 // 会话卡：标题（firstMessage 摘要）+ 消息数 + 上次活动时间；点击切换（懒创建实例）；
 // 「新建会话」按钮。文件树行带 data-path 供蠕虫定位；点击文件行发读取指令。
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { FileNode, SessionInfoLike } from '../../../shared/protocol';
 import { useFeed } from '../store';
 import NeuralCore from './NeuralCore';
@@ -69,12 +69,22 @@ export default function Sidebar({ onSelectFile }: { onSelectFile: (path: string)
   const applySession = useFeed((s) => s.applySession);
   const log = useFeed((s) => s.log);
   const [switching, setSwitching] = useState(false);
+  const deckRef = useRef<HTMLDivElement | null>(null);
 
   // 初始：文件树 + 会话列表
   useEffect(() => {
     window.zion?.scanTree().then(setTree).catch(() => {});
     window.zion?.listSessions().then(setSessions).catch(() => {});
   }, [setTree, setSessions]);
+
+  // 堆叠卡：测量每卡完整高度 → --h（负 margin 覆盖量 = 完整高 - 露出区 88px）
+  useEffect(() => {
+    const deck = deckRef.current;
+    if (!deck) return;
+    deck.querySelectorAll<HTMLElement>('.scard').forEach((el) => {
+      el.style.setProperty('--h', el.scrollHeight + 2 + 'px');
+    });
+  }, [sessions, currentSessionId]);
 
   const toggleDir = (n: FileNode) => {
     const flip = (nodes: FileNode[]): FileNode[] =>
@@ -127,42 +137,41 @@ export default function Sidebar({ onSelectFile }: { onSelectFile: (path: string)
 
       <div className="side-section">
         <h3>会话</h3>
-        {sessions.map((s) => {
-          const active = s.id === currentSessionId;
-          return (
-            <div
-              key={s.id}
-              className={`agent-card${active ? ' active' : ''}`}
-              role="button"
-              tabIndex={0}
-              aria-current={active || undefined}
-              onClick={() => void selectSession(s)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                  void selectSession(s);
-                }
-              }}
-            >
-              <div className="a-name">{titleFor(s)}</div>
-              <div className="a-desc">
-                {s.messageCount} 条消息 · {fmtTime(s.modified)}
+        <div className="deck" ref={deckRef}>
+          {sessions.map((s) => {
+            const active = s.id === currentSessionId;
+            return (
+              <div
+                key={s.id}
+                className={`scard${active ? ' active' : ''}`}
+                role="button"
+                tabIndex={0}
+                aria-current={active || undefined}
+                onClick={() => void selectSession(s)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    void selectSession(s);
+                  }
+                }}
+              >
+                <div className="s-title">{titleFor(s)}</div>
+                <div className="s-summary">{s.firstMessage || '（空会话）'}</div>
+                <div className="s-meta">
+                  {s.messageCount} 条消息 · 上次活动 {fmtTime(s.modified)}
+                </div>
               </div>
-              <div className="a-state">
-                {active ? <span className="st-online">●</span> : <span className="st-idle">◐</span>}{' '}
-                {active ? '当前会话' : '上次活动 ' + fmtTime(s.modified)}
-              </div>
+            );
+          })}
+          {sessions.length === 0 && (
+            <div className="ft-row" style={{ color: 'var(--text-tertiary)' }}>
+              （尚无会话）
             </div>
-          );
-        })}
-        {sessions.length === 0 && (
-          <div className="ft-row" style={{ color: 'var(--text-tertiary)' }}>
-            （尚无会话）
-          </div>
-        )}
-        <button className="qcmd" style={{ marginTop: 8 }} disabled={switching} onClick={() => void newSession()}>
-          ＋ 新建会话
-        </button>
+          )}
+          <button className="new-btn" disabled={switching} onClick={() => void newSession()}>
+            ＋ 新建会话
+          </button>
+        </div>
       </div>
 
       <div className="side-section">
