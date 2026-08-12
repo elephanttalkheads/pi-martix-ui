@@ -5,16 +5,18 @@
   "description": "ZION — 黑客帝国风 Windows 桌面 Agent（pi 为底座）",
   "license": "MIT",
   "type": "module",
-  "main": "src/main/main.mjs",
+  "main": "dist-main/main/main.mjs",
   "scripts": {
-    "dev": "concurrently -k \"vite --config vite.config.mjs\" \"wait-on tcp:127.0.0.1:5173 && electron . --dev\"",
+    "dev": "npm run build:main && concurrently -k \"vite --config vite.config.mjs\" \"wait-on tcp:127.0.0.1:5173 && electron . --dev\"",
     "build:renderer": "vite build --config vite.config.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json",
-    "smoke": "npm run build:renderer && node scripts/smoke-cdp.mjs",
-    "e2e": "npm run build:renderer && node scripts/e2e-prompt.mjs",
+    "smoke": "npm run build:renderer && npm run build:main && node scripts/smoke-cdp.mjs",
+    "e2e": "npm run build:renderer && npm run build:main && node scripts/e2e-prompt.mjs",
     "start": "electron .",
-    "pack": "npm run build:renderer && electron-builder --dir",
-    "dist": "npm run build:renderer && electron-builder"
+    "pack": "npm run build && electron-builder --dir",
+    "dist": "npm run build && electron-builder",
+    "build:main": "node scripts/build-main.mjs",
+    "build": "npm run build:renderer && npm run build:main"
   },
   "dependencies": {
     "@earendil-works/pi-coding-agent": "^0.84.1",
