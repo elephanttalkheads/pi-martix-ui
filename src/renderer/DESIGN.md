@@ -36,7 +36,7 @@
 - `pick(path)` / `browse()`：`busy` 锁防并发 → `switchProject(path)` 或 `browseProject()`（主进程 `dialog.showOpenDialog` 原生目录选择，取消返回 null 不切换）→ 成功走 `applySwitch`：`applySession(r.id, '会话 ' + r.id.slice(0, 4), r.items)` 重建 feed（状态机回 READY）→ `setTree([])` → `setCurrentProject(r.path)`（侧栏 Project 标题同步）→ 重拉 `listSessions`/`scanTree` 刷新会话卡与文件树 → `log('ok', '[PRJ] 已切换项目 → ' + r.path)` → `setProjectOpen(false)`。
 - 失败：`log('err', '[PRJ] …')`，busy 复位，面板保持打开。
 - 关闭条件：`projects.length > 0` 时遮罩 mousedown（`target === currentTarget`）与「取消」按钮可关；无最近项目时必须完成一次选择。
-- 主进程切换语义（`zion:switch-project`，main.mjs）：同目录快速路径（仅刷新会话指针）；异目录 → 全部旧会话 `dispose()` + sessions Map 清空 + 指针重置 + 新目录 `continueRecent`/新建 + `saveProject`（`~/.pi/agent/zion-projects.json`，`{path, lastUsed}` 上限 8、最近优先去重）。
+- 主进程切换语义（`zion:switch-project`，main.mjs）：同目录快速路径（仅刷新会话指针）；异目录 → 全部旧会话 `dispose()` + sessions Map 清空 + 指针重置 + 新目录 `continueRecent`/新建 + `saveProject`（`~/.pi/agent/zion-projects.json`，`{path, lastUsed}` 上限 8、最近优先去重）；启动时 `WORKSPACE_DIR` 从 `zion-projects.json[0]` 恢复（重启回到上次项目，无记录/读失败回落默认工作区）——渲染层首屏 `getCurrentSession`/`getProject` 即反映该项目。
 
 **命令面板**（InputBar 本地 state，不入 store；`.palette` 上弹式锚定 `.inputbar`）：
 - 数据：mount 预取一次 `window.zion.listCommands()`（`CommandItem[]`；主进程 `zion:list-commands` 聚合扫描 skills+命令，数据源 `skillscan.mjs` 属主进程模块）；失败静默 → 空面板。
@@ -87,6 +87,7 @@
 - **标题推导收敛为纯函数**（`title.ts` → store re-export 的 `deriveSessionTitle`，App 启动恢复与 Sidebar 会话卡共用）：两处原为各自内联 `slice(0,22)` 截断且行为不一致（App 不补省略号、不清引号），现统一为 name → firstMessage 智能摘要 → `会话 <id 前 4 位>` 兜底。摘要规则：取首行 → 剥含路径/命令特征的内嵌引号对（消除 `为"D:\\...\\..."` 残尾）与成对包裹引号 → 去前导符号（`- # > * · / \`）→ 22 字符截断 + '…'。改规则只动 `title.ts`（node:test 覆盖）。
 - **会话堆叠卡 `--h` 测量**（Sidebar effect，deps `[sessions, currentSessionId]`）：每张 `.scard` 置 `--h = scrollHeight + 2`；CSS `margin-bottom: calc(80px - var(--h, 140px))` 使每卡恒定露出 80px 头部（标题 + 2 行摘要），hover 拉直旋转（`rotate(0) translateY(-4px)`）+ 展开摘要/meta。注意：Sidebar.tsx 注释"露出区 88px"与 CSS 实际 80px 不一致（注释过时，行为以 CSS 为准）。
 - **侧栏分区滚动**（styles.css 注释明示）：`.sidebar` 整栏 `overflow: hidden`，`.core-wrap`/`.side-foot` `flex: none` 固定，会话/项目两区 flex 分割、`.deck`/`#file-tree` 各自 `overflow-y: auto`——列表过长只滚列表区，项目标题行与底部 workspace 行始终可见。
+- **统一滚动条**（styles.css）：`*::-webkit-scrollbar` 全局 6px 终端绿胶囊（thumb `#00ff66`/hover `#66ff99`、轨道与角落透明，vision 规格），替代旧 feed/侧栏/term-body 分段 8px 规则——侧栏整栏不滚动，旧 `.sidebar` 规则本就无效；新滚动容器（`.palette`/`.ask-options`/`.pp-list`/`.diff-body` 等）自动同款。
 - **`setSessionTitle` 与 `applySession` 分工**：改名当前会话只走 `setSessionTitle`（仅更新 `sessionTitle`，feed/状态机/token 全不动）——`applySession` 会重建 feed，误用会把正在进行的对话内容冲掉。
 - **删除是软删除 + 两段确认**：`deleteSession` 为软删（主进程语义，UI 只展示 log），侧栏用「首击确认? + 2.5s 自动复位」防误触；删除当前会话后主进程指针自动落回最近会话，渲染层不自行猜 id，`getCurrentSession` 重拉。
 - **日志前端自收集**：`store.logs` 上限 120 行（LOG_MAX），`role="log"`，收起时 `aria-hidden`。

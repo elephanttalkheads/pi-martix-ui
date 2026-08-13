@@ -3,7 +3,7 @@
 ## 目标与非目标
 
 **目标**
-- 进程内接入 pi SDK：`createAgentSession` 复用 `~/.pi/agent` 配置（auth/models/settings）；会话创建/恢复/列举/打开/重命名/删除全部经 `SessionManager`，工作目录为可变 `WORKSPACE_DIR`（默认 `D:\zion-workspace`，仅经 `zion:switch-project` / `zion:browse-project` 更新；切换 = 废弃全部旧会话 + 按新目录重建，见 ADR-0003）
+- 进程内接入 pi SDK：`createAgentSession` 复用 `~/.pi/agent` 配置（auth/models/settings）；会话创建/恢复/列举/打开/重命名/删除全部经 `SessionManager`，工作目录为可变 `WORKSPACE_DIR`（默认 `D:\zion-workspace`；模块加载期从最近项目清单首位恢复，运行时仅经 `zion:switch-project` / `zion:browse-project` 更新；切换 = 废弃全部旧会话 + 按新目录重建，见 ADR-0003）
 - 多会话并存：`Map<sessionId, AgentSession>` 懒创建 + `currentSession` 指针切换；事件流只转发当前会话
 - 命令面板数据源：`zion:list-commands` 聚合本机全部 skills（用户/共享/项目/扩展包/settings.skills）与命令（内置 + 扩展白名单），`skillscan.mjs` 实现
 - 渲染层零 Node 访问：preload 在 sandbox 下暴露 `window.zion` 白名单桥（安全配置事实归 `src/shared/DESIGN.md` 安全边界）
@@ -34,6 +34,8 @@ main.mjs：ipcMain.handle ×18 + agent:event / zion:ui-ask / zion:ui-notify 转�
         ▼
 @earendil-works/pi-coding-agent：createAgentSession / SessionManager / session.subscribe / bindExtensions
 ```
+
+**模块加载期（whenReady 前）**：声明 `PROJECTS_FILE`/`PROJECTS_MAX` 后立即执行启动恢复——`listProjects()[0]` 存在则 `WORKSPACE_DIR = recent[0].path`（日志 `startup restore project →`），否则保持默认 `D:\zion-workspace`（日志 `startup no recent project`）；只改工作目录、不建会话。恢复块必须在常量声明之后（`const` TDZ：声明前读取抛 ReferenceError，故两常量上移到文件顶部）。
 
 **启动**：`app.whenReady` → `createWindow()`（1440×900、黑底、`autoHideMenuBar`、preload=`../preload/preload.cjs`）；存在 `--dev` argv 时加载 `http://127.0.0.1:5173`，否则 `dist-renderer/index.html`；`did-finish-load` 后 `executeJavaScript('Boolean(window.zion)')` 自检注入并打日志（smoke 脚本同款检查）。`createWindow()` 开头调用 `dispatchUi()` 向 uiBridge 注入真实派发（`webContents.send('zion:ui-ask' / 'zion:ui-notify')`，闭包经 `win?.` 可选链）：派发时窗口不存在则落到 no-op，ask 由 timeout 兜底。产物侧：`scripts/build-main.mjs` 以 tsconfig.node.json typecheck 为门禁，把 `src/main`/`src/preload` 的 JS 复制到 `dist-main/main` + `dist-main/preload`（package.json `main` 指向 `dist-main/main/main.mjs`，dev/smoke/e2e/start 全走产物；复制保持 `../preload/preload.cjs`、`../../dist-renderer` 相对路径在 dist-main 布局下依旧成立）。
 
@@ -98,7 +100,7 @@ IPC 通道全集与返回形状见 `src/shared/DESIGN.md` 接口节（本模块�
 - **45s init 超时**：SDK 的 ModelRuntime 目录刷新可能挂（root AGENTS.md「关键 SDK 行为」），超时保护避免 UI 永久等待；失败会话不入 Map，可重试
 - **prompt 不抛错 → IPC 返回 stopReason**：主进程不维护回合状态机，错误检测责任交给渲染层（shared 契约明示）
 - **preload CJS + JSDoc 类型**：`sandbox: true` 强制 CJS 决定文件形态；类型经 `@typedef import('../shared/protocol.ts')` + checkJs 校验，契约单一事实源不落地为运行时模块
-- **WORKSPACE_DIR 可变 + 切换即整体重建**（ADR-0003）：项目选择 UI 已落地（侧栏 Project 标题 + 切换按钮 + ProjectPanel），工作区不再固定——跨目录切换 dispose 全部旧会话（`wireSession` 订阅随实例销毁，事件不会串台）+ 清空 Map/指针，保证新项目上下文干净；同目录快速路径避免无谓重建。`SessionManager.open(info.path, undefined, WORKSPACE_DIR)` 的第三参 cwdOverride 把会话 cwd 固定到当前工作区
+- **WORKSPACE_DIR 可变 + 切换即整体重建**（ADR-0003）：项目选择 UI 已落地（侧栏 Project 标题 + 切换按钮 + ProjectPanel），工作区不再固定——跨目录切换 dispose 全部旧会话（`wireSession` 订阅随实例销毁，事件不会串台）+ 清空 Map/指针，保证新项目上下文干净；同目录快速路径避免无谓重建。`SessionManager.open(info.path, undefined, WORKSPACE_DIR)` 的第三参 cwdOverride 把会话 cwd 固定到当前工作区；模块加载期再从最近项目清单首位恢复 `WORKSPACE_DIR`——重启回到上次项目而非默认工作区（只影响工作目录，会话仍懒创建）
 - **最近项目清单 = 本地 JSON**：`~/.pi/agent/zion-projects.json`（`{ path, lastUsed }[]`，上限 8，最近优先、去重置顶、损坏/缺失视为空列表）——无独立配置库的轻量持久化；写失败仅 warn，不阻断切换
 - **browse 走主进程原生 dialog**：目录选择器在 main 侧（`dialog.showOpenDialog`），渲染层不实现目录浏览器、只消费结果；`win` 为 null（未建/已销毁）时无父窗重载兜底
 - **历史只取 user/assistant 文本**：恢复 feed 的最小契约（`SessionHistoryItem` 无工具细节字段），工具消息与空文本排除
@@ -117,7 +119,7 @@ IPC 通道全集与返回形状见 `src/shared/DESIGN.md` 接口节（本模块�
 
 **不变量**：
 - 任意时刻至多一个会话（`currentSession`）的事件被转发；`sessions` Map 实例仅被 `zion:delete-session` 显式释放或 `switchProject` 整体清空（会话切换 `switch-session` 不丢实例；无自动淘汰策略）
-- `WORKSPACE_DIR` 只经 `switchProject` 更新（`zion:switch-project` / `zion:browse-project` 两条入口）；同目录切换不重建会话、不写最近清单
+- `WORKSPACE_DIR` 仅两处赋值：模块加载期启动恢复（whenReady 前，取最近项目清单首位）与 `switchProject`（`zion:switch-project` / `zion:browse-project` 两条入口）；同目录切换不重建会话、不写最近清单
 - `window.zion` 方法集合与 `ZionAPI` 一一对应（preload 以 `/** @type {ZionAPI} */` 注解，checkJs 强制）
 - `agent:prompt` 不因模型/请求失败 reject；abort/steer/followUp 无会话时返回 `true`
 - 每个 dialog 请求至多一次有效应答：`handleAnswer` 命中即清表，二次应答返回 false 不重复 resolve
@@ -141,7 +143,8 @@ IPC 通道全集与返回形状见 `src/shared/DESIGN.md` 接口节（本模块�
 - `switchProject` 中旧会话 dispose 异常 → 捕获忽略（实例随进程回收），不阻断切换
 - 切换后新目录 `ensureCurrentSession` 失败（init 超时）→ IPC reject；此时 `WORKSPACE_DIR` 已更新、旧会话已全部清空（半完成状态，重试即走新目录创建路径）
 - `saveProject` 写失败 → `console.warn`，切换继续（最近清单未更新）
-- `zion-projects.json` 缺失/损坏 → `listProjects` 返回 `[]`（面板只剩「浏览」入口）
+- `zion-projects.json` 缺失/损坏 → `listProjects` 返回 `[]`（面板只剩「浏览」入口，启动恢复随之保持默认工作区）
+- 启动恢复异常（`listProjects` 意外抛错）→ warn `startup project restore failed`，保持默认工作区继续启动（`listProjects` 内部已 catch，外层 try/catch 为防御）
 - `zion:browse-project` 取消/空选 → 返回 `null`（面板保持打开，不切换）
 - `zion:switch-project` 非字符串/空白 → 抛 `'invalid project path'`
 - rename/delete 未知 id → 同 switch 抛 `'session not found: <id>'`（校验不通过，不触碰任何文件）

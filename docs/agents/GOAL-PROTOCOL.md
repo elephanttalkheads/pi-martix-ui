@@ -37,7 +37,7 @@
 ## 五、纪律
 
 - 遵守项目 `AGENTS.md` / `CONTEXT.md` / `docs/adr/`；域词汇保持一致
-- 每完成一项功能：回归 + 一个聚焦中文 commit；**默认不 push**（推送等用户指令）
+- 每完成一项功能：回归 + 保留改动在工作树（**不提交、不推送**——提交/推送仅当用户明确指示「提交推送」，届时先跑 doc-update 再 git add/commit/push，见根 AGENTS.md Git 约定）
 - 不用本协议的技能未覆盖的工具做"探索性重构"，避免范围蔓延
 - UI 改动必须与 `ui-demo/react/agent-ui-design-spec.md` 数值规范逐字一致，不得"优化"
 - 涉及图像/视觉比对任务交给 `vision` 子代理

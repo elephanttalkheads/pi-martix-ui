@@ -8,7 +8,7 @@
 
 ## 关键入口
 
-- `src/main/main.mjs` —— 主进程全部逻辑：`sessions` Map + `currentSession` 指针、`ensureCurrentSession`/`ensureSessionFor`（会话创建后 `bindExtensions({ uiContext })` 注入 UI 桥）、18 组 `ipcMain.handle`（会话管理 `list-sessions`/`get-current`/`switch-session`/`new-session`/`rename-session`/`delete-session`；项目 `list-projects`/`get-project`/`browse-project`/`switch-project`；其余 `ping`/`scan-tree`/`list-commands`/`prompt`/`abort`/`steer`/`followUp`/`ui-answer`）+ `agent:event` / `zion:ui-ask` / `zion:ui-notify` 转发（`wireSession` / `dispatchUi`）、`listProjects`/`saveProject`/`switchProject`（项目切换：dispose 旧会话 + 重建）、`historyFromSession`、`scanDir`
+- `src/main/main.mjs` —— 主进程全部逻辑：`sessions` Map + `currentSession` 指针、`ensureCurrentSession`/`ensureSessionFor`（会话创建后 `bindExtensions({ uiContext })` 注入 UI 桥）、18 组 `ipcMain.handle`（会话管理 `list-sessions`/`get-current`/`switch-session`/`new-session`/`rename-session`/`delete-session`；项目 `list-projects`/`get-project`/`browse-project`/`switch-project`；其余 `ping`/`scan-tree`/`list-commands`/`prompt`/`abort`/`steer`/`followUp`/`ui-answer`）+ `agent:event` / `zion:ui-ask` / `zion:ui-notify` 转发（`wireSession` / `dispatchUi`）、`listProjects`/`saveProject`/`switchProject`（项目切换：dispose 旧会话 + 重建）、启动恢复（模块加载期读 `zion-projects.json` 首位重置 `WORKSPACE_DIR`）、`historyFromSession`、`scanDir`
 - `src/main/uibridge.mjs` —— 扩展 UI 桥（纯 Node、无 electron 依赖）：`createUiBridge` 把 `select`/`confirm`/`input` 挂 Promise 表 → 经注入的 `dispatch` 派发 renderer；timeout/AbortSignal 兜底 resolve `undefined`；`notify` 单向派发；`handleAnswer` 回传应答；其余 `ExtensionUIContext` 方法为 TUI no-op 桩
 - `src/main/skillscan.mjs` —— 命令面板数据源（纯 Node、无 electron 依赖）：`parseSkillFrontmatter`/`scanSkillsDir`/`collectCommands` + `BUILTIN_COMMANDS`/`EXTENSION_COMMANDS`（命令清单维护规则见「本模块硬约束」）
 - `scripts/build-main.mjs` —— main/preload 产物构建：tsconfig.node.json typecheck 门禁 + 复制 JS 到 `dist-main/main` + `dist-main/preload`（源码即产物、无转译；package.json `main` 指向 `dist-main/main/main.mjs`）
@@ -36,8 +36,8 @@
 - **IPC 通道名字符串散落两处字面量**（main.mjs 的 `handle`/`send` 与 preload.cjs 的 `invoke`/`on`，JS 无法共享运行时常量）：新增/改名通道必须两处同步，且同步更新 `ZionAPI`（契约归 `src/shared`，完整清单见其 DESIGN.md）
 - **扩展对话框形态三处同步**：`uibridge.mjs` 的 `ask()` kind、`src/shared/protocol.ts` 的 `UiAsk.kind`、`AskDialog.tsx` 渲染分支（confirm/input/select）必须一致；新增形态三处同改（形状契约归 `src/shared`）
 - **命令清单人工维护**：新增扩展命令必须追加 `skillscan.mjs` 的 `EXTENSION_COMMANDS`（运行时注册的命令无法静态枚举，漏加则面板不显示）；升级 pi SDK 后核对 `BUILTIN_COMMANDS` 是否漂移（快照来源见 DESIGN.md）
-- **`WORKSPACE_DIR` 只经 `switchProject` 更新**（main.mjs，默认 `D:\zion-workspace`；唯一入口是 `zion:switch-project` / `zion:browse-project`）：跨目录切换 = 废弃全部旧会话并按新目录重建（dispose/清空/continueRecent 细节见 [DESIGN.md](DESIGN.md) 架构节）；同目录切换走快速路径、不写最近清单
-- **项目相关逻辑必须读 `WORKSPACE_DIR` 当前值**：该值可变（切换项目即更新）——不要在模块加载期缓存它的快照，否则切换后 scan-tree / list-commands（项目级 skills）/ 会话归属仍指旧目录
+- **`WORKSPACE_DIR` 运行时只经 `switchProject` 更新**（main.mjs，默认 `D:\zion-workspace`；唯一入口是 `zion:switch-project` / `zion:browse-project`；例外：模块加载期启动恢复会从最近项目清单首位改写一次，流程见 [DESIGN.md](DESIGN.md) 启动节）：跨目录切换 = 废弃全部旧会话并按新目录重建（dispose/清空/continueRecent 细节见 [DESIGN.md](DESIGN.md) 架构节）；同目录切换走快速路径、不写最近清单
+- **项目相关逻辑必须读 `WORKSPACE_DIR` 当前值**：该值可变（启动恢复与切换项目都会更新）——不要在模块加载期缓存它的快照（启动恢复会改写），否则 scan-tree / list-commands（项目级 skills）/ 会话归属指向错误目录
 - **`window.zion` 之外的渲染层通道不可新增**：渲染进程只能经该白名单触达主进程（`contextIsolation`/`sandbox` 等安全配置事实见 `src/shared/DESIGN.md` 安全边界，改动 `webPreferences` 前先读）
 - **改 `src/main` / `src/preload` 后必须 `npm run build:main` 再验证**：运行时加载的是 `dist-main/` 产物（dev/smoke/e2e 自动先构建；`npm start` 不会，直接跑旧产物）
 

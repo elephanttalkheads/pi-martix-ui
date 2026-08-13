@@ -18,6 +18,23 @@ const RENDERER_DEV_URL = 'http://127.0.0.1:5173';
 // 当前工作目录（项目选择 UI 落地后可变：切换项目 = 更新此值 + 重建会话上下文）
 let WORKSPACE_DIR = path.join('D:', 'zion-workspace');
 
+// 最近项目文件（上移供启动恢复；项目选择 IPC 见下）
+const PROJECTS_FILE = path.join(os.homedir(), '.pi', 'agent', 'zion-projects.json');
+const PROJECTS_MAX = 8;
+
+// 启动恢复最近项目：切换过项目后重启应回到上次项目（而非默认工作区）
+try {
+  const recent = listProjects();
+  if (recent.length > 0 && recent[0].path) {
+    WORKSPACE_DIR = recent[0].path;
+    console.log('[zion] startup restore project →', WORKSPACE_DIR);
+  } else {
+    console.log('[zion] startup no recent project, default →', WORKSPACE_DIR);
+  }
+} catch (e) {
+  console.warn('[zion] startup project restore failed:', String(e));
+}
+
 // 扩展 UI 桥：dialog 请求 → renderer 弹层（AskDialog）；uiContext + projectTrustContextFactory 双注入
 // （headless 默认无 UI——扩展 ask 与项目信任询问此前全部静默落空）
 const uiBridge = createUiBridge();
@@ -245,8 +262,6 @@ ipcMain.handle('agent:followUp', async (_e, text) => {
 });
 
 /** 项目选择：最近项目存储（~/.pi/agent/zion-projects.json，path + lastUsed，上限 8） */
-const PROJECTS_FILE = path.join(os.homedir(), '.pi', 'agent', 'zion-projects.json');
-const PROJECTS_MAX = 8;
 
 /** @returns {import('../shared/protocol.ts').ProjectInfo[]} */
 function listProjects() {
