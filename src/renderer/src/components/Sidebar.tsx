@@ -1,11 +1,13 @@
 // 侧栏 —— Neo 头像 + 三槽会话培育仓（真实 SDK 会话）+ 文件树 + 底部信息
 // 培育仓：中央名称常驻、名称悬停显示操作、共享全息标题/首行摘要；仅删除待确认态开仓。
 // 「新建会话」按钮。文件树行带 data-path 供蠕虫定位；点击文件行发读取指令。
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { FileNode, SessionInfoLike } from '../../../shared/protocol';
 import { useFeed, deriveSessionTitle, mergeTreeOpen } from '../store';
+import type { PodCableTarget } from '../neuralCable';
 import { firstLineSummary } from '../sessionPod';
 import NeoAvatar from './NeoAvatar';
+import NeuralCableLayer from './NeuralCableLayer';
 import SessionPod from './SessionPod';
 
 /** 会话显示标题：name → firstMessage 摘要 → 会话短码（统一 deriveSessionTitle，store.ts 单测覆盖） */
@@ -84,11 +86,21 @@ export default function Sidebar({ onSelectFile }: { onSelectFile: (path: string)
   /** 删除确认态：待确认的会话 id（2.5s 自动复位） */
   const [confirmId, setConfirmId] = useState<string | null>(null);
   const [preview, setPreview] = useState<SessionPreview | null>(null);
+  const [cableInteractionId, setCableInteractionId] = useState<string | null>(null);
+  const [cableTargetVersion, setCableTargetVersion] = useState(0);
   const confirmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const sidebarRef = useRef<HTMLElement | null>(null);
   const deckRef = useRef<HTMLDivElement | null>(null);
+  const neoSourceRef = useRef<HTMLSpanElement | null>(null);
+  const podTargetsRef = useRef(new Map<string, PodCableTarget>());
   const wheelEndTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const wheelGestureActive = useRef(false);
+
+  const registerCableTarget = useCallback((sessionId: string, target: PodCableTarget | null) => {
+    if (target) podTargetsRef.current.set(sessionId, target);
+    else podTargetsRef.current.delete(sessionId);
+    setCableTargetVersion((version) => version + 1);
+  }, []);
 
   useEffect(() => {
     const hidePreview = () => setPreview(null);
@@ -254,6 +266,7 @@ export default function Sidebar({ onSelectFile }: { onSelectFile: (path: string)
   };
 
   const showPreview = (s: SessionInfoLike, anchor: HTMLElement) => {
+    setCableInteractionId(s.id);
     const sidebar = sidebarRef.current;
     if (!sidebar) return;
 
@@ -273,10 +286,26 @@ export default function Sidebar({ onSelectFile }: { onSelectFile: (path: string)
     });
   };
 
+  const endSessionPreview = () => {
+    setPreview(null);
+    setCableInteractionId(null);
+  };
+
   return (
     <aside ref={sidebarRef} className="sidebar" aria-label="侧栏">
+      <NeuralCableLayer
+        sidebarRef={sidebarRef}
+        deckRef={deckRef}
+        sourceRef={neoSourceRef}
+        targetsRef={podTargetsRef}
+        targetVersion={cableTargetVersion}
+        sessions={sessions}
+        currentSessionId={currentSessionId}
+        hoveredSessionId={cableInteractionId}
+        openSessionId={confirmId}
+      />
       <div className="core-wrap">
-        <NeoAvatar />
+        <NeoAvatar sourceRef={neoSourceRef} />
         <div className="core-label">
           NEO · <b>{sessionTitle}</b> ·{' '}
           <span id="core-state">{sessionState === 'READY' ? 'IDLE' : 'ACTIVE'}</span>
@@ -319,7 +348,8 @@ export default function Sidebar({ onSelectFile }: { onSelectFile: (path: string)
                 summary={summary}
                 onSelect={() => void selectSession(s)}
                 onPreview={(anchor) => showPreview(s, anchor)}
-                onPreviewEnd={() => setPreview(null)}
+                onPreviewEnd={endSessionPreview}
+                onCableTarget={registerCableTarget}
                 titleEditor={
                   editing ? (
                     <input

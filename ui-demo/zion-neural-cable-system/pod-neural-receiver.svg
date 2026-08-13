@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 48" role="img" aria-labelledby="title desc" shape-rendering="crispEdges">
+  <title id="title">培育仓左侧神经接头</title>
+  <desc id="desc">透明背景的冷绿色像素接收头，线缆从左侧插入。</desc>
+  <style>
+    .dark{fill:#010a04}.shell{fill:#1da754}.mid{fill:#14b850}.light{fill:#3dff8f}.pin{fill:#c2ffd9}
+  </style>
+  <g id="pod-receiver-body">
+    <path class="dark" d="M20 8h24v4h8v4h4v16h-4v4h-8v4H20v-4h-8V12h8z"/>
+    <path class="shell" d="M22 10h20v4h8v4h4v12h-4v4h-8v4H22v-4h-6V14h6z"/>
+    <path class="dark" d="M24 16h16v4h6v8h-6v4H24v-4h-4v-8h4z"/>
+    <path class="mid" d="M26 18h12v4h4v4h-4v4H26v-4h-2v-4h2z"/>
+    <path class="pin" d="M28 20h4v8h-4zm6 0h4v8h-4z"/>
+  </g>
+  <g id="pod-receiver-socket">
+    <path class="dark" d="M4 17h18v14H4z"/>
+    <path class="shell" d="M4 19h16v10H4z"/>
+    <path class="light" d="M4 21h12v2H4zm0 6h10v2H4z"/>
+    <path class="dark" d="M0 20h6v8H0z"/>
+  </g>
+</svg>

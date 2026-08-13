@@ -1,0 +1,122 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"
+  viewBox="0 0 900 660" role="img" aria-labelledby="title desc">
+  <title id="title">ZION Neo 脑机接口连接线系统</title>
+  <desc id="desc">透明背景的六路 Matrix 字符神经束设计样本。每一路径、端头、机械节点与字符信号层均可独立编辑。</desc>
+  <metadata>
+    {
+      "coordinateSpace": "component-swatch-not-sidebar",
+      "runtime": "replace every path[data-runtime-d] from DOM anchors",
+      "sourceAnchor": [0.3203125, 0.4453125],
+      "podAnchorClosed": [0.1758373, 0.5696068],
+      "podAnchorOpen": [0.1752392, 0.5696068]
+    }
+  </metadata>
+  <style>
+    :root{
+      --bg:#010a04;--fg:#3dff8f;--muted:#1da754;--mid:#23c468;
+      --accent:#00ff41;--accent-muted:#14b850;--bright:#c2ffd9;
+    }
+    .route-bed{fill:none;stroke:var(--muted);stroke-opacity:.18;stroke-width:1;stroke-dasharray:1 7;vector-effect:non-scaling-stroke}
+    .route-nerve{fill:none;stroke:var(--mid);stroke-opacity:.28;stroke-width:1.25;stroke-dasharray:6 4 1 6;vector-effect:non-scaling-stroke}
+    .glyphs{font:11px "Matrix Code","Share Tech Mono",ui-monospace,monospace;letter-spacing:7px;fill:var(--mid);fill-opacity:.48}
+    .source-shell,.target-shell{fill:var(--bg);stroke:var(--muted);stroke-width:1;vector-effect:non-scaling-stroke}
+    .source-pin,.target-pin{fill:var(--accent-muted)}
+    .node{fill:var(--bg);stroke:var(--accent-muted);stroke-width:1;vector-effect:non-scaling-stroke}
+    .node-mark{fill:var(--mid)}
+    .signal-head{opacity:0}
+    .signal-head text{font:11px "Matrix Code","Share Tech Mono",ui-monospace,monospace;fill:var(--bright)}
+    .signal-tail{stroke:var(--fg);stroke-opacity:.64;stroke-width:1.5;stroke-dasharray:1 8;vector-effect:non-scaling-stroke}
+    .is-active .route-nerve{stroke-opacity:.46}
+    .is-active .glyphs{fill-opacity:.68}
+    .is-active .signal-head{opacity:1}
+    .is-hover .route-nerve{stroke-opacity:.36}
+    .is-hover .glyphs{fill-opacity:.58}
+  </style>
+  <defs>
+    <g id="source-terminal" shape-rendering="crispEdges">
+      <path class="source-shell" d="M-16-9h12v3h5v12h-5v3h-12z"/>
+      <path class="source-pin" d="M-13-5h6v2h5v2h-11zm0 6h11v2h-5v2h-6z"/>
+    </g>
+    <g id="target-terminal" shape-rendering="crispEdges">
+      <path class="target-shell" d="M0-9h13v3h5v12h-5v3H0z"/>
+      <path class="target-pin" d="M2-5h8v2h5v2H2zm0 6h13v2h-5v2H2z"/>
+    </g>
+    <g id="bundle-node" shape-rendering="crispEdges">
+      <rect class="node" x="-5" y="-7" width="10" height="14"/>
+      <rect class="node-mark" x="-1" y="-5" width="2" height="10"/>
+    </g>
+  </defs>
+
+  <!-- 六行是组件样本，不是 Sidebar 固定坐标；运行时必须替换 data-runtime-d 路径。 -->
+  <g id="cable-01" class="cable is-active" data-seed="zion-01" data-cadence="kana-digit" data-node-phase="0.28">
+    <g id="cable-01-source"><use href="#source-terminal" x="104" y="66"/></g>
+    <g id="cable-01-control-path">
+      <path id="cable-01-path" data-runtime-d="true" class="route-bed" pathLength="100" d="M104 66C58 66 52 70 52 92C52 112 92 102 142 102C292 102 612 98 796 66"/>
+      <path class="route-nerve" pathLength="100" d="M104 66C58 66 52 70 52 92C52 112 92 102 142 102C292 102 612 98 796 66"/>
+    </g>
+    <g id="cable-01-mechanical-nodes"><use href="#bundle-node" x="52" y="90"/><use href="#bundle-node" x="318" y="101"/></g>
+    <g id="cable-01-character-signal"><text class="glyphs"><textPath href="#cable-01-path" startOffset="3%">ｱ 0 F &lt; 7 + ｾ A 1 * ｲ 6 C &gt; 2</textPath></text></g>
+    <g id="cable-01-signal-head" class="signal-head"><path class="signal-tail" d="M654 91h108"/><text x="766" y="82">ｱ</text></g>
+    <g id="cable-01-target"><use href="#target-terminal" x="796" y="66"/></g>
+  </g>
+
+  <g id="cable-02" class="cable" data-seed="zion-02" data-cadence="paired-digits" data-node-phase="0.42">
+    <g id="cable-02-source"><use href="#source-terminal" x="104" y="166"/></g>
+    <g id="cable-02-control-path">
+      <path id="cable-02-path" data-runtime-d="true" class="route-bed" pathLength="100" d="M104 166C62 166 54 174 54 194C54 220 100 206 164 206C332 206 610 210 796 166"/>
+      <path class="route-nerve" pathLength="100" d="M104 166C62 166 54 174 54 194C54 220 100 206 164 206C332 206 610 210 796 166"/>
+    </g>
+    <g id="cable-02-mechanical-nodes"><use href="#bundle-node" x="54" y="192"/><use href="#bundle-node" x="406" y="208"/></g>
+    <g id="cable-02-character-signal"><text class="glyphs"><textPath href="#cable-02-path" startOffset="5%">01 ｶ 9 02 F ｷ 4 03 B ｸ 8 04 E</textPath></text></g>
+    <g id="cable-02-signal-head" class="signal-head"><path class="signal-tail" d="M650 201h110"/><text x="766" y="184">7</text></g>
+    <g id="cable-02-target"><use href="#target-terminal" x="796" y="166"/></g>
+  </g>
+
+  <g id="cable-03" class="cable" data-seed="zion-03" data-cadence="hex-spaced" data-node-phase="0.52">
+    <g id="cable-03-source"><use href="#source-terminal" x="104" y="266"/></g>
+    <g id="cable-03-control-path">
+      <path id="cable-03-path" data-runtime-d="true" class="route-bed" pathLength="100" d="M104 266C66 266 50 274 50 298C50 326 112 306 180 306C350 306 626 314 796 266"/>
+      <path class="route-nerve" pathLength="100" d="M104 266C66 266 50 274 50 298C50 326 112 306 180 306C350 306 626 314 796 266"/>
+    </g>
+    <g id="cable-03-mechanical-nodes"><use href="#bundle-node" x="50" y="296"/><use href="#bundle-node" x="496" y="309"/></g>
+    <g id="cable-03-character-signal"><text class="glyphs"><textPath href="#cable-03-path" startOffset="2%">A F 3 ｹ 7 C &lt; 0 9 ｺ E 2 + 6</textPath></text></g>
+    <g id="cable-03-signal-head" class="signal-head"><path class="signal-tail" d="M652 302h108"/><text x="766" y="284">F</text></g>
+    <g id="cable-03-target"><use href="#target-terminal" x="796" y="266"/></g>
+  </g>
+
+  <g id="cable-04" class="cable" data-seed="zion-04" data-cadence="kana-pairs" data-node-phase="0.34">
+    <g id="cable-04-source"><use href="#source-terminal" x="104" y="366"/></g>
+    <g id="cable-04-control-path">
+      <path id="cable-04-path" data-runtime-d="true" class="route-bed" pathLength="100" d="M104 366C60 366 48 374 48 394C48 422 92 414 154 414C318 414 604 404 796 366"/>
+      <path class="route-nerve" pathLength="100" d="M104 366C60 366 48 374 48 394C48 422 92 414 154 414C318 414 604 404 796 366"/>
+    </g>
+    <g id="cable-04-mechanical-nodes"><use href="#bundle-node" x="48" y="392"/><use href="#bundle-node" x="358" y="413"/></g>
+    <g id="cable-04-character-signal"><text class="glyphs"><textPath href="#cable-04-path" startOffset="4%">ｻｼ 4 0 ｽｾ B 7 ｿｱ 1 E ｶｷ 6</textPath></text></g>
+    <g id="cable-04-signal-head" class="signal-head"><path class="signal-tail" d="M650 397h110"/><text x="766" y="382">ｾ</text></g>
+    <g id="cable-04-target"><use href="#target-terminal" x="796" y="366"/></g>
+  </g>
+
+  <g id="cable-05" class="cable" data-seed="zion-05" data-cadence="operator-gaps" data-node-phase="0.61">
+    <g id="cable-05-source"><use href="#source-terminal" x="104" y="466"/></g>
+    <g id="cable-05-control-path">
+      <path id="cable-05-path" data-runtime-d="true" class="route-bed" pathLength="100" d="M104 466C64 466 56 474 56 498C56 524 106 510 174 510C346 510 618 520 796 466"/>
+      <path class="route-nerve" pathLength="100" d="M104 466C64 466 56 474 56 498C56 524 106 510 174 510C346 510 618 520 796 466"/>
+    </g>
+    <g id="cable-05-mechanical-nodes"><use href="#bundle-node" x="56" y="496"/><use href="#bundle-node" x="560" y="514"/></g>
+    <g id="cable-05-character-signal"><text class="glyphs"><textPath href="#cable-05-path" startOffset="1%">&lt; + * 8 ｱ 2 &gt; + 5 ｲ F * 0 &lt;</textPath></text></g>
+    <g id="cable-05-signal-head" class="signal-head"><path class="signal-tail" d="M646 506h114"/><text x="766" y="484">+</text></g>
+    <g id="cable-05-target"><use href="#target-terminal" x="796" y="466"/></g>
+  </g>
+
+  <g id="cable-06" class="cable" data-seed="zion-06" data-cadence="sparse-checksum" data-node-phase="0.47">
+    <g id="cable-06-source"><use href="#source-terminal" x="104" y="566"/></g>
+    <g id="cable-06-control-path">
+      <path id="cable-06-path" data-runtime-d="true" class="route-bed" pathLength="100" d="M104 566C58 566 46 574 46 598C46 624 98 610 160 610C328 610 612 618 796 566"/>
+      <path class="route-nerve" pathLength="100" d="M104 566C58 566 46 574 46 598C46 624 98 610 160 610C328 610 612 618 796 566"/>
+    </g>
+    <g id="cable-06-mechanical-nodes"><use href="#bundle-node" x="46" y="596"/><use href="#bundle-node" x="452" y="613"/></g>
+    <g id="cable-06-character-signal"><text class="glyphs"><textPath href="#cable-06-path" startOffset="6%">6 &gt; A &gt; ｵ &gt; 1 &gt; D &gt; ｹ &gt; 9 &gt; *</textPath></text></g>
+    <g id="cable-06-signal-head" class="signal-head"><path class="signal-tail" d="M650 603h110"/><text x="766" y="584">6</text></g>
+    <g id="cable-06-target"><use href="#target-terminal" x="796" y="566"/></g>
+  </g>
+</svg>

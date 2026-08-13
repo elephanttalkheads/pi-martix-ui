@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" role="img" aria-labelledby="title desc" shape-rendering="crispEdges">
+  <title id="title">字符神经束束线环</title>
+  <desc id="desc">透明背景的小型深绿机械束线环。</desc>
+  <style>.dark{fill:#010a04}.edge{fill:#1da754}.core{fill:#14b850}</style>
+  <path class="dark" d="M4 2h12v2h2v12h-2v2H4v-2H2V4h2z"/>
+  <path class="edge" d="M5 4h10v2h1v8h-1v2H5v-2H4V6h1z"/>
+  <path class="dark" d="M7 5h6v10H7z"/>
+  <path class="core" d="M9 5h2v10H9z"/>
+</svg>

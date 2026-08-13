@@ -1,5 +1,6 @@
-import type { FocusEvent, KeyboardEvent, PointerEvent, ReactNode } from 'react';
+import { useEffect, useRef, type FocusEvent, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react';
 import type { SessionInfoLike } from '../../../shared/protocol';
+import type { PodCableTarget } from '../neuralCable';
 import podClosed from '../assets/session-pod-horizontal-closed.png';
 import podOpen from '../assets/session-pod-horizontal-open.png';
 
@@ -15,6 +16,7 @@ type SessionPodProps = {
   onSelect: () => void;
   onPreview: (anchor: HTMLElement) => void;
   onPreviewEnd: () => void;
+  onCableTarget?: (sessionId: string, target: PodCableTarget | null) => void;
   titleEditor?: ReactNode;
   actions: ReactNode;
 };
@@ -31,9 +33,13 @@ export default function SessionPod({
   onSelect,
   onPreview,
   onPreviewEnd,
+  onCableTarget,
   titleEditor,
   actions,
 }: SessionPodProps) {
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const closedImageRef = useRef<HTMLImageElement | null>(null);
+  const openImageRef = useRef<HTMLImageElement | null>(null);
   const stateText = deleteArmed ? '等待删除确认' : active ? '当前会话' : '';
   const ariaLabel = [title, summary, stateText].filter(Boolean).join('。');
 
@@ -54,8 +60,18 @@ export default function SessionPod({
     }
   };
 
+  useEffect(() => {
+    const root = rootRef.current;
+    const closedImage = closedImageRef.current;
+    const openImage = openImageRef.current;
+    if (!onCableTarget || !root || !closedImage || !openImage) return;
+    onCableTarget(session.id, { root, closedImage, openImage });
+    return () => onCableTarget(session.id, null);
+  }, [onCableTarget, session.id]);
+
   return (
     <div
+      ref={rootRef}
       className={`scard session-pod${active ? ' active' : ''}${deleteArmed ? ' delete-armed' : ''}${editing ? ' is-editing' : ''}`}
       data-session-id={session.id}
       data-od-id={`session-card-${session.id.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}`}
@@ -72,8 +88,8 @@ export default function SessionPod({
       onKeyDown={handleKeyDown}
     >
       <span className="pod-visual" aria-hidden="true">
-        <img className="pod-frame pod-frame-closed" src={podClosed} alt="" draggable={false} />
-        <img className="pod-frame pod-frame-open" src={podOpen} alt="" draggable={false} />
+        <img ref={closedImageRef} className="pod-frame pod-frame-closed" src={podClosed} alt="" draggable={false} />
+        <img ref={openImageRef} className="pod-frame pod-frame-open" src={podOpen} alt="" draggable={false} />
       </span>
 
       <span className="pod-nameplate">

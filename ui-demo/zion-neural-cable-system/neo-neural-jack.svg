@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 48" role="img" aria-labelledby="title desc" shape-rendering="crispEdges">
+  <title id="title">Neo 左后脑脑机接口</title>
+  <desc id="desc">透明背景的冷绿色像素机械接口，线缆从左侧离开。</desc>
+  <style>
+    .dark{fill:#010a04}.shell{fill:#1da754}.mid{fill:#14b850}.light{fill:#3dff8f}.pin{fill:#c2ffd9}
+  </style>
+  <g id="neo-jack-shell">
+    <path class="dark" d="M18 8h22v4h8v4h4v16h-4v4h-8v4H18v-4h-6V12h6z"/>
+    <path class="shell" d="M20 10h18v4h8v4h4v12h-4v4h-8v4H20v-4h-4V14h4z"/>
+    <path class="dark" d="M24 14h14v4h6v12h-6v4H24v-4h-4V18h4z"/>
+    <path class="mid" d="M28 18h10v4h4v4h-4v4H28v-4h-4v-4h4z"/>
+    <path class="pin" d="M30 20h6v8h-6z"/>
+  </g>
+  <g id="neo-jack-exit">
+    <path class="dark" d="M4 17h16v14H4z"/>
+    <path class="shell" d="M4 19h14v10H4z"/>
+    <path class="light" d="M4 21h10v2H4zm0 6h8v2H4z"/>
+    <path class="dark" d="M0 20h6v8H0z"/>
+    <path class="mid" d="M0 22h6v4H0z"/>
+  </g>
+</svg>

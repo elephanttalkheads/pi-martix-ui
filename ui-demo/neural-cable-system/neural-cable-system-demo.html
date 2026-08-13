@@ -1,0 +1,611 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ZION · Neo 脑机接口连接线系统</title>
+  <style>
+    @font-face {
+      font-family: "Sarasa Term SC";
+      src: url("../font/SarasaTermSC-Regular.ttf") format("truetype");
+      font-display: swap;
+    }
+    :root {
+      --bg: oklch(12% 0.025 150);
+      --surface: oklch(15% 0.035 150);
+      --fg: oklch(92% 0.13 150);
+      --muted: oklch(63% 0.13 150);
+      --border: oklch(38% 0.11 150 / 0.58);
+      --accent: #3dff8f;
+      --accent-mid: #23c468;
+      --accent-deep: #1da754;
+      --accent-dim: #14b850;
+      --head: #c2ffd9;
+      --danger: oklch(65% 0.22 25);
+      --side-w: 232px;
+      --font: "Sarasa Term SC", Consolas, "Cascadia Mono", monospace;
+    }
+    * { box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; }
+    body {
+      background: var(--bg);
+      color: var(--fg);
+      font-family: var(--font);
+      font-size: 13px;
+      line-height: 1.7;
+    }
+    button { font: inherit; }
+    :focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
+    .stage { display: flex; width: 100%; height: 100%; min-width: 0; }
+    .sidebar {
+      position: relative;
+      isolation: isolate;
+      width: var(--side-w);
+      min-width: 160px;
+      max-width: min(480px, 50vw);
+      height: 100%;
+      flex: none;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      background: color-mix(in oklch, var(--surface) 92%, transparent);
+      border-right: 1px solid var(--border);
+    }
+    .cable-layer {
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      overflow: visible;
+    }
+    .core-wrap, .sessions, .project-dummy, .side-foot {
+      position: relative;
+      z-index: 2;
+    }
+    .core-wrap {
+      flex: none;
+      height: 165px;
+      padding: 10px 0 6px;
+      border-bottom: 1px solid var(--border);
+    }
+    .core-visual { position: relative; width: 100%; height: 140px; }
+    .neo-avatar {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 120px;
+      height: 120px;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+      user-select: none;
+    }
+    .neo-avatar img {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      image-rendering: pixelated;
+    }
+    .core-label {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 4px;
+      text-align: center;
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.5;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+    }
+    .core-label b { color: var(--fg); font-weight: 500; }
+    .sessions {
+      flex: 0 0 322px;
+      min-height: 0;
+      padding: 10px 12px 4px;
+      border-bottom: 1px solid var(--border);
+    }
+    .session-head {
+      height: 28px;
+      display: flex;
+      align-items: start;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .session-head h2 {
+      margin: 0;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 400;
+      line-height: 24px;
+      letter-spacing: 0.18em;
+    }
+    .new-session {
+      min-height: 24px;
+      padding: 1px 7px;
+      color: var(--muted);
+      background: color-mix(in oklch, var(--surface) 86%, transparent);
+      border: 1px solid var(--border);
+      letter-spacing: 0.02em;
+      cursor: pointer;
+    }
+    .new-session:hover, .new-session:focus-visible {
+      color: var(--fg);
+      background: color-mix(in oklch, var(--surface) 74%, var(--accent) 8%);
+      border-color: var(--accent-mid);
+    }
+    .deck {
+      --gap: 8px;
+      position: relative;
+      height: 276px;
+      min-height: 0;
+      display: grid;
+      grid-auto-rows: calc((100% - var(--gap) - var(--gap)) / 3);
+      gap: var(--gap);
+      overflow-y: auto;
+      overscroll-behavior-y: contain;
+      scrollbar-gutter: stable;
+      scroll-snap-type: y mandatory;
+    }
+    .deck::-webkit-scrollbar { width: 6px; }
+    .deck::-webkit-scrollbar-track { background: transparent; }
+    .deck::-webkit-scrollbar-thumb { background: var(--accent-mid); }
+    .session-pod {
+      container-type: size;
+      --pod-art-width: min(108cqw, 324cqh);
+      position: relative;
+      min-height: 0;
+      overflow: hidden;
+      border: 1px solid transparent;
+      scroll-snap-align: start;
+      scroll-snap-stop: always;
+      cursor: pointer;
+      isolation: isolate;
+    }
+    .session-pod:hover { background: oklch(35% 0.1 150 / 0.08); }
+    .session-pod:focus-visible { border-color: var(--accent-mid); }
+    .pod-visual { position: absolute; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; }
+    .pod-frame {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: var(--pod-art-width);
+      max-width: none;
+      height: auto;
+      transform: translate(-50%, -50%);
+      image-rendering: pixelated;
+      filter: brightness(.72) saturate(.76);
+    }
+    .pod-frame-open { opacity: 0; }
+    .session-pod.delete-armed .pod-frame-open { opacity: 1; }
+    .session-pod.delete-armed .pod-frame-closed { opacity: 0; }
+    .session-pod:hover .pod-frame, .session-pod:focus-visible .pod-frame { filter: brightness(.9) saturate(.92); }
+    .session-pod.active .pod-frame { filter: brightness(1.02) saturate(1.02); }
+    .pod-nameplate {
+      position: absolute;
+      z-index: 4;
+      left: 50%;
+      top: 59%;
+      width: clamp(72px, 56%, 168px);
+      height: 18px;
+      transform: translate(-50%, -50%);
+      display: grid;
+      grid-template-columns: 18px minmax(0,1fr) 14px;
+      align-items: center;
+      color: var(--muted);
+      background: oklch(13% 0.025 150 / .94);
+      border: 1px solid var(--border);
+      font-size: 11px;
+      line-height: 1;
+      letter-spacing: .02em;
+    }
+    .session-pod.active .pod-nameplate { color: var(--fg); border-color: var(--accent-mid); }
+    .pod-index, .pod-state { text-align: center; }
+    .pod-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .pod-delete {
+      position: absolute;
+      right: 2px;
+      top: 2px;
+      z-index: 5;
+      width: 24px;
+      height: 24px;
+      padding: 0;
+      opacity: 0;
+      color: var(--muted);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      cursor: pointer;
+    }
+    .session-pod:hover .pod-delete, .pod-delete:focus-visible { opacity: 1; }
+    .session-pod.delete-armed .pod-delete { opacity: 1; color: var(--danger); border-color: var(--danger); }
+    .session-hologram {
+      position: absolute;
+      z-index: 30;
+      min-height: 70px;
+      padding: 9px 13px 8px 16px;
+      overflow: hidden;
+      pointer-events: none;
+      background: oklch(20% 0.07 150 / .92);
+      border: 1px solid var(--accent-mid);
+      clip-path: polygon(9px 0,100% 0,100% calc(100% - 9px),calc(100% - 9px) 100%,0 100%,0 9px);
+      opacity: 0;
+      transform: translateY(8px) scaleY(.8);
+      transform-origin: bottom center;
+      transition: opacity .15s, transform .15s;
+    }
+    .session-hologram.visible { opacity: 1; transform: none; }
+    .session-hologram strong, .session-hologram span {
+      display: block;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .session-hologram strong { color: var(--head); font-size: 13px; font-weight: 500; line-height: 1.5; }
+    .session-hologram span { color: var(--fg); font-size: 11px; line-height: 1.6; }
+    .project-dummy {
+      flex: 1;
+      min-height: 0;
+      padding: 14px 12px;
+      color: var(--muted);
+      font-size: 11px;
+      letter-spacing: .02em;
+    }
+    .project-dummy b { display: block; margin-bottom: 8px; color: var(--fg); font-weight: 500; letter-spacing: .1em; }
+    .side-foot { flex: none; padding: 6px 12px; border-top: 1px solid var(--border); color: var(--muted); font-size: 10px; }
+    .resizer {
+      width: 7px;
+      height: 100%;
+      flex: none;
+      cursor: col-resize;
+      background: transparent;
+      border: 0;
+      border-right: 1px solid var(--border);
+    }
+    .resizer:hover, .resizer:focus-visible { background: oklch(60% .18 150 / .12); }
+    .demo-space {
+      flex: 1;
+      min-width: 0;
+      display: grid;
+      place-items: center;
+      padding: 32px;
+      color: var(--muted);
+      background-image:
+        linear-gradient(var(--border) 1px, transparent 1px),
+        linear-gradient(90deg, var(--border) 1px, transparent 1px);
+      background-size: 32px 32px;
+    }
+    .demo-note { max-width: 44ch; padding: 14px 16px; background: var(--bg); border: 1px solid var(--border); }
+    .demo-note b { color: var(--fg); font-weight: 500; }
+    .cable-base { fill: none; stroke: var(--accent-deep); stroke-width: 1.2; stroke-dasharray: 2 6; vector-effect: non-scaling-stroke; }
+    .cable-glyphs { fill: var(--accent-mid); font-family: var(--font); font-size: 11px; letter-spacing: 3px; }
+    .cable-group.dormant { opacity: .34; }
+    .cable-group.active { opacity: .86; }
+    .cable-group.hover { opacity: .62; }
+    .cable-group.hidden { display: none; }
+    .cable-port path, .cable-port rect { vector-effect: non-scaling-stroke; }
+    .signal-glyph { font-family: var(--font); font-size: 11px; text-anchor: middle; dominant-baseline: middle; }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+    }
+  </style>
+</head>
+<body>
+  <main class="stage" data-od-id="neural-cable-demo">
+    <aside class="sidebar" id="sidebar" aria-label="Neo 脑机接口动态连线演示" data-od-id="responsive-sidebar">
+      <svg class="cable-layer" id="cable-layer" aria-hidden="true" data-od-id="neural-cable-layer"></svg>
+
+      <section class="core-wrap" data-od-id="neo-core">
+        <div class="core-visual">
+          <div class="neo-avatar" id="neo-avatar" aria-label="Neo 头像">
+            <img src="../../src/renderer/src/assets/neo-avatar/neo-idle.png" alt="Neo 像素头像" />
+          </div>
+        </div>
+        <div class="core-label">NEO · <b>121111</b> · IDLE</div>
+      </section>
+
+      <section class="sessions" data-od-id="session-section">
+        <header class="session-head">
+          <h2 data-od-id="session-heading">会话</h2>
+          <button class="new-session" data-od-id="new-session">＋ 新建会话</button>
+        </header>
+        <div class="deck" id="deck" aria-label="六个逻辑会话，每次显示三个槽位" data-od-id="session-list"></div>
+      </section>
+
+      <div class="session-hologram" id="hologram" role="status" aria-live="polite" data-od-id="session-hologram">
+        <strong></strong><span></span>
+      </div>
+
+      <section class="project-dummy" aria-label="项目区占位" data-od-id="project-region">
+        <b>ECC</b>
+        <div>assets</div><div>src</div><div>docs</div>
+      </section>
+      <footer class="side-foot">● 已连接 zion 主网</footer>
+    </aside>
+    <div class="resizer" id="resizer" role="separator" aria-label="拖拽调整侧栏宽度" aria-orientation="vertical" aria-valuemin="160" aria-valuemax="480" aria-valuenow="232" tabindex="0" data-od-id="sidebar-resizer"></div>
+    <section class="demo-space" aria-label="演示说明">
+      <p class="demo-note"><b>动态验证：</b>拖拽左侧分隔线改变 Sidebar 宽度；滚动会话区查看 04–06 线路重新锚定；点击会话切换活动脉冲；点击仓体右上角可独立切换开仓状态。</p>
+    </section>
+  </main>
+
+  <script>
+    (() => {
+      const NS = 'http://www.w3.org/2000/svg';
+      const SOURCE_ANCHOR = { x: 73 / 256, y: 102 / 256 };
+      const POD_ANCHORS = {
+        closed: { x: 159 / 1672, y: 556 / 941 },
+        open: { x: 159 / 1672, y: 556 / 941 },
+      };
+      const GLYPHS = 'ｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿ0123456789ABCDEF<>+*';
+      const PATTERNS = [
+        'ｱ 0 A < 7 + F * 1 ', '0 2 ｹ C + 8 > ｵ ', 'A 3 F 9 ｾ 0 C 7 E + ',
+        '4 ｱ * 0 D 2 < + ', '5 5 ｺ B + 0 * E ', '6 ｾ 0 F > * ',
+      ];
+      const sessions = [
+        ['培育仓会话接入', '设计动态锚定的字符神经束连接系统。'],
+        ['重构 Electron 启动流程', '检查单实例锁与开发环境启动顺序。'],
+        ['修复流式消息队列', '将增量输出统一合并进 requestAnimationFrame。'],
+        ['整理工具调用事件', '保持 tool_start 与 tool_end 的顺序语义。'],
+        ['校准 Neo 动画状态', '嘴部动画仅由蠕虫释放状态驱动。'],
+        ['补充无障碍验证', '低动态模式保留清晰的静态连接关系。'],
+      ];
+      const sidebar = document.getElementById('sidebar');
+      const avatar = document.getElementById('neo-avatar');
+      const deck = document.getElementById('deck');
+      const svg = document.getElementById('cable-layer');
+      const hologram = document.getElementById('hologram');
+      const resizer = document.getElementById('resizer');
+      const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+      let activeId = 1;
+      let hoveredId = null;
+      let layoutFrame = 0;
+      let animationFrame = 0;
+      let lastTime = performance.now();
+      let drag = null;
+      let wheelLocked = false;
+      let wheelTimer = 0;
+
+      const clamp = (n, min, max) => Math.max(min, Math.min(max, n));
+      const el = (name, attrs = {}) => {
+        const node = document.createElementNS(NS, name);
+        Object.entries(attrs).forEach(([key, value]) => node.setAttribute(key, String(value)));
+        return node;
+      };
+
+      sessions.forEach(([title, summary], index) => {
+        const id = index + 1;
+        const pod = document.createElement('div');
+        pod.className = `session-pod${id === activeId ? ' active' : ''}`;
+        pod.tabIndex = 0;
+        pod.setAttribute('role', 'button');
+        pod.setAttribute('aria-current', id === activeId ? 'true' : 'false');
+        pod.dataset.cableId = String(id);
+        pod.dataset.title = title;
+        pod.dataset.summary = summary;
+        pod.dataset.odId = `session-pod-${String(id).padStart(2, '0')}`;
+        pod.innerHTML = `
+          <span class="pod-visual" aria-hidden="true">
+            <img class="pod-frame pod-frame-closed" src="../../src/renderer/src/assets/session-pod-horizontal-closed.png" alt="" draggable="false" />
+            <img class="pod-frame pod-frame-open" src="../../src/renderer/src/assets/session-pod-horizontal-open.png" alt="" draggable="false" />
+          </span>
+          <span class="pod-nameplate"><span class="pod-index">${String(id).padStart(2, '0')}</span><span class="pod-title">${title}</span><span class="pod-state">${id === activeId ? '●' : '○'}</span></span>
+          <button class="pod-delete" aria-label="切换 ${title} 的开仓预览">×</button>`;
+        pod.addEventListener('click', (event) => {
+          if (event.target.closest('.pod-delete')) return;
+          activeId = id;
+          updatePodStates();
+        });
+        pod.addEventListener('keydown', (event) => {
+          if ((event.key === 'Enter' || event.key === ' ') && event.target === pod) {
+            event.preventDefault(); activeId = id; updatePodStates();
+          }
+        });
+        const show = () => { hoveredId = id; showHologram(pod); scheduleLayout(); };
+        const hide = () => { if (!pod.contains(document.activeElement)) { hoveredId = null; hologram.classList.remove('visible'); scheduleLayout(); } };
+        pod.addEventListener('pointerenter', show);
+        pod.addEventListener('pointerleave', hide);
+        pod.addEventListener('focus', show);
+        pod.addEventListener('blur', () => { hoveredId = null; hologram.classList.remove('visible'); scheduleLayout(); });
+        pod.querySelector('.pod-delete').addEventListener('click', (event) => {
+          event.stopPropagation(); pod.classList.toggle('delete-armed'); scheduleLayout();
+        });
+        pod.querySelectorAll('img').forEach((image) => image.addEventListener('load', scheduleLayout));
+        deck.appendChild(pod);
+      });
+
+      function updatePodStates() {
+        deck.querySelectorAll('.session-pod').forEach((pod) => {
+          const id = Number(pod.dataset.cableId);
+          const active = id === activeId;
+          pod.classList.toggle('active', active);
+          pod.setAttribute('aria-current', active ? 'true' : 'false');
+          pod.querySelector('.pod-state').textContent = active ? '●' : '○';
+        });
+        scheduleLayout();
+      }
+
+      function showHologram(pod) {
+        const sr = sidebar.getBoundingClientRect();
+        const pr = pod.getBoundingClientRect();
+        const inset = clamp(sr.width * .08, 22, 38);
+        hologram.style.left = `${inset}px`;
+        hologram.style.width = `${Math.max(0, sr.width - inset * 2)}px`;
+        hologram.style.top = `${Math.max(8, pr.top - sr.top - 78)}px`;
+        hologram.querySelector('strong').textContent = pod.dataset.title;
+        hologram.querySelector('span').textContent = pod.dataset.summary;
+        hologram.classList.add('visible');
+      }
+
+      function anchorFromRect(rect, normalized, rootRect) {
+        return { x: rect.left - rootRect.left + rect.width * normalized.x, y: rect.top - rootRect.top + rect.height * normalized.y };
+      }
+
+      function routeD(source, target, width, routeIndex) {
+        const phase = (routeIndex - 1) % 3;
+        const exit = { x: source.x - clamp(width * .055, 9, 22), y: source.y + phase * 1.5 };
+        const laneX = clamp(width * .032 + phase * 3, 7, 23);
+        const entry = { x: Math.max(laneX + 9, target.x - clamp(width * .045, 8, 20)), y: target.y };
+        const bendY = source.y + clamp((target.y - source.y) * .22, 30, 68);
+        return [
+          `M ${source.x.toFixed(2)} ${source.y.toFixed(2)}`,
+          `C ${(source.x - 8).toFixed(2)} ${source.y.toFixed(2)}, ${exit.x.toFixed(2)} ${(source.y + 2).toFixed(2)}, ${exit.x.toFixed(2)} ${exit.y.toFixed(2)}`,
+          `C ${laneX.toFixed(2)} ${bendY.toFixed(2)}, ${laneX.toFixed(2)} ${(target.y - 28).toFixed(2)}, ${entry.x.toFixed(2)} ${entry.y.toFixed(2)}`,
+          `C ${(entry.x + 7).toFixed(2)} ${target.y.toFixed(2)}, ${(target.x - 5).toFixed(2)} ${target.y.toFixed(2)}, ${target.x.toFixed(2)} ${target.y.toFixed(2)}`,
+        ].join(' ');
+      }
+
+      function buildPort(kind, point) {
+        const group = el('g', { class: `cable-port ${kind}`, transform: `translate(${point.x} ${point.y})` });
+        if (kind === 'source') {
+          group.append(el('path', { d: 'M-16-5H-7V-8H8L15-3V3L8 8H-7V5H-16Z', fill: '#010a04', stroke: '#23c468', 'stroke-width': 1 }));
+          group.append(el('rect', { x: 2, y: -2, width: 4, height: 4, fill: '#3dff8f' }));
+        } else {
+          group.append(el('path', { d: 'M-14-5H-5L0-8H9L15-3V3L9 8H0L-5 5H-14Z', fill: '#010a04', stroke: '#23c468', 'stroke-width': 1 }));
+          group.append(el('rect', { x: 1, y: -2, width: 4, height: 4, fill: '#3dff8f' }));
+        }
+        return group;
+      }
+
+      function drawCable(id, source, target, state, showSource) {
+        const group = el('g', { id: `cable-${String(id).padStart(2, '0')}`, class: `cable-group ${state}`, 'data-state': state });
+        const pathId = `cable-path-${id}`;
+        const d = routeD(source, target, sidebar.clientWidth, id);
+        const path = el('path', { id: pathId, class: 'cable-base', d, 'vector-effect': 'non-scaling-stroke' });
+        group.append(path);
+        const text = el('text', { class: 'cable-glyphs' });
+        const textPath = el('textPath', { href: `#${pathId}`, startOffset: `${3 + (id * 7) % 19}` });
+        textPath.textContent = PATTERNS[id - 1].repeat(14);
+        text.append(textPath);
+        group.append(text);
+        if (showSource) group.append(buildPort('source', source));
+        group.append(buildPort('target', target));
+        const ring = el('g', { class: 'bundle-ring' });
+        ring.append(el('rect', { x: -4, y: -7, width: 8, height: 14, fill: '#010a04', stroke: '#14b850', 'stroke-width': 1 }));
+        ring.append(el('path', { d: 'M-1-6V6M2-6V6', stroke: '#23c468', 'stroke-width': 1 }));
+        group.append(ring);
+        if (state === 'active' && !reduced) {
+          const signal = el('g', { class: 'signal-train', 'data-progress': String((id * 31) % 100) });
+          for (let i = 0; i < 18; i++) {
+            const glyph = el('text', { class: 'signal-glyph', fill: i === 0 ? '#c2ffd9' : '#3dff8f', opacity: i === 0 ? .95 : Math.max(.04, (1 - i / 18) * .7) });
+            glyph.textContent = GLYPHS[(id * 5 + i) % GLYPHS.length];
+            signal.append(glyph);
+          }
+          group.append(signal);
+        }
+        svg.append(group);
+        const ringDistance = path.getTotalLength() * (.36 + ((id * 7) % 13) / 100);
+        const ringPoint = path.getPointAtLength(ringDistance);
+        const ringNext = path.getPointAtLength(Math.min(path.getTotalLength(), ringDistance + 1));
+        const ringAngle = Math.atan2(ringNext.y - ringPoint.y, ringNext.x - ringPoint.x) * 180 / Math.PI;
+        ring.setAttribute('transform', `translate(${ringPoint.x.toFixed(2)} ${ringPoint.y.toFixed(2)}) rotate(${ringAngle.toFixed(2)})`);
+      }
+
+      function visiblePods() {
+        const dr = deck.getBoundingClientRect();
+        return [...deck.querySelectorAll('.session-pod')].filter((pod) => {
+          const r = pod.getBoundingClientRect();
+          const visible = Math.min(r.bottom, dr.bottom) - Math.max(r.top, dr.top);
+          return visible > r.height * .55;
+        }).slice(0, 3);
+      }
+
+      function layoutCables() {
+        layoutFrame = 0;
+        const sr = sidebar.getBoundingClientRect();
+        svg.setAttribute('viewBox', `0 0 ${sr.width} ${sr.height}`);
+        svg.replaceChildren();
+        const source = anchorFromRect(avatar.getBoundingClientRect(), SOURCE_ANCHOR, sr);
+        visiblePods().forEach((pod, visibleIndex) => {
+          const id = Number(pod.dataset.cableId);
+          const open = pod.classList.contains('delete-armed');
+          const image = pod.querySelector(open ? '.pod-frame-open' : '.pod-frame-closed');
+          const target = anchorFromRect(image.getBoundingClientRect(), open ? POD_ANCHORS.open : POD_ANCHORS.closed, sr);
+          const state = id === activeId ? 'active' : id === hoveredId ? 'hover' : 'dormant';
+          drawCable(id, source, target, state, visibleIndex === 0);
+        });
+      }
+
+      function scheduleLayout() {
+        if (layoutFrame) return;
+        layoutFrame = requestAnimationFrame(layoutCables);
+      }
+
+      function animate(time) {
+        const dt = Math.min(50, time - lastTime);
+        lastTime = time;
+        svg.querySelectorAll('.signal-train').forEach((train) => {
+          const path = train.parentElement.querySelector('.cable-base');
+          const length = path.getTotalLength();
+          let progress = Number(train.dataset.progress || 0) + dt * .00012;
+          if (progress > 1.18) progress = -.05;
+          train.dataset.progress = String(progress);
+          [...train.children].forEach((glyph, i) => {
+            const dist = progress * length - i * 7;
+            if (dist < 0 || dist > length) { glyph.setAttribute('visibility', 'hidden'); return; }
+            glyph.removeAttribute('visibility');
+            const p = path.getPointAtLength(dist);
+            const p2 = path.getPointAtLength(Math.min(length, dist + 1));
+            const angle = Math.atan2(p2.y - p.y, p2.x - p.x);
+            const jitter = i ? Math.sin((dist + time * .06) * .9) * 1.5 : 0;
+            const x = p.x - Math.sin(angle) * jitter;
+            const y = p.y + Math.cos(angle) * jitter;
+            glyph.setAttribute('transform', `translate(${x.toFixed(2)} ${y.toFixed(2)}) rotate(${(angle * 180 / Math.PI).toFixed(2)})`);
+            if (i && Math.floor(time / 120 + i) % 11 === 0) glyph.textContent = GLYPHS[(Math.random() * GLYPHS.length) | 0];
+          });
+        });
+        animationFrame = requestAnimationFrame(animate);
+      }
+
+      const observer = new ResizeObserver(scheduleLayout);
+      observer.observe(sidebar); observer.observe(avatar); observer.observe(deck);
+      deck.querySelectorAll('.pod-frame').forEach((image) => observer.observe(image));
+      deck.addEventListener('scroll', () => { hologram.classList.remove('visible'); scheduleLayout(); }, { passive: true });
+      deck.addEventListener('wheel', (event) => {
+        const cards = [...deck.querySelectorAll('.session-pod')];
+        if (cards.length <= 3 || !event.deltaY) return;
+        event.preventDefault();
+        if (!wheelLocked) {
+          const current = cards.reduce((nearest, card, index) => Math.abs(card.offsetTop - deck.scrollTop) < Math.abs(cards[nearest].offsetTop - deck.scrollTop) ? index : nearest, 0);
+          const next = clamp(current + Math.sign(event.deltaY), 0, cards.length - 3);
+          deck.scrollTo({ top: cards[next].offsetTop, behavior: reduced ? 'auto' : 'smooth' });
+          wheelLocked = true;
+        }
+        clearTimeout(wheelTimer);
+        wheelTimer = setTimeout(() => { wheelLocked = false; }, 140);
+      }, { passive: false });
+      window.addEventListener('resize', scheduleLayout);
+
+      resizer.addEventListener('pointerdown', (event) => {
+        if (event.button !== 0) return;
+        event.preventDefault();
+        drag = { x: event.clientX, width: sidebar.getBoundingClientRect().width };
+        resizer.setPointerCapture(event.pointerId);
+      });
+      resizer.addEventListener('pointermove', (event) => {
+        if (!drag) return;
+        const width = clamp(drag.width + event.clientX - drag.x, 160, Math.min(480, innerWidth / 2));
+        document.documentElement.style.setProperty('--side-w', `${width}px`);
+        resizer.setAttribute('aria-valuenow', String(Math.round(width)));
+        scheduleLayout();
+      });
+      resizer.addEventListener('pointerup', () => { drag = null; });
+      resizer.addEventListener('keydown', (event) => {
+        if (!['ArrowLeft','ArrowRight','Escape'].includes(event.key)) return;
+        event.preventDefault();
+        const current = sidebar.getBoundingClientRect().width;
+        const next = event.key === 'Escape' ? 232 : current + (event.key === 'ArrowLeft' ? -8 : 8);
+        const width = clamp(next, 160, Math.min(480, innerWidth / 2));
+        document.documentElement.style.setProperty('--side-w', `${width}px`);
+        resizer.setAttribute('aria-valuenow', String(Math.round(width)));
+        scheduleLayout();
+      });
+
+      scheduleLayout();
+      if (!reduced) animationFrame = requestAnimationFrame(animate);
+      window.addEventListener('beforeunload', () => { observer.disconnect(); cancelAnimationFrame(layoutFrame); cancelAnimationFrame(animationFrame); });
+    })();
+  </script>
+</body>
+</html>

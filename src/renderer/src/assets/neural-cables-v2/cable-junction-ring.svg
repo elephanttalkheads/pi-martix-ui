@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="24" viewBox="0 0 32 24" fill="none" shape-rendering="crispEdges">
+  <title>字符神经束束线环</title>
+  <g id="junction-ring">
+    <path d="M4 7H8V4H24V7H28V17H24V20H8V17H4V7Z" fill="#010a04" stroke="#1da754"/>
+    <path d="M8 8H24V16H8V8Z" stroke="#23c468"/>
+    <path d="M12 5V19M20 5V19" stroke="#14b850"/>
+    <rect x="15" y="10" width="2" height="4" fill="#3dff8f"/>
+  </g>
+</svg>

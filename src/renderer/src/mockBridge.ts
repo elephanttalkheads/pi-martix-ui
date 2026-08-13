@@ -22,6 +22,9 @@ const MOCK_SESSIONS: Record<string, SessionInfoLike[]> = {
     { id: 'mock-1', path: 'D:/zion-workspace', name: '调色板验证', firstMessage: '读取 palette-verify.txt 并核对色值', messageCount: 12, modified: '2026-08-13T14:30:00.000Z' },
     { id: 'mock-2', path: 'D:/zion-workspace', name: '会话标题摘要', firstMessage: '给会话自动生成标题', messageCount: 8, modified: '2026-08-13T12:05:00.000Z' },
     { id: 'mock-3', path: 'D:/zion-workspace', name: undefined, firstMessage: '检查文件树实时更新是否生效', messageCount: 5, modified: '2026-08-13T10:12:00.000Z' },
+    { id: 'mock-7', path: 'D:/zion-workspace', name: '神经链路校准', firstMessage: '核对第四槽培育仓接线锚点', messageCount: 7, modified: '2026-08-13T09:45:00.000Z' },
+    { id: 'mock-8', path: 'D:/zion-workspace', name: '休眠信号检查', firstMessage: '确认非当前会话保持完全静止', messageCount: 4, modified: '2026-08-13T09:15:00.000Z' },
+    { id: 'mock-9', path: 'D:/zion-workspace', name: '滚动换线验证', firstMessage: '滚动到第六槽并检查三线替换', messageCount: 6, modified: '2026-08-13T08:40:00.000Z' },
   ],
   'D:/pi-martix-ui-dev': [
     { id: 'mock-4', path: 'D:/pi-martix-ui-dev', name: 'Sidebar 拖拽调宽', firstMessage: '侧栏边界拖拽调整宽度', messageCount: 23, modified: '2026-08-13T15:00:00.000Z' },

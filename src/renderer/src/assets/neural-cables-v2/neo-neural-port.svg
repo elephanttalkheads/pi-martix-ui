@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="48" viewBox="0 0 64 48" fill="none" shape-rendering="crispEdges">
+  <title>Neo 左后脑脑机接口端头</title>
+  <g id="neo-head-interface">
+    <path d="M2 21H18V17H32" stroke="#1da754" stroke-width="2"/>
+    <path d="M2 27H18V31H32" stroke="#14b850" stroke-width="2"/>
+    <path d="M8 17V31M15 18V30" stroke="#010a04" stroke-width="3"/>
+    <path d="M8 17V31M15 18V30" stroke="#23c468" stroke-width="1"/>
+    <path d="M30 12H50L60 20V28L50 36H30L24 30V18L30 12Z" fill="#010a04" stroke="#1da754" stroke-width="2"/>
+    <path d="M34 16H48L55 22V26L48 32H34L29 28V20L34 16Z" stroke="#23c468" stroke-width="1"/>
+    <rect x="35" y="21" width="14" height="6" fill="#010a04" stroke="#3dff8f"/>
+    <rect x="38" y="23" width="2" height="2" fill="#c2ffd9"/>
+    <rect x="43" y="23" width="2" height="2" fill="#00ff41"/>
+    <path d="M52 17V31M57 21V27" stroke="#14b850" stroke-width="2"/>
+  </g>
+</svg>

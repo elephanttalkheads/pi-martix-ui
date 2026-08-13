@@ -2,7 +2,7 @@
 
 ## 目标与非目标
 
-**目标**：把 pi SDK 会话事件流渲染为黑客帝国风 UI——v4 四区骨架 + v5 回合化会话区（回合聚合消息流 + 凝结雨轨 / 思考块折叠 / 结算行 / 注入解码 / 液态玻璃）+ 4 态会话状态机 + 三件装饰（单层数字雨 / 轻扫描线 / 蠕虫入侵+Neo 头像）+ WebAudio 程序化音效；会话列表、文件树、历史恢复、项目选择面板（最近项目 / 原生目录浏览 → 切换工作目录与会话上下文）、扩展对话框（`ctx.ui` 的 confirm/select/input → AskDialog 弹层）与扩展通知（notify → toast）走真实 IPC；纯浏览器调试桥（`mockBridge.ts`：无 preload 时注入 mock ZionAPI，prompt 经真实事件派发路径，UI 全功能可演示）。
+**目标**：把 pi SDK 会话事件流渲染为黑客帝国风 UI——v4 四区骨架 + v5 回合化会话区（回合聚合消息流 + 凝结雨轨 / 思考块折叠 / 结算行 / 注入解码 / 液态玻璃）+ 4 态会话状态机 + 三件装饰（单层数字雨 / 轻扫描线 / 蠕虫入侵+Neo 头像）+ 会话脑机链路 + WebAudio 程序化音效；会话列表、文件树、历史恢复、项目选择面板（最近项目 / 原生目录浏览 → 切换工作目录与会话上下文）、扩展对话框（`ctx.ui` 的 confirm/select/input → AskDialog 弹层）与扩展通知（notify → toast）走真实 IPC；纯浏览器调试桥（`mockBridge.ts`：无 preload 时注入 mock ZionAPI，prompt 经真实事件派发路径，UI 全功能可演示）。
 
 **非目标**：不定义 IPC 契约（`src/shared/protocol.ts` 类型与主进程是事实源）；不提供 Node/凭据能力（隔离在 preload 白名单之后）；不做真实 context 统计（头部「上下文 12.4k / 128k」与「主控会话 #0047」为硬编码装饰）；不实现扩展对话框的 Promise 表/超时/AbortSignal 兜底（主进程 `src/main/uibridge.mjs` 是事实源）——本模块只消费 `UiAsk`/`UiNotify` 类型与 `uiAnswer`/`onUiAsk`/`onUiNotify` 桥面；不实现项目切换的主进程语义（`WORKSPACE_DIR` 变更、旧会话 dispose、`~/.pi/agent/zion-projects.json` 持久化在 `src/main/main.mjs`）——本模块只消费 `listProjects`/`browseProject`/`switchProject` 桥面；不做完整 markdown 渲染（仅围栏 + 行内 code/高亮子集，语法边界见「正文解析」）。
 
@@ -12,7 +12,7 @@
 
 **布局**（App.tsx）：氛围层（`#rain` / `#signal` / `.scanlines`，fixed）与 `#stage`（z-index 5，四区）同级。
 - 区1 标题栏 `.titlebar`（36px）：品牌 + 时钟
-- 区2 侧栏 `.sidebar`（`width: var(--side-w, 232px)`，默认 232，可拖拽调宽；整栏不滚动且 `position: relative` 承载共享全息层）：`.core-wrap`（Neo 头像，固定）→ `.side-section.sessions`（高度 `clamp(244px, 36vh, 320px)`：三等高培育仓槽位 `.deck` 内部滚动）→ `.side-section.projects`（flex 3：`.side-head` 标题行 = 项目 basename（全路径在 title 属性）+「⇄ 切换项目」按钮 + 文件树 `#file-tree` 内部滚动）→ `.side-foot`（固定，workspace 文案）
+- 区2 侧栏 `.sidebar`（`width: var(--side-w, 232px)`，默认 232，可拖拽调宽；整栏不滚动且 `position: relative; isolation: isolate` 承载共享全息层与本地动态 SVG 链路层）：`.core-wrap`（Neo 头像，固定）→ `.side-section.sessions`（高度 `clamp(244px, 36vh, 320px)`：三等高培育仓槽位 `.deck` 内部滚动）→ `.side-section.projects`（flex 3：`.side-head` 标题行 = 项目 basename（全路径在 title 属性）+「⇄ 切换项目」按钮 + 文件树 `#file-tree` 内部滚动）→ `.side-foot`（固定，workspace 文案）
 - 区2.5 `.side-resizer`（8px 拖拽热区，`margin: 0 -4px` 视觉零宽、伸出两侧各 4px 命中区，WAI-ARIA separator，机制见下「侧栏调宽」）——`.main`（flex 行）内位于 Sidebar 与 `.console` 之间
 - 区3 对话区 `.console`：`.conv-head`（状态芯片）+ `#feed` + `.inputbar`
 - 区4 `.term` 日志抽屉（默认 height:0，展开 150px）+ `.statusbar`（26px，SND 开关 / DEC 开关 / 日志按钮 / `tokens:` 真实 usage 计数）
@@ -54,6 +54,8 @@
 **浏览器调试桥**（mockBridge.ts + main.tsx）：`installMockBridge()` 在 `window.zion` 缺失时（浏览器直开 vite dev、无 Electron preload）注入 mock ZionAPI，有桥（Electron 打包）检测后直接跳过，不影响生产。mock 数据按项目维度写死（`MOCK_SESSIONS`/`MOCK_ITEMS`/`MOCK_TREE`/`MOCK_PROJECTS`/`MOCK_COMMANDS`）；`prompt` 按输入生成模板回复，经 setTimeout 按真实时序派发 `agent_start → tool_execution_start → message_update(text_delta) → tool_execution_end → message_end → agent_end → agent_settled`（`abort` 置位后未触发的派发全部取消）——事件经 `onAgentEvent` 真实派发路径，feed 流式渲染与事件管线零改动。`browseProject` 浏览器无原生对话框，轮换到下一个 mock 项目模拟选择；`onUiAsk`/`onUiNotify` 为空实现（无扩展弹层演示数据）。
 
 **会话切换/新建/重命名/删除**（Sidebar + SessionPod）：`.deck` 固定三等高槽并按槽吸附滚动；每仓保留 `.scard` 查询类，外层 `role="button"`，点击/Enter/Space 调 `selectSession` → `switchSession`（主进程懒创建实例，可能秒级；`switching` 锁防并发）→ `applySession`；`newSession` 同理；失败走 `log('err')`。中央名称牌常驻，标题统一走 `deriveSessionTitle`，编号为列表索引 + 1；只有名称牌 hover/focus 时展示等高的重命名/删除按钮。Sidebar 持有唯一 `preview`，仓 hover/focus 时按 anchor/sidebar rect 测量共享 `.session-hologram-layer`，显示标题与 `firstMessage` 第一条非空行（无内容显示「尚无会话内容」）；离开/真正离焦/列表滚动立即隐藏。重命名：`startRename` 以当前显示标题为草稿，名称牌中央替换为 `.s-title-edit`，Enter/blur 提交 `commitRename`、Esc 取消；`renameSession` → `setSessions`，当前会话另 `setSessionTitle(name)`（只改标题，不重置 feed）。删除：`askDelete` 两段确认——首击进入待确认态（2.5s 自动复位），此时才由 closed 帧切到 open 帧；再击先清待确认态再 `doDelete` → `deleteSession`（软删，移入 `.trash` 可恢复）→ `setSessions`；删除的是当前会话时主进程指针已落最近会话，`getCurrentSession` 重拉 + `applySession`（标题取新列表匹配，兜底短码）。点文件树行 → `pushUser` + `window.zion.prompt('读取 <path>')`（真实 prompt，无假动画）。
+
+**会话脑机链路**（Sidebar + NeuralCableLayer + neuralCable.ts）：`NeoAvatar` 在 256×256 帧的 `(82,114)` 放置 18×14 接线口；`SessionPod` 注册 root 与 closed/open 两张实际图片，接收点统一取 1672×941 帧的 `(159,556)` 左侧机械柱。`NeuralCableLayer` 是 `.sidebar` 直接子级透明 SVG（z=1、pointer-events none；真实内容 z=2、全息层 z=30），用 `ResizeObserver` 监听 Sidebar/deck/接线口/仓体与图片；resize、image load、deck scroll、窗口 resize、字体 ready 都汇入单个 rAF 测量。React StrictMode 冷启动下 effect 注册/清理会短暂交错，因此每次初始化观察和测量还会从同一 `.session-pod` DOM 只读收集实际图片作为兜底，不生成第二套几何来源。测量先求与 deck 相交的仓体，按距视窗中心选最近三个再按屏幕顺序分 lane；路径与终点始终用最新 DOM rect 换算到 Sidebar 本地坐标。六种神经签名由稳定会话 id hash 选择，不限制会话总数。状态优先级为 `active > hover/focus > dormant > hidden`：active 以约 180px/s 运行 18 字符尾包，尾部清空后休止 1.2s；hover/focus 只增亮静态字符；dormant 完全静止。可见会话集合变化时旧三线 90ms 淡出，再替换身份/路径并以 90ms 淡入，任一时刻 DOM 不超过三线；当前会话滚出视窗时不画离屏线、不自动滚回。reduced-motion 关闭脉冲与淡入淡出。该层是冗余拓扑反馈，不替代名称牌/文字/ARIA；全屏 `SignalCanvas` 继续只负责 Neo 嘴部到文件树的一次性写入蠕虫。
 
 **项目切换管线**（ProjectPanel，App 顶层 fragment 挂载；store `projectOpen` 控制开合；打开入口：侧栏 `.side-head` 的「⇄ 切换项目」按钮 + 启动无最近项目自动打开）：
 - 打开时 `window.zion.listProjects()` 拉最近项目（effect 按 `[open]` 触发，`alive` 活期守卫；失败静默 → 空列表，仅「浏览其他目录…」可用）。
@@ -110,6 +112,7 @@
 - **状态栏 token 计数 = 真实 usage**：`turn_end` 的 `usage.totalTokens` 经 `addUsage` 累积（v4 的「delta 字符数 ×2」伪计数已删除）；`applySession`/`reset` 归零。结算行 tokens 同样取该累积（`seenUsage=false` 显示 null），不再有字符近似。
 - **标题推导收敛为纯函数**（`title.ts` → store re-export 的 `deriveSessionTitle`，App 启动恢复与 Sidebar 会话卡共用）：两处原为各自内联 `slice(0,22)` 截断且行为不一致（App 不补省略号、不清引号），现统一为 name → firstMessage 智能摘要 → `会话 <id 前 4 位>` 兜底。摘要规则：取首行 → 剥含路径/命令特征的内嵌引号对（消除 `为"D:\\...\\..."` 残尾）与成对包裹引号 → 去前导符号（`- # > * · / \`）→ 22 字符截断 + '…'。改规则只动 `title.ts`（node:test 覆盖）。
 - **三槽培育仓与共享全息层**：`.deck` 用 `grid-auto-rows: calc((100% - 2 * gap) / 3)` 固定三槽，并用 `scroll-snap` 保证完整槽位；`SessionPod` 是 size query container，双帧宽度取 `min(108cqw, 324cqh)`——窄侧栏随宽度缩放，达到开仓帧可被槽高完整容纳的上限后停止放大并居中留白。closed/open 两 PNG 叠在同一绝对定位容器，只切 opacity，避免状态切换位移；两帧透明画布的可见底边接近同一坐标，中央名称牌用同一响应式几何贴住仓体底边。opened 帧不是选中/hover 反馈，只表示「已点击删除但尚未确认」；普通 hover/focus 只调亮 closed 帧。每仓只保留中央编号/标题/状态点，详细标题和首行摘要由 Sidebar 的单个绝对定位、`pointer-events:none` 全息层复用，避免每仓常驻多份面板与动画。
+- **动态 SVG 而非固定连线图**：侧栏宽度可连续变化，仓体会在槽高上限停止放大且列表会滚动复用屏幕槽位；固定 PNG/SVG 线路无法同时守住这三种几何变化。运行时只保存真实端点引用和归一化素材锚点，每次测量重建三条 path；六种签名只提供稳定视觉身份，不绑定槽号。代价是增加 ResizeObserver/路径测量，但动画仅存在于一条 active 线路，dormant 无 rAF；ADR 0004 记录边界。
 - **侧栏分区滚动**（styles.css 注释明示）：`.sidebar` 整栏 `overflow: hidden`，`.core-wrap`/`.side-foot` `flex: none` 固定，会话/项目两区 flex 分割、`.deck`/`#file-tree` 各自 `overflow-y: auto`——列表过长只滚列表区，项目标题行与底部 workspace 行始终可见。
 - **统一滚动条**（styles.css）：`*::-webkit-scrollbar` 全局 6px 终端绿胶囊（thumb `#00ff66`/hover `#66ff99`、轨道与角落透明，vision 规格），替代旧 feed/侧栏/term-body 分段 8px 规则——侧栏整栏不滚动，旧 `.sidebar` 规则本就无效；新滚动容器（`.palette`/`.ask-options`/`.pp-list`/`.diff-body` 等）自动同款。
 - **选区高亮同终端绿语言**（styles.css 全局 `::selection`）：`rgba(0,255,102,0.22)` 半透明绿底 + 白字——不用纯 `#00ff66`（大面积纯色会淹没文字），0.22 透明度保留识别度且白字可读（styles.css 注释明示）；是 v5 原型（`index-v5.html` 的 `rgba(0,255,65,0.25)`）的收敛版：色相统一到滚动条 thumb 的 `#00ff66` 并补白字。全局生效，组件不另写选区样式。
@@ -154,6 +157,7 @@
 - `uiAsk`/`toasts`/`projectOpen` 不随 `applySession`/`reset` 清空：弹层、toast 与项目面板跨会话切换残留，直到应答/取消/计时器到期或切换流程显式 `setProjectOpen(false)`。
 - `currentProject` 只在 App 启动（`getProject`）与项目切换（`applySwitch`）时更新：会话切换/`applySession`/`reset` 均不改动——它描述工作目录而非会话。
 - REDUCED 分支必须在动画路径早期返回且 done 仍执行（蠕虫直接命中）。
+- 会话脑机链路 DOM 数恒为 `0..3`；仅可见 active 链路启动字符脉冲，hover/dormant 不启动 rAF；路径终点必须来自当前 closed/open 图片 rect，禁止回退到固定屏幕像素。
 - 渲染进程零 Node 访问：所有数据经 ZionAPI 白名单。
 
 **失败模式**：
@@ -170,10 +174,11 @@
 - 目标行不可见（侧栏 `<900px` 隐藏时）：蠕虫落 `.trace` 兜底行。
 - `zion.sidebar-w` 读回非数字（`Number.isFinite` 守卫）忽略、回落默认；越界值经 `clampSide` 收敛到区间；拖拽松手在窗口外——监听挂在 window 上，正常收尾持久化。
 - 本地字体加载失败：styles.css 顶部 `@font-face` 引用的 `assets/fonts/ShareTechMono-Regular.woff2` 缺失/损坏时，按 `--font` 回退链走 ui-monospace/Courier New；字体声明只在 styles.css 一处，组件一律 `var(--font)`。
+- 会话仓 effect 锚点尚未注册：初始化观察/测量会从同一 `.session-pod` 与双帧图片 DOM 只读收集兜底；若图片/Sidebar rect 仍为 0，本帧跳过该仓或整次测量，等待 targetVersion、图片 load 或 ResizeObserver 的后续重测，不绘制猜测线路。连续滚动中只保留最新待应用布局，防止过时槽位在滚动停止后回跳。
 
 ## 已知限制与技术债
 
-- 单元测试仅覆盖纯函数层（`deriveSessionTitle`、`toolfmt`、`parseBody`（markdown.test.mjs 8 用例），node:test）；组件、事件管线、store 逻辑无测试（含命令面板键盘交互、AskDialog 三形态与 toast 自动消失，smoke 不查 `.palette`/`.ask-dialog`），UI 回归依赖 typecheck + smoke + e2e。
+- 单元测试仅覆盖纯函数层（`deriveSessionTitle`、`toolfmt`、`parseBody`（markdown.test.mjs 8 用例）、会话摘要、会话链路 hash/锚点/路径，node:test）；组件、事件管线、store 逻辑无自动化测试（含命令面板键盘交互、AskDialog 三形态与 toast 自动消失，smoke 不查 `.palette`/`.ask-dialog`/`.neural-cables-layer`），UI 回归依赖 typecheck + smoke + e2e；链路另需人工覆盖侧栏 160/232/480、04–06 滚动换线、删除待确认开仓与 reduced-motion。
 - AskDialog.tsx 头部注释与实现不完全一致：注释声称的「Esc 取消 / select ↑↓/Enter / confirm danger 强调」实际只有 input 形态的 Esc/Enter 真实存在——select 选项纯鼠标（hover/click，`role="listbox"` 仅是标记），confirm 主按钮为 `.primary`（accent 绿）而非 danger 色；改注释或补实现前先认清现状。
 - 会话历史恢复只重建文本回合（无工具卡 / 结算行，`startedAt=0` 不计时）。
 - conv-head「上下文 12.4k / 128k」、「主控会话 #0047」、状态栏「TLS 1.3」为硬编码装饰，非真实数据。

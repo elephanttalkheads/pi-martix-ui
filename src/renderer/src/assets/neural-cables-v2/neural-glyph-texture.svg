@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="192" height="24" viewBox="0 0 192 24" fill="none" shape-rendering="crispEdges">
+  <title>可沿路径重复的 Matrix 字符神经束纹理</title>
+  <g id="glyph-texture" font-family="Sarasa Term SC, Consolas, monospace" font-size="11" letter-spacing="3">
+    <path d="M0 12H192" stroke="#1da754" stroke-width="1" stroke-dasharray="2 7"/>
+    <text x="2" y="16" fill="#23c468" opacity="0.72">ｱ 0 A &lt; 7 + F * 1 ｾ</text>
+    <path d="M50 4V20M55 6V18M124 4V20M129 6V18" stroke="#14b850"/>
+    <rect x="53" y="10" width="2" height="4" fill="#3dff8f"/>
+    <rect x="127" y="10" width="2" height="4" fill="#3dff8f"/>
+  </g>
+</svg>

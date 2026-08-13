@@ -1,0 +1,40 @@
+{
+  "version": 2,
+  "coordinateSpace": "full image element content box, normalized 0..1",
+  "sourceAnchor": {
+    "asset": "../neo-avatar/neo-idle.png and ../neo-avatar/neo-talking.png",
+    "assetSize": [256, 256],
+    "pixel": [73, 102],
+    "normalized": [0.28515625, 0.3984375],
+    "description": "Neo 画面左侧后脑与外露脑部下缘交界的接口中心"
+  },
+  "podAnchorClosed": {
+    "asset": "../session-pod-horizontal-closed.png",
+    "assetSize": [1672, 941],
+    "pixel": [159, 556],
+    "normalized": [0.0950956938, 0.5908607864],
+    "description": "培育仓最左侧外接机械柱的中心"
+  },
+  "podAnchorOpen": {
+    "asset": "../session-pod-horizontal-open.png",
+    "assetSize": [1672, 941],
+    "pixel": [159, 556],
+    "normalized": [0.0950956938, 0.5908607864],
+    "description": "与关闭帧相同的底座外接机械柱中心"
+  },
+  "rendering": {
+    "lineWidth": 1.2,
+    "characterSizePx": 11,
+    "characterStepPx": 8,
+    "signalTailGlyphs": 18,
+    "signalJitterPx": 1.5,
+    "colors": {
+      "backgroundShadow": "#010a04",
+      "active": "#3dff8f",
+      "glyph": "#23c468",
+      "spine": "#1da754",
+      "ring": "#14b850",
+      "head": "#c2ffd9"
+    }
+  }
+}

@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="48" viewBox="0 0 64 48" fill="none" shape-rendering="crispEdges">
+  <title>培育仓左侧神经束接头</title>
+  <g id="pod-side-interface">
+    <path d="M2 19H18L23 14H39L47 19H58V29H47L39 34H23L18 29H2V19Z" fill="#010a04" stroke="#1da754" stroke-width="2"/>
+    <path d="M6 22H21M6 26H21" stroke="#23c468" stroke-width="1"/>
+    <path d="M25 18H37L43 22V26L37 30H25L21 26V22L25 18Z" stroke="#3dff8f" stroke-width="1"/>
+    <rect x="27" y="21" width="9" height="6" fill="#010a04" stroke="#14b850"/>
+    <rect x="29" y="23" width="2" height="2" fill="#c2ffd9"/>
+    <rect x="34" y="23" width="2" height="2" fill="#00ff41"/>
+    <path d="M48 17V31M53 19V29" stroke="#23c468" stroke-width="2"/>
+    <path d="M59 16V32" stroke="#1da754" stroke-width="2"/>
+  </g>
+</svg>

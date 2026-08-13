@@ -95,9 +95,51 @@ body {
   background: var(--surface-2);
   border-right: 1px solid var(--border);
   display: flex; flex-direction: column;
-  position: relative;
+  position: relative; isolation: isolate;
   font-size: 13px; overflow: hidden; /* 整栏不滚动：Neo 头像/底部固定，列表区各自滚动 */
 }
+
+/* Sidebar 本地坐标系中的会话脑机链路。路径层低于真实控件/仓体，不参与命中测试。 */
+.neural-cables-layer {
+  position: absolute; inset: 0; z-index: 1;
+  display: block; width: 100%; height: 100%;
+  overflow: hidden; pointer-events: none; user-select: none;
+}
+.core-wrap,
+.side-section,
+.side-foot { position: relative; z-index: 2; }
+.neural-cable {
+  opacity: 0.34;
+  transition: opacity 90ms linear;
+}
+.neural-cable-bed,
+.neural-cable-nerve {
+  fill: none; stroke-linecap: round; stroke-linejoin: round;
+}
+.neural-cable-bed { stroke: rgba(0, 10, 5, 0.92); stroke-width: 3.6px; }
+.neural-cable-nerve { stroke: #1da754; stroke-width: 1.2px; }
+.neural-cable-static,
+.neural-cable-pulse text {
+  font-family: var(--font); font-size: 11px; line-height: 1;
+  text-rendering: geometricPrecision;
+}
+.neural-cable-static {
+  fill: #23c468; opacity: 0.46; letter-spacing: 4px;
+}
+.neural-cable-ring,
+.neural-cable-receiver { opacity: 0.58; image-rendering: pixelated; }
+.neural-cable-hover { opacity: 0.72; }
+.neural-cable-hover .neural-cable-nerve { stroke: #23c468; }
+.neural-cable-hover .neural-cable-static { opacity: 0.72; }
+.neural-cable-active { opacity: 1; }
+.neural-cable-active .neural-cable-nerve { stroke: #3dff8f; stroke-width: 1.25px; }
+.neural-cable-active .neural-cable-static { fill: #3dff8f; opacity: 0.78; }
+.neural-cable-active .neural-cable-ring,
+.neural-cable-active .neural-cable-receiver { opacity: 0.92; }
+.neural-cable-pulse-head { fill: #c8ffd4; font-weight: 600; }
+.neural-cable-pulse-tail { fill: #3dff8f; }
+.neural-cables-entering .neural-cable,
+.neural-cables-leaving .neural-cable { opacity: 0; }
 
 /* 拖拽热区：.main 布局内独立条（负 margin 视觉零宽、伸出两侧各 4px），hover 双向箭头；
    双击复位默认宽；键盘 ←/→ 8px（Shift 32px）、Esc 复位（WAI-ARIA separator）。
@@ -155,6 +197,16 @@ body {
   color: var(--text-tertiary); font-size: 11px; font-weight: normal;
   text-transform: uppercase; letter-spacing: 0.18em;
   margin-bottom: 8px;
+}
+.neo-neural-source {
+  position: absolute; z-index: 3;
+  width: 18px; height: 14px;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+.neo-neural-source img {
+  display: block; width: 100%; height: 100%;
+  image-rendering: pixelated;
 }
 /* ---------- 会话列表：3 槽固定视窗 ----------
    视窗始终恰好容纳 3 个等高槽位；滚动只停在完整槽位，供后续横向培育仓素材按稳定坐标接入。 */
@@ -740,6 +792,8 @@ body {
   .neo-avatar.is-burst { animation: none; }
   .session-hologram-layer { animation: none; }
   .session-pod, .pod-frame, .session-pod-actions { transition: none; }
+  .neural-cable { transition: none; }
+  .neural-cable-pulse { display: none; }
 }
 
 /* ---------- 扩展 UI 桥：AskDialog + toast（v4 令牌） ---------- */

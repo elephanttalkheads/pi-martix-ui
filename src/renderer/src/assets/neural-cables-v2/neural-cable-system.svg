@@ -1,0 +1,76 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="480" height="720" viewBox="0 0 480 720" fill="none" shape-rendering="geometricPrecision">
+  <title>ZION Neo 脑机接口连接线系统</title>
+  <desc>透明背景的六路字符神经束设计母版。示例路径仅展示纹理差异；运行时必须用 DOM 锚点重写每条 path 的 d。</desc>
+  <metadata>
+    sourceAnchor=0.285156,0.398438; podAnchorClosed=0.095096,0.590861; podAnchorOpen=0.095096,0.590861
+  </metadata>
+  <style>
+    .cable { --base: #1da754; --glyph: #23c468; --signal: #3dff8f; --head: #c2ffd9; opacity: .5; }
+    .cable[data-state="active"] { opacity: .92; }
+    .cable[data-state="hover"] { opacity: .7; }
+    .cable[data-state="hidden"] { display: none; }
+    .control-guide { fill: none; stroke: #14b850; stroke-width: 1; stroke-dasharray: 1 7; vector-effect: non-scaling-stroke; }
+    .nerve-spine { fill: none; stroke: var(--base); stroke-width: 1.25; stroke-dasharray: 2 6; vector-effect: non-scaling-stroke; }
+    .nerve-glyph { fill: var(--glyph); font-family: "Sarasa Term SC", Consolas, monospace; font-size: 11px; letter-spacing: 3px; }
+    .signal-head { fill: var(--head); font-family: "Sarasa Term SC", Consolas, monospace; font-size: 11px; }
+    .endpoint { color: #23c468; }
+    .ring { color: #14b850; }
+  </style>
+  <defs>
+    <g id="source-port" shape-rendering="crispEdges">
+      <path d="M-18 -5H-8V-9H8L16 -3V3L8 9H-8V5H-18Z" fill="#010a04" stroke="currentColor" stroke-width="1.5"/>
+      <path d="M-9 -5V5M-4 -7V7" stroke="#14b850"/>
+      <rect x="3" y="-2" width="4" height="4" fill="#3dff8f"/>
+    </g>
+    <g id="target-port" shape-rendering="crispEdges">
+      <path d="M-16 -6H-5L0 -10H10L17 -4V4L10 10H0L-5 6H-16Z" fill="#010a04" stroke="currentColor" stroke-width="1.5"/>
+      <path d="M-10 -4V4M-6 -5V5M9 -7V7" stroke="#14b850"/>
+      <rect x="2" y="-2" width="4" height="4" fill="#3dff8f"/>
+    </g>
+    <g id="bundle-ring" shape-rendering="crispEdges">
+      <path d="M-5 -8H5V8H-5Z" fill="#010a04" stroke="currentColor"/>
+      <path d="M-2 -7V7M2 -7V7" stroke="#23c468"/>
+    </g>
+  </defs>
+
+  <!-- 六组使用抽象试样路径；集成时由几何函数重写 d，并移动端头/束线环。 -->
+  <g id="cable-01" class="cable" data-state="active" data-pattern="balanced" data-runtime-path="required">
+    <g id="cable-01-control-path"><path id="cable-01-path" class="control-guide" d="M74 70 C44 70 34 90 34 116 C34 138 76 136 116 136"/></g>
+    <g id="cable-01-character-signal">
+      <path class="nerve-spine" d="M74 70 C44 70 34 90 34 116 C34 138 76 136 116 136"/>
+      <text class="nerve-glyph"><textPath xlink:href="#cable-01-path" startOffset="4">ｱ 0 A &lt; 7 + F * 1</textPath></text>
+      <text class="signal-head" x="82" y="139">+</text>
+    </g>
+    <g id="cable-01-mechanical-endpoints" class="endpoint"><use href="#source-port" transform="translate(74 70)"/><use href="#target-port" transform="translate(116 136)"/><use href="#bundle-ring" class="ring" transform="translate(34 103)"/></g>
+  </g>
+
+  <g id="cable-02" class="cable" data-state="dormant" data-pattern="paired-ring" data-runtime-path="required">
+    <g id="cable-02-control-path"><path id="cable-02-path" class="control-guide" d="M168 70 C138 70 126 98 126 124 C126 158 168 170 210 170"/></g>
+    <g id="cable-02-character-signal"><path class="nerve-spine" d="M168 70 C138 70 126 98 126 124 C126 158 168 170 210 170"/><text class="nerve-glyph"><textPath xlink:href="#cable-02-path" startOffset="8">0 2 ｹ C + 8 &gt; ｵ</textPath></text></g>
+    <g id="cable-02-mechanical-endpoints" class="endpoint"><use href="#source-port" transform="translate(168 70)"/><use href="#target-port" transform="translate(210 170)"/><use href="#bundle-ring" class="ring" transform="translate(126 112)"/><use href="#bundle-ring" class="ring" transform="translate(145 163)"/></g>
+  </g>
+
+  <g id="cable-03" class="cable" data-state="dormant" data-pattern="dense-hex" data-runtime-path="required">
+    <g id="cable-03-control-path"><path id="cable-03-path" class="control-guide" d="M262 70 C230 72 218 100 218 134 C218 178 258 202 304 202"/></g>
+    <g id="cable-03-character-signal"><path class="nerve-spine" d="M262 70 C230 72 218 100 218 134 C218 178 258 202 304 202"/><text class="nerve-glyph" letter-spacing="2"><textPath xlink:href="#cable-03-path" startOffset="3">A3F9 ｾ 0C 7E + 1</textPath></text></g>
+    <g id="cable-03-mechanical-endpoints" class="endpoint"><use href="#source-port" transform="translate(262 70)"/><use href="#target-port" transform="translate(304 202)"/><use href="#bundle-ring" class="ring" transform="translate(218 134)"/></g>
+  </g>
+
+  <g id="cable-04" class="cable" data-state="dormant" data-pattern="offset-pulse" data-runtime-path="required">
+    <g id="cable-04-control-path"><path id="cable-04-path" class="control-guide" d="M74 316 C42 316 32 340 32 372 C32 414 74 430 116 430"/></g>
+    <g id="cable-04-character-signal"><path class="nerve-spine" d="M74 316 C42 316 32 340 32 372 C32 414 74 430 116 430"/><text class="nerve-glyph"><textPath xlink:href="#cable-04-path" startOffset="13">4 ｱ * 0 D 2 &lt; +</textPath></text></g>
+    <g id="cable-04-mechanical-endpoints" class="endpoint"><use href="#source-port" transform="translate(74 316)"/><use href="#target-port" transform="translate(116 430)"/><use href="#bundle-ring" class="ring" transform="translate(32 370)"/></g>
+  </g>
+
+  <g id="cable-05" class="cable" data-state="dormant" data-pattern="double-node" data-runtime-path="required">
+    <g id="cable-05-control-path"><path id="cable-05-path" class="control-guide" d="M168 316 C136 316 124 346 124 382 C124 432 166 464 210 464"/></g>
+    <g id="cable-05-character-signal"><path class="nerve-spine" d="M168 316 C136 316 124 346 124 382 C124 432 166 464 210 464"/><text class="nerve-glyph"><textPath xlink:href="#cable-05-path" startOffset="5">5 5 ｺ B + 0 * E</textPath></text><rect x="122" y="377" width="4" height="4" fill="#3dff8f"/></g>
+    <g id="cable-05-mechanical-endpoints" class="endpoint"><use href="#source-port" transform="translate(168 316)"/><use href="#target-port" transform="translate(210 464)"/><use href="#bundle-ring" class="ring" transform="translate(124 366)"/><use href="#bundle-ring" class="ring" transform="translate(158 456)"/></g>
+  </g>
+
+  <g id="cable-06" class="cable" data-state="dormant" data-pattern="sparse-long" data-runtime-path="required">
+    <g id="cable-06-control-path"><path id="cable-06-path" class="control-guide" d="M262 316 C228 316 216 350 216 392 C216 454 258 498 304 498"/></g>
+    <g id="cable-06-character-signal"><path class="nerve-spine" d="M262 316 C228 316 216 350 216 392 C216 454 258 498 304 498"/><text class="nerve-glyph" letter-spacing="5"><textPath xlink:href="#cable-06-path" startOffset="9">6 ｾ 0 F &gt; *</textPath></text></g>
+    <g id="cable-06-mechanical-endpoints" class="endpoint"><use href="#source-port" transform="translate(262 316)"/><use href="#target-port" transform="translate(304 498)"/><use href="#bundle-ring" class="ring" transform="translate(216 390)"/></g>
+  </g>
+</svg>

@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"
+  viewBox="0 0 1420 885" width="1420" height="885" role="img" aria-labelledby="title desc">
+  <title id="title">ZION 三条可见脑机连接线透明预览</title>
+  <desc id="desc">按当前 1420×885 截图比例绘制的三条 Matrix 字符神经束；线路位于左侧 Sidebar 区域，仅用于透明叠图验收。</desc>
+  <style>
+    :root{--bg:#010a04;--fg:#3dff8f;--muted:#1da754;--mid:#23c468;--accent-muted:#14b850;--bright:#c2ffd9}
+    .bed{fill:none;stroke:var(--muted);stroke-width:1;stroke-opacity:.22;stroke-dasharray:1 7;vector-effect:non-scaling-stroke}
+    .nerve{fill:none;stroke:var(--mid);stroke-width:1.25;stroke-opacity:.34;stroke-dasharray:6 4 1 6;vector-effect:non-scaling-stroke}
+    .active .nerve{stroke-opacity:.62}.glyph{font:11px "Matrix Code","Share Tech Mono",monospace;letter-spacing:6px;fill:var(--mid);fill-opacity:.55}
+    .active .glyph{fill:var(--fg);fill-opacity:.78}.jack{fill:var(--bg);stroke:var(--accent-muted);stroke-width:1;vector-effect:non-scaling-stroke}
+    .pin{fill:var(--fg)}.node{fill:var(--bg);stroke:var(--muted);stroke-width:1;vector-effect:non-scaling-stroke}
+    .pulse{font:11px "Matrix Code","Share Tech Mono",monospace;fill:var(--bright)}
+  </style>
+  <defs>
+    <g id="source-jack" shape-rendering="crispEdges">
+      <path class="jack" d="M-14-8h10v3h5v10h-5v3h-10z"/><path class="pin" d="M-11-4h8v2h3v2h-11zm0 5h11v2h-5v2h-6z"/>
+    </g>
+    <g id="pod-jack" shape-rendering="crispEdges">
+      <path class="jack" d="M0-8h11v3h5v10h-5v3H0z"/><path class="pin" d="M2-4h7v2h5v2H2zm0 5h12v2H9v2H2z"/>
+    </g>
+  </defs>
+
+  <g id="preview-cable-01" class="cable">
+    <path id="preview-path-01" class="bed" pathLength="100" d="M160 109C132 108 86 112 48 148C22 172 12 192 12 224C12 284 12 338 12 358C12 379 43 388 102 388"/>
+    <path class="nerve" pathLength="100" d="M160 109C132 108 86 112 48 148C22 172 12 192 12 224C12 284 12 338 12 358C12 379 43 388 102 388"/>
+    <text class="glyph"><textPath href="#preview-path-01" startOffset="3%">ｱ 0 F &lt; 7 + ｾ A 1 * ｲ 6</textPath></text>
+    <rect class="node" x="7" y="258" width="10" height="14"/>
+    <use href="#pod-jack" x="102" y="388"/>
+  </g>
+
+  <g id="preview-cable-02" class="cable active">
+    <path id="preview-path-02" class="bed" pathLength="100" d="M160 109C132 110 90 116 54 151C28 177 18 197 18 228C18 330 18 422 18 449C18 470 48 479 102 479"/>
+    <path class="nerve" pathLength="100" d="M160 109C132 110 90 116 54 151C28 177 18 197 18 228C18 330 18 422 18 449C18 470 48 479 102 479"/>
+    <text class="glyph"><textPath href="#preview-path-02" startOffset="5%">01 ｶ 9 02 F ｷ 4 03 B ｸ 8</textPath></text>
+    <rect class="node" x="13" y="308" width="10" height="14"/>
+    <text class="pulse" x="50" y="479">ｱ 7 1</text>
+    <use href="#pod-jack" x="102" y="479"/>
+  </g>
+
+  <g id="preview-cable-03" class="cable">
+    <path id="preview-path-03" class="bed" pathLength="100" d="M160 109C133 112 94 120 61 154C35 180 24 202 24 232C24 370 24 508 24 542C24 563 51 572 102 572"/>
+    <path class="nerve" pathLength="100" d="M160 109C133 112 94 120 61 154C35 180 24 202 24 232C24 370 24 508 24 542C24 563 51 572 102 572"/>
+    <text class="glyph"><textPath href="#preview-path-03" startOffset="2%">A F 3 ｹ 7 C &lt; 0 9 ｺ E 2</textPath></text>
+    <rect class="node" x="19" y="362" width="10" height="14"/>
+    <use href="#pod-jack" x="102" y="572"/>
+  </g>
+
+  <use href="#source-jack" x="160" y="109"/>
+</svg>
