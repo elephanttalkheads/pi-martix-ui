@@ -194,7 +194,7 @@ feed 不再是无结构消息列表，而是**回合序列**（词汇见 CONTEXT
 
 **agent 回合容器**（`.turn-agent`，`position: relative; padding-left: 40px`）：
 1. **凝结雨轨** `.rail`（见 CONTEXT.md）：`absolute; left: 0; top: 20px; bottom: 2px; width: 26px; border-left: 1px solid --border`。
-   - 活动回合：一枚迷你数字雨 canvas（2 列，字号 11px，假名+`0123456789<>+*`），每帧绘制、**匀速 0.8 行/帧**（9.6px < 11px 字高 → 字符叠影成连续雨幕；不随 FX 缩放，加速会拉大字符间距使雨幕散成单字）；**半分辨率绘制**（backstore = 0.5×，CSS 放大的双线性插值产生天然柔化，字符不可辨、像真实的雨，与平台 dpr 无关）；亮头 8% 概率 `rgba(194,255,217,0.7)`，普通 `rgba(0,255,65,0.55)`；拖尾为 `destination-out` 透明衰减（`rgba(0,0,0,0.14)`，不盖实色——canvas 保持透明，可透出背景雨）；尺寸用 ResizeObserver 跟随回合高度。
+   - 活动回合：一枚迷你数字雨 canvas（2 列，字号 11px，假名+`0123456789<>+*`），帧节流 `90 / FX.speed`（与背景雨同一折算规则）；亮头 8% 概率 `rgba(194,255,217,0.7)`，普通 `rgba(0,255,65,0.5)`；拖尾为 `destination-out` 透明衰减（`rgba(0,0,0,0.14)`，不盖实色——canvas 保持透明，可透出背景雨）；尺寸用 ResizeObserver 跟随回合高度。
    - 回合闭环：canvas 立即卸载（rAF 停，零常驻开销），原位凝为 ◆（`.rail.settled .seal`，`sealIn 0.5s` 入场）。
    - reduced-motion：只画一帧静态雨。
 2. **正文段**（`.msg.agent`，同 v4：头部 = 会话标题 + `HH:MM`，正文 15px/1.8，行内 `code` / 【高亮词】 / 中断标记 `[已被操作员中断]` → `--danger`）。一个回合可有多个正文段（工具调用前后各一段），各占一个 `.msg.agent`。

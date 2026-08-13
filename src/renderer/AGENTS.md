@@ -14,7 +14,7 @@ React 18 + TypeScript(strict) 渲染层：v4 四区骨架（标题栏 / 侧栏 /
 - `src/renderer/src/toolfmt.ts` — 工具参数格式化纯函数 `formatToolArgs`/`toolExpandTitle`（无依赖模块；Feed 工具链块展开区用；node:test 直测）
 - `src/renderer/src/markdown.ts` — 正文解析纯函数 `parseBody`（``` / ~~~ 围栏代码块 + 行内 `code`/【高亮词】；语法边界见 [DESIGN.md](DESIGN.md)「正文解析」；无依赖模块；Feed Body 消费；node:test 直测）
 - `src/renderer/src/mockBridge.ts` — 纯浏览器调试桥 `installMockBridge`（`window.zion` 缺失时注入 mock ZionAPI，Electron 有 preload 自动跳过；mock 数据与事件派发语义见 [DESIGN.md](DESIGN.md)「浏览器调试桥」）
-- `src/renderer/src/components/` — `RainCanvas` / `SignalCanvas`(releaseWorm) / `NeoAvatar` / `Sidebar`(两分区：`.side-section.sessions` 会话堆叠卡（悬停操作：✎ 重命名 / ✕ 两段删除确认）+ `.side-section.projects`（`.side-head` 标题行 = 项目名 + 「⇄ 切换项目」按钮 + 文件树）；`.core-wrap`/`.side-foot` 固定，`.deck`/`#file-tree` 各自内部滚动) / `LogDrawer` / `Feed`(回合化消息流：TurnView memo 边界 + 注入解码 `OperatorBody` + thinking 折叠块 + 结算行 + 工具收尾凝结涟漪) / `TurnRail`(凝结雨轨：活动回合迷你数字雨，闭环凝 ◆，每帧绘制、匀速 0.8 行/帧、半分辨率绘制 CSS 放大柔化——不读 fx，加速会把字符间距拉大使雨幕散字) / `DiffCard` / `AskDialog`(扩展对话框三形态 confirm/input/select + `ToastHost` toast 队列) / `ProjectPanel`(项目选择：最近项目卡片 + 「浏览其他目录…」，遮罩复用 `.ask-mask`；启动无最近项目自动打开) / `InputBar`(快捷指令+命令面板：`/` 弹出 skills/命令 listbox，面板 state 全在组件本地) / `SoundFx`(SND + useSoundFx)
+- `src/renderer/src/components/` — `RainCanvas` / `SignalCanvas`(releaseWorm) / `NeoAvatar` / `Sidebar`(两分区：`.side-section.sessions` 会话堆叠卡（悬停操作：✎ 重命名 / ✕ 两段删除确认）+ `.side-section.projects`（`.side-head` 标题行 = 项目名 + 「⇄ 切换项目」按钮 + 文件树）；`.core-wrap`/`.side-foot` 固定，`.deck`/`#file-tree` 各自内部滚动) / `LogDrawer` / `Feed`(回合化消息流：TurnView memo 边界 + 注入解码 `OperatorBody` + thinking 折叠块 + 结算行 + 工具收尾凝结涟漪) / `TurnRail`(凝结雨轨：活动回合迷你数字雨，闭环凝 ◆，`90/fx.speed` 节流) / `DiffCard` / `AskDialog`(扩展对话框三形态 confirm/input/select + `ToastHost` toast 队列) / `ProjectPanel`(项目选择：最近项目卡片 + 「浏览其他目录…」，遮罩复用 `.ask-mask`；启动无最近项目自动打开) / `InputBar`(快捷指令+命令面板：`/` 弹出 skills/命令 listbox，面板 state 全在组件本地) / `SoundFx`(SND + useSoundFx)
 - `src/renderer/src/env.d.ts` — `window.zion` 全局声明（type-only import `ZionAPI`）
 - `src/renderer/src/styles.css` — 全部设计令牌与布局数值（令牌数值照 `ui-demo/index-v4.html`，勿改；顶部本地 `@font-face` 为刻意偏离，见 [DESIGN.md](DESIGN.md)「设计决策与权衡」）
 - `src/shared/protocol.ts` — IPC 契约类型（type-only，构建期擦除，无运行时依赖）
@@ -33,7 +33,7 @@ node --test scripts/derive-title.test.mjs scripts/toolfmt.test.mjs scripts/markd
 
 ## 本模块硬约束
 
-1. **FX 不进 React 渲染路径**：氛围组件（RainCanvas）直接 `import { fx } from '../store'` 读取 speed/energy（`90/fx.speed` 帧节流）；不要复制进组件 state，也不要自行插值。`fx` 是模块级对象，仅 `setSessionState` 时改写（两档取值见 [DESIGN.md](DESIGN.md)「架构与主要流程」FX 派生）。**例外：TurnRail 不读 fx**——雨轨匀速 0.8 行/帧（9.6px<11px 字高叠影成幕），加速会把字符间距拉大、雨幕散成单字。
+1. **FX 不进 React 渲染路径**：氛围组件与雨轨（RainCanvas / TurnRail）直接 `import { fx } from '../store'` 读取 speed/energy（`90/fx.speed` 帧节流）；不要复制进组件 state，也不要自行插值。`fx` 是模块级对象，仅 `setSessionState` 时改写（两档取值见 [DESIGN.md](DESIGN.md)「架构与主要流程」FX 派生）。
 2. **蠕虫触发留在事件回调同步路径**（App.tsx `triggerWorm`）：不得改为 useEffect 触发——快工具（bash 等）的 `tool_execution_end` 可能先于 React 渲染到达，异步化会漏触发。
 3. **diff 卡渲染以 `revealedEdits` 为准**：Feed 中 DiffCard 仅在 `item.edit && revealedEdits[toolCallId] && rows.length > 0` 时渲染；不要在 `toolStart` 时直接渲染。
 4. **动画/音效数值照 v4 规格原样提取**（FS=18、拖尾 0.035、`90/fx.speed` 节流、12% 亮头、L 路径 8px 采样、TAIL=18、扰码 620ms、闪烁 900ms、SND 7 音参数）；v5 会话区数值同样照 index-v5.html/代码注释（注入解码 `min(700, 240+len*6)`ms、凝结涟漪 0.7s、雨轨 11px 双列）：禁止"优化"数值（ADR 0002）。
