@@ -128,7 +128,7 @@ font-family: "Share Tech Mono", ui-monospace, "Courier New", "Sarasa Term SC", "
 4. 每列随机取一个字符：
    - **12% 概率是"亮头"**：`shadowColor = 'rgba(120,255,175,0.9)'`，`shadowBlur = 8`，`fillStyle = 'rgba(220,255,232,1)'`（近白磷光，带辉光）。
    - 否则普通字符：`shadowBlur = 0`，`fillStyle = 'rgba(61,255,143,0.95)'`。
-5. `fillText(ch, x + FS/2, y)`（textAlign center），之后务必 `shadowBlur = 0` 复位。
+5. **横向压缩绘制**：`translate(x + FS/2, y) → scale(0.55, 1) → fillText(ch, 0, 0)`（textAlign center），之后务必 `shadowBlur = 0` 复位——Matrix Code 是宽体全角字形（18px 下 advance 16.8px），X 向 ×0.55 恢复原半角雨丝的纤细观感（网格 FS 不变；这是字形参数不是布局参数）。
 6. `y += FS * 0.9`；落出屏底且 `random() > 0.965` 时重置到 `random(-30 * FS, 0)`。
 7. 窗口 resize 时重建列数组。
 

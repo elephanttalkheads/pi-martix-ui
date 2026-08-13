@@ -10,6 +10,9 @@ import { fx } from '../store';
 const CHARS = 'アウエオカキケコサシスセソタツテナニヌネハヒホマミムメモヤヨラリワー012345789*+<>:|';
 const RAIN_FONT = '"Matrix Code", "Share Tech Mono", monospace';
 const FS = 18;
+/** 字形横向压缩：Matrix Code 全角字形 18px 下 advance 16.8px，
+ *  原半角假名约 9px——X 向 ×0.55 恢复原雨丝的纤细观感（网格 FS 不变） */
+const GLYPH_SX = 0.55;
 const REDUCED = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 interface Col {
@@ -42,6 +45,14 @@ export default function RainCanvas() {
     resize();
 
     ctx.textAlign = 'center';
+    /** 横向压缩绘制（GLYPH_SX），保持字形墨色高度不变、宽度回到原半角观感 */
+    const put = (ch: string, x: number, y: number) => {
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.scale(GLYPH_SX, 1);
+      ctx.fillText(ch, 0, 0);
+      ctx.restore();
+    };
 
     if (REDUCED) {
       // reduced-motion：只绘制一帧静态雨幕
@@ -49,7 +60,7 @@ export default function RainCanvas() {
       ctx.fillStyle = 'rgba(61,255,143,0.6)';
       for (let k = 0; k < cols.length; k++) {
         for (let y = -FS * 2; y < canvas.height; y += FS * 2) {
-          ctx.fillText(CHARS[(Math.random() * CHARS.length) | 0], cols[k].x + FS / 2, y);
+          put(CHARS[(Math.random() * CHARS.length) | 0], cols[k].x + FS / 2, y);
         }
       }
       return () => window.removeEventListener('resize', resize);
@@ -74,7 +85,7 @@ export default function RainCanvas() {
           ctx.shadowBlur = 0;
           ctx.fillStyle = 'rgba(61,255,143,0.95)';
         }
-        ctx.fillText(ch, c.x + FS / 2, c.y);
+        put(ch, c.x + FS / 2, c.y);
         ctx.shadowBlur = 0;
         c.y += FS * 0.9;
         if (c.y > canvas.height && Math.random() > 0.965) c.y = Math.random() * -30 * FS;
