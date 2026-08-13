@@ -7,7 +7,7 @@
 做一个 agent 启动时的开屏动画 HTML demo：参考《2001 太空漫游》星门穿越段
 （`C:\Users\DELL\Videos\屏幕录制\屏幕录制 2026-08-12 235206.mp4`，8s slit-scan 光廊）
 的**运镜方式和场景构图**，内容替换为黑客帝国数字雨（基础算法见
-`ui-demo/icon/react/agent-ui-design-spec.md` §4.1）。
+`ui-demo/react/agent-ui-design-spec.md` §4.1）。
 
 产品语义（用户拍板）：启动 agent 后默认无会话，**循环播放**开屏动画；
 用户选择会话或发送消息时退出动画进入主界面。
