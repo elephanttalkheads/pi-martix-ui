@@ -196,6 +196,67 @@ export default function App() {
   const [bootAt] = useState(() => Date.now());
   const [now, setNow] = useState(() => new Date());
 
+  // ---- 侧栏拖拽调宽（原生 pointer，宽度直写 CSS 变量，不触发 React 渲染） ----
+  // 常量/函数放模块级（见文件底部）：SIDE_MIN/MAX/DEFAULT/STEP/KEY、clampSide
+  const mainRef = useRef<HTMLDivElement | null>(null);
+  const resizerRef = useRef<HTMLDivElement | null>(null);
+  const dragRef = useRef<{ startX: number; startW: number } | null>(null);
+
+  const applySideWidth = (w: number) => {
+    const el = mainRef.current;
+    if (!el) return;
+    el.style.setProperty('--side-w', `${w}px`);
+    resizerRef.current?.setAttribute('aria-valuenow', String(w));
+  };
+  const persistSideWidth = (w: number) => localStorage.setItem(SIDE_KEY, String(w));
+  const currentSideWidth = () => {
+    const raw = mainRef.current?.style.getPropertyValue('--side-w');
+    const v = raw ? parseFloat(raw) : NaN;
+    return Number.isFinite(v) ? Math.round(v) : SIDE_DEFAULT;
+  };
+
+  // 启动读回持久化宽度
+  useEffect(() => {
+    const saved = parseInt(localStorage.getItem(SIDE_KEY) ?? '', 10);
+    if (Number.isFinite(saved)) applySideWidth(clampSide(saved));
+  }, []);
+
+  const onResizePointerDown = (e: React.PointerEvent) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    dragRef.current = { startX: e.clientX, startW: currentSideWidth() };
+    const move = (ev: PointerEvent) => {
+      const d = dragRef.current;
+      if (!d) return;
+      applySideWidth(clampSide(d.startW + (ev.clientX - d.startX)));
+    };
+    const up = () => {
+      dragRef.current = null;
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      persistSideWidth(currentSideWidth());
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  };
+
+  const onResizeKeyDown = (e: React.KeyboardEvent) => {
+    let next: number | null = null;
+    if (e.key === 'ArrowLeft') next = currentSideWidth() - (e.shiftKey ? SIDE_STEP_BIG : SIDE_STEP);
+    else if (e.key === 'ArrowRight') next = currentSideWidth() + (e.shiftKey ? SIDE_STEP_BIG : SIDE_STEP);
+    else if (e.key === 'Escape') next = SIDE_DEFAULT;
+    if (next == null) return;
+    e.preventDefault();
+    const w = clampSide(next);
+    applySideWidth(w);
+    persistSideWidth(w);
+  };
+
+  const resetSideWidth = () => {
+    applySideWidth(SIDE_DEFAULT);
+    persistSideWidth(SIDE_DEFAULT);
+  };
+
   // 启动：恢复当前会话（continueRecent）→ 历史重建 feed；桥未注入时优雅降级（空界面）
   useEffect(() => {
     if (!window.zion?.getCurrentSession) return;
@@ -281,8 +342,22 @@ export default function App() {
         <Clock />
       </header>
 
-      <div className="main">
+      <div className="main" ref={mainRef}>
         <Sidebar onSelectFile={selectFile} />
+        <div
+          className="side-resizer"
+          ref={resizerRef}
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="调整侧栏宽度（拖拽或 ←/→，Esc 复位）"
+          aria-valuemin={SIDE_MIN}
+          aria-valuemax={SIDE_MAX}
+          aria-valuenow={SIDE_DEFAULT}
+          tabIndex={0}
+          onDoubleClick={resetSideWidth}
+          onPointerDown={onResizePointerDown}
+          onKeyDown={onResizeKeyDown}
+        />
         <section className="console">
           <div className="conv-head">
             <span className="c-title">主控会话 #0047</span>
@@ -344,4 +419,16 @@ export default function App() {
       </div>
     </>
   );
+}
+
+// 侧栏拖拽调宽：min 160 / max 480（或窗口一半，取小）/ 默认 232；localStorage 'zion.sidebar-w' 持久化
+const SIDE_MIN = 160;
+const SIDE_MAX = 480;
+const SIDE_DEFAULT = 232;
+const SIDE_STEP = 8;
+const SIDE_STEP_BIG = 32;
+const SIDE_KEY = 'zion.sidebar-w';
+function clampSide(w: number): number {
+  const max = Math.max(SIDE_MIN, Math.min(SIDE_MAX, Math.round(window.innerWidth / 2)));
+  return Math.max(SIDE_MIN, Math.min(max, Math.round(w)));
 }

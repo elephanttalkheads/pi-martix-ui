@@ -2,32 +2,50 @@
 
 ## 目标与非目标
 
-**目标**：把 pi SDK 会话事件流渲染为 v4 极简黑客帝国 UI——四区布局 + 4 态会话状态机 + 三件装饰（单层数字雨 / 轻扫描线 / 蠕虫入侵+Neo 头像）+ WebAudio 程序化音效；会话列表、文件树、历史恢复、项目选择面板（最近项目 / 原生目录浏览 → 切换工作目录与会话上下文）、扩展对话框（`ctx.ui` 的 confirm/select/input → AskDialog 弹层）与扩展通知（notify → toast）走真实 IPC。
+**目标**：把 pi SDK 会话事件流渲染为黑客帝国风 UI——v4 四区骨架 + v5 回合化会话区（回合聚合消息流 + 凝结雨轨 / 思考块折叠 / 结算行 / 注入解码 / 液态玻璃）+ 4 态会话状态机 + 三件装饰（单层数字雨 / 轻扫描线 / 蠕虫入侵+Neo 头像）+ WebAudio 程序化音效；会话列表、文件树、历史恢复、项目选择面板（最近项目 / 原生目录浏览 → 切换工作目录与会话上下文）、扩展对话框（`ctx.ui` 的 confirm/select/input → AskDialog 弹层）与扩展通知（notify → toast）走真实 IPC。
 
 **非目标**：不定义 IPC 契约（`src/shared/protocol.ts` 类型与主进程是事实源）；不提供 Node/凭据能力（隔离在 preload 白名单之后）；不做真实 context 统计（头部「上下文 12.4k / 128k」与「主控会话 #0047」为硬编码装饰）；不实现扩展对话框的 Promise 表/超时/AbortSignal 兜底（主进程 `src/main/uibridge.mjs` 是事实源）——本模块只消费 `UiAsk`/`UiNotify` 类型与 `uiAnswer`/`onUiAsk`/`onUiNotify` 桥面；不实现项目切换的主进程语义（`WORKSPACE_DIR` 变更、旧会话 dispose、`~/.pi/agent/zion-projects.json` 持久化在 `src/main/main.mjs`）——本模块只消费 `listProjects`/`browseProject`/`switchProject` 桥面。
 
-**边界**：渲染层只消费 `window.zion`（ZionAPI）；事件类型源 `@earendil-works/pi-coding-agent`（经 `shared/protocol.ts` re-export）。主进程/preload 为 JS（`main.mjs`/`preload.cjs`），经 `tsconfig.node.json` checkJs 校验，IPC 通道名字面量在 main/preload 两处，本模块不持有。
+**边界**：渲染层只消费 `window.zion`（ZionAPI）；事件类型源 `@earendil-works/pi-coding-agent`（经 `shared/protocol.ts` re-export）。主进程/preload 为 JS（`main.mjs`/`preload.cjs`），经 `tsconfig.node.json` checkJs 校验，IPC 通道名字面量在 main/preload 两处，本模块不持有。会话区词条（agent 回合 / 凝结雨轨 / 结算行 / 注入解码）定义以根 `CONTEXT.md` 为准，本文件只记实现语义，不重述定义。
 
 ## 架构与主要流程
 
 **布局**（App.tsx）：氛围层（`#rain` / `#signal` / `.scanlines`，fixed）与 `#stage`（z-index 5，四区）同级。
 - 区1 标题栏 `.titlebar`（36px）：品牌 + 时钟
-- 区2 侧栏 `.sidebar`（232px，整栏不滚动）：`.core-wrap`（Neo 头像，固定）→ `.side-section.sessions`（flex 2：会话堆叠卡 `.deck` 内部滚动）→ `.side-section.projects`（flex 3：`.side-head` 标题行 = 项目 basename（全路径在 title 属性）+「⇄ 切换项目」按钮 + 文件树 `#file-tree` 内部滚动）→ `.side-foot`（固定，workspace 文案）
+- 区2 侧栏 `.sidebar`（`width: var(--side-w, 232px)`，默认 232，可拖拽调宽；整栏不滚动）：`.core-wrap`（Neo 头像，固定）→ `.side-section.sessions`（flex 2：会话堆叠卡 `.deck` 内部滚动）→ `.side-section.projects`（flex 3：`.side-head` 标题行 = 项目 basename（全路径在 title 属性）+「⇄ 切换项目」按钮 + 文件树 `#file-tree` 内部滚动）→ `.side-foot`（固定，workspace 文案）
+- 区2.5 `.side-resizer`（8px 拖拽热区，`margin: 0 -4px` 视觉零宽、伸出两侧各 4px 命中区，WAI-ARIA separator，机制见下「侧栏调宽」）——`.main`（flex 行）内位于 Sidebar 与 `.console` 之间
 - 区3 对话区 `.console`：`.conv-head`（状态芯片）+ `#feed` + `.inputbar`
-- 区4 `.term` 日志抽屉（默认 height:0，展开 150px）+ `.statusbar`（26px，SND 开关 / 日志按钮）
+- 区4 `.term` 日志抽屉（默认 height:0，展开 150px）+ `.statusbar`（26px，SND 开关 / DEC 开关 / 日志按钮 / `tokens:` 真实 usage 计数）
 
-**事件→状态管线**（`useAgentEvents`，App.tsx 单一订阅点；退订函数在 effect cleanup 调用）：
-- `agent_start` → RUNNING（重置 replyScheduled/errored）
-- `tool_execution_start` → RUNNING + `toolStart` 入 feed + 编辑类调用触发蠕虫
-- `message_update`（text_delta / thinking_delta）→ STREAMING + `appendDelta`
-- `tool_execution_end` → `toolEnd`（写 dur、状态 ok/err、尝试 result.patch 升级）；err → SND.abort，ok → SND.step
-- `agent_end` → READY + SND.reply（replyScheduled 防重复）；`errored` 标记的错误回合不再补 reply 音/「回复完成」日志；`agent_settled` → READY
-- `message_end` 中 `stopReason === 'error'` → READY + SND.abort + 置 `errored` 标记（错误回合，由 `agent_end` 消费）
-- CANCELLING 由 InputBar 本地置位（中断按钮或生成中按 Enter，`setSessionState('CANCELLING')` + `markInterrupted` + `window.zion.abort()`），非事件驱动
+**侧栏调宽**（App.tsx + styles.css）：热区独立条而非 sidebar 子元素——`.sidebar` 的 `overflow: hidden` 会裁剪伸出边界的子元素，且独立条不盖内部滚动条（styles.css 注释明示）。
+- 拖拽：resizer `pointerdown`（仅左键，preventDefault）记 `{startX, startW}` → window 级 `pointermove` 每帧 `applySideWidth(clampSide(startW + dx))`——直写 `.main` 元素 style 的 `--side-w`（不触发 React 渲染），并同步 resizer `aria-valuenow` → `pointerup` 解绑监听 + `persistSideWidth`（localStorage `zion.sidebar-w`，仅松手写一次）。`touch-action: none` 防触屏拖拽触发滚动。
+- 键盘（`role="separator"` + `aria-orientation="vertical"` + `tabIndex=0` + `aria-valuemin/max/now`）：←/→ ±8px（Shift ±32px）、Esc 复位默认宽；键盘路径立即 apply + persist。`aria-valuenow` 由 `applySideWidth` 同步，ARIA 值与真实宽度不脱节。
+- 双击复位默认宽；启动 useEffect 读 `zion.sidebar-w` 经 `clampSide` 后应用（无键/非数字忽略，回落默认宽）。
+- clamp 边界与步进常量在 App.tsx 模块级（`SIDE_*`，值见 AGENTS.md 硬约束 17）；`clampSide` 动态上限取窗口一半与 `SIDE_MAX` 取小——窄窗口侧栏不撑过半屏。
 
-**FX 派生**：`setSessionState` 同步 `Object.assign` 到模块级 `fx` 对象（READY `{speed:1, energy:0.3}` / 忙碌 `{speed:2.2, energy:0.85}`）；仅 RainCanvas（`90/fx.speed` 帧节流）直接读取，不触发 React 渲染。侧栏顶部为 Vite import 的透明 Neo 双帧 PNG（120×120，容器无底板/描边）；张嘴仅由蠕虫释放驱动（store `wormActive` 计数 > 0，`releaseWorm` 开始 +1、done -1），CSS 以 300ms `steps(1,end)` 在闭嘴/张嘴间切换，释放瞬间附带 700ms 缩放脉冲，reduced-motion 下停在静态张嘴帧且不脉冲。
+**事件→状态管线**（`useAgentEvents`，App.tsx 单一订阅点；退订函数在 effect cleanup 调用；所有 store 写入经队列 API 入队，见「回合聚合模型与渲染队列」）：
+- `agent_start` → `armTurn`（回合起点，队列化保序）+ RUNNING（重置 replyScheduled/errored）
+- `message_update`（text_delta / thinking_delta）→ `queueDelta(delta, kind)` + STREAMING
+- `tool_execution_start` → `toolStart` 入队 + RUNNING + 编辑类调用触发蠕虫
+- `tool_execution_end` → `toolEnd`（写 dur、状态 ok/err、尝试 result.patch 升级）；闭环后到达的迟到事件倒序扫回合回退匹配；err → SND.abort，ok → SND.step
+- `turn_end` → `addUsage(usage.totalTokens)`：累积进活动回合（结算行 Σtokens）+ 状态栏真实 token 计数（替代 v4 字符数 ×2 伪计数）
+- `agent_end` → `closeTurn()` + READY + SND.reply（replyScheduled 防重复）；`errored` 标记的错误回合不再补 reply 音/「回复完成」日志；`agent_settled` → `closeTurn()` + READY
+- `message_end` 中 `stopReason === 'error'` → `closeTurn('error')` + READY + SND.abort + 置 `errored` 标记（错误回合，由 `agent_end` 消费）
+- CANCELLING 由 InputBar 本地置位（中断按钮或生成中按 Enter，`setSessionState('CANCELLING')` + `markInterrupted`（入队）+ `window.zion.abort()`），非事件驱动
 
-**启动恢复**（App useEffect，`window.zion?.getCurrentSession` 守卫——桥未注入直接 return 优雅降级）：`getCurrentSession` → `listSessions` → 标题经 `deriveSessionTitle`（title.ts 纯函数，规则见「设计决策与权衡」）→ `applySession(id, title, items)` 以历史重建 feed（仅 user/assistant 文本，无工具卡）+ `setSessions` + `getProject` → `setCurrentProject`（侧栏 Project 标题）→ `listProjects` 判空：无最近项目 → `setProjectOpen(true)` 自动打开项目选择面板（启动引导，ADR-0003 决策 3）。
+**回合聚合模型与渲染队列**（store.ts）：feed 数据不再是平铺 FeedItem 数组，而是 `turns`（id→Turn）+ `order`（渲染序）+ `activeTurnId`。Turn 分两类：`operator`（一次用户输入）与 `agent`（agent_start→闭环的执行周期）；agent 回合的 `content` 按到达顺序保序存放内容段（`text`/`thinking`）与工具条目（`tool`）。agent 事件经 IPC 逐条到达（每条一个宏任务），store 把它们攒进模块级 op 队列（`arm`/`delta`/`toolStart`/`toolEnd`/`usage`/`interrupt`/`close`），rAF 时 `_flush` 一次应用：每帧至多一次 `set()`，且只替换活动回合对象（`edit()` 首次访问克隆换引用，`ensureTurn()` 在 armed 或无活动回合时新建）——这是 TurnView 回合级 memo 的前提，历史回合零重渲染。`pushUser` 先同步 `flushNow`（OPERATOR 回合落在正确位置）；`applySession`/`reset` 清队防跨会话污染。
+
+**回合内容与结算行**（Feed.tsx TurnView）：`order.map` 渲染 TurnView（memo），`active`/`streaming` 只对活动回合为真。operator 回合右对齐（OPERATOR 头 + 注入解码）；agent 回合 `.turn-agent`：`TurnRail` + content 逐条渲染——`tool` → ToolCard（工具链块 + diff 卡，revealedEdits 门控）、`thinking` → `<details class="think">` 默认折叠（「思路」摘要，流式中显示「· 思考中…」）、`text` → `.msg.agent`（Body 解析 code/高亮；中断标记 `[已被操作员中断]` 落最后一个 text 段；caret 落末 entry）。闭环写结算行 `.settle`：`◆ 已结算/已中断/错误 · N tools · Σtokens · 耗时`——tokens 为回合内各 turn_end usage 求和（`seenUsage=false` 时显示 null），耗时为 `agent_start`→闭环的渲染层实测（performance.now，非 SDK 计时）；outcome 判定：`closeTurn('error')` → error，有 `interrupted` 标记 → interrupted，否则 ok；`!cur.settle` 守卫保证每回合至多一条。
+
+**凝结雨轨**（TurnRail.tsx）：活动回合左侧 `.rail` 内 2 列迷你数字雨 canvas，帧节流 `90/fx.speed`（与背景雨同一折算，直接读 `fx`）；回合闭环后组件卸载 canvas、凝为 ◆（`.seal`，rAF 立即停——长会话零常驻开销）；reduced-motion 只画一帧静态雨；`aria-hidden`，纯装饰不承载业务（见 CONTEXT.md「凝结雨轨」）。
+
+**注入解码**（Feed.tsx OperatorBody）：OPERATOR 消息入场时假名乱码逐位还原（时长 `min(700, 240+字符数*6)`ms，空格/换行保留；解码期间纯文本渲染，完成后交 Body 做 code/高亮解析）；只入场播一次（text/decOn 变化不重播）；DEC 关闭或 reduced-motion 直接 Body；开关 `decOn` 持久化 `zion.dec`（见 CONTEXT.md「注入解码」）。
+
+**液态玻璃分级**（styles.css）：工具卡/diff 卡为「agent 凝结出的实体」——静态态半透明磷光底 + 顶边镜面高光/底边折射暗线（无 blur 开销）；`backdrop-filter: blur(9px) saturate(1.25) brightness(1.05)` 只开 `.turn-agent.is-active` 内的卡（性能分级：长会话任意时刻 blur 卡数 ≤ 活动回合卡数）；工具收尾（run→ok/err）挂载 `.ripple` 凝结涟漪（0.7s 一次性动画，reduced-motion 关闭）。
+
+**FX 派生**：`setSessionState` 同步 `Object.assign` 到模块级 `fx` 对象（READY `{speed:1, energy:0.3}` / 忙碌 `{speed:2.2, energy:0.85}`）；RainCanvas 与 TurnRail（均 `90/fx.speed` 帧节流）直接读取，不触发 React 渲染。侧栏顶部为 Vite import 的透明 Neo 双帧 PNG（120×120，容器无底板/描边）；张嘴仅由蠕虫释放驱动（store `wormActive` 计数 > 0，`releaseWorm` 开始 +1、done -1），CSS 以 300ms `steps(1,end)` 在闭嘴/张嘴间切换，释放瞬间附带 700ms 缩放脉冲，reduced-motion 下停在静态张嘴帧且不脉冲。
+
+**启动恢复**（App useEffect，`window.zion?.getCurrentSession` 守卫——桥未注入直接 return 优雅降级）：`getCurrentSession` → `listSessions` → 标题经 `deriveSessionTitle`（title.ts 纯函数，规则见「设计决策与权衡」）→ `applySession(id, title, items)` 以历史重建回合 feed（仅文本段：user→operator 回合、assistant→agent 回合单 text 段；无工具卡/结算行，`startedAt=0` 不计时）+ `setSessions` + `getProject` → `setCurrentProject`（侧栏 Project 标题）→ `listProjects` 判空：无最近项目 → `setProjectOpen(true)` 自动打开项目选择面板（启动引导，ADR-0003 决策 3）。
 
 **会话切换/新建/重命名/删除**（Sidebar）：`selectSession` → `switchSession`（主进程懒创建实例，可能秒级；`switching` 锁防并发）→ `applySession`；`newSession` 同理；失败走 `log('err')`。重命名：`startRename` 以当前显示标题为草稿，`.s-title-edit` 内联输入 Enter/blur 提交 `commitRename`、Esc 取消；`renameSession` → `setSessions`，当前会话另 `setSessionTitle(name)`（只改标题，不重置 feed）。删除：`askDelete` 两段确认——首击进入「确认?」态（2.5s 自动复位），再击 `doDelete` → `deleteSession`（软删，移入 `.trash` 可恢复）→ `setSessions`；删除的是当前会话时主进程指针已落最近会话，`getCurrentSession` 重拉 + `applySession`（标题取新列表匹配，兜底短码）。点文件树行 → `pushUser` + `window.zion.prompt('读取 <path>')`（真实 prompt，无假动画）。
 
@@ -83,7 +101,7 @@
 - **revealedEdits 延迟渲染**：把"动画命中"与"diff 可见"绑定；目标缺失时 done 仍回调，卡片照样出现。
 - **bash 写操作启发式**：正则提取目标与文本——复杂链式命令可能漏判、纯 echo 到屏幕可能误判，是权衡而非精确解析。
 - **stopReason 运行时判定**：strict 下 AgentMessage 联合无法静态收窄到助手分支，用 cast + 可选链按运行时语义读取。
-- **tokenCount 近似**：delta 字符数 ×2，非真实 token；`applySession`/`reset` 归零。
+- **状态栏 token 计数 = 真实 usage**：`turn_end` 的 `usage.totalTokens` 经 `addUsage` 累积（v4 的「delta 字符数 ×2」伪计数已删除）；`applySession`/`reset` 归零。结算行 tokens 同样取该累积（`seenUsage=false` 显示 null），不再有字符近似。
 - **标题推导收敛为纯函数**（`title.ts` → store re-export 的 `deriveSessionTitle`，App 启动恢复与 Sidebar 会话卡共用）：两处原为各自内联 `slice(0,22)` 截断且行为不一致（App 不补省略号、不清引号），现统一为 name → firstMessage 智能摘要 → `会话 <id 前 4 位>` 兜底。摘要规则：取首行 → 剥含路径/命令特征的内嵌引号对（消除 `为"D:\\...\\..."` 残尾）与成对包裹引号 → 去前导符号（`- # > * · / \`）→ 22 字符截断 + '…'。改规则只动 `title.ts`（node:test 覆盖）。
 - **会话堆叠卡 `--h` 测量**（Sidebar effect，deps `[sessions, currentSessionId]`）：每张 `.scard` 置 `--h = scrollHeight + 2`；CSS `margin-bottom: calc(80px - var(--h, 140px))` 使每卡恒定露出 80px 头部（标题 + 2 行摘要），hover 拉直旋转（`rotate(0) translateY(-4px)`）+ 展开摘要/meta。
 - **侧栏分区滚动**（styles.css 注释明示）：`.sidebar` 整栏 `overflow: hidden`，`.core-wrap`/`.side-foot` `flex: none` 固定，会话/项目两区 flex 分割、`.deck`/`#file-tree` 各自 `overflow-y: auto`——列表过长只滚列表区，项目标题行与底部 workspace 行始终可见。
@@ -92,16 +110,27 @@
 - **`setSessionTitle` 与 `applySession` 分工**：改名当前会话只走 `setSessionTitle`（仅更新 `sessionTitle`，feed/状态机/token 全不动）——`applySession` 会重建 feed，误用会把正在进行的对话内容冲掉。
 - **删除是软删除 + 两段确认**：`deleteSession` 为软删（主进程语义，UI 只展示 log），侧栏用「首击确认? + 2.5s 自动复位」防误触；删除当前会话后主进程指针自动落回最近会话，渲染层不自行猜 id，`getCurrentSession` 重拉。
 - **日志前端自收集**：`store.logs` 上限 120 行（LOG_MAX），`role="log"`，收起时 `aria-hidden`。
-- **交互细节**：mousedown 全局焦点归还 `#cmdline`（v4 §7.5），豁免 `.ask-mask`/`.project-panel`/`.palette`/`.s-title-edit`——弹层内部输入与内联重命名输入不被抢焦；Enter 在 STREAMING/CANCELLING 时切换为中断而非发送；面板打开且有候选时 Enter/Tab 插入选中项（不回发）。
+- **交互细节**：mousedown 全局焦点归还 `#cmdline`（v4 §7.5），豁免 `.ask-mask`/`.project-panel`/`.palette`/`.s-title-edit`——弹层内部输入与内联重命名输入不被抢焦；`.side-resizer` 未豁免——点击热区后焦点仍归还 `#cmdline`，键盘调宽须 Tab 聚焦 separator。Enter 在 STREAMING/CANCELLING 时切换为中断而非发送；面板打开且有候选时 Enter/Tab 插入选中项（不回发）。
 - **命令面板只插入、不执行**：选中项仅写入输入框、不触发任何行为，回车后与普通输入同路径 `prompt`；命令执行语义归宿主 TUI 层（InputBar 头注释明示），渲染层不维护命令实现，避免两处命令知识漂移。
 - **command 优先 + 字母序**：面板 max-height 320px 截断时命令恒在可见区（命令少、skills 多），字母序给稳定预期。
 - **启动预取一次**：`listCommands` 主进程聚合扫描较重，仅 mount 调用一次，打开/过滤面板不再查主进程（代价见「已知限制与技术债」）。
 - **本地字体替代 Google Fonts**：styles.css 顶部 `@font-face` 引入 `assets/fonts/ShareTechMono-Regular.woff2`（latin 子集 13.5KB，来源 @fontsource/share-tech-mono，font-display: swap），替代 demo（index-v4.html）的 Google Fonts `@import`——离线/墙内可用，「离线字体」未做项闭环；`--font` 回退链不变，latin 子集无 CJK，中文文案走系统字体回退。
+- **回合聚合 + 回合级 memo**：TurnView 是渲染边界——流式期间 store 只替换活动回合对象（`edit()` 克隆），历史回合 props/context 全等 → 零重渲染；代价是 store 更新必须遵守「每帧至多一次 + 只换活动回合」纪律（AGENTS.md 硬约束 15）。
+- **rAF 合帧队列**：agent 事件每条 IPC 一个宏任务，直接 `set()` 会让长会话下整树重渲染成为主瓶颈；攒 op 队列、rAF flush 把每帧压缩为一次 store 更新。同步路径（`pushUser`）先 drain 保序，`applySession`/`reset` 直接清队防跨会话污染。
+- **结算行照常结算**：中断/错误回合也写结算行（标「已中断」/「错误」）——结算行是回合闭环的固定仪式，即使无工具调用/usage 也显示（tokens 显示 null）。
+- **thinking 默认折叠**：`<details>` 原生折叠不引入额外状态；「思考中…」由 streaming + 末 entry 判定。
+- **注入解码入场一次**：`useEffect` 空依赖（eslint-disable）保证只播一次，OPERATOR 文本更新不重播；DEC 开关与 reduced-motion 都直出原文。
+- **液态玻璃分级**：backdrop-filter 昂贵，只开活动回合的卡；历史回合卡静态半透明——长会话 blur 卡数有上界（≤ 活动回合卡数）。
+- **凝结雨轨零常驻**：闭环即卸载 canvas、停 rAF，长会话不叠加常驻动画开销；◆ 是卸载后的静态替身。
+- **tool_end 迟到回退**：回合闭环后可能仍有迟到 `tool_execution_end`（SDK 时序），`_flush` 在活动回合找不到 run 态 toolCallId 时倒序扫全部回合回退匹配；仍无匹配则丢弃。
 - **弹层应答成对（uiAnswer + setUiAsk(null)）**：主进程 `handleAnswer` 按 id 在 Promise 表查找，只关弹层不应答会让扩展阻塞到超时兜底（undefined）才继续——`answer()` 封装了这一对操作，勿拆开。
 - **单弹层槽**：`uiAsk` 同时只容一个对话框，新 ask 直接覆盖旧 ask；被覆盖的旧 id 失去应答路径，只能等主进程 timeout 兜底。
 - **切换成功后成套刷新（applySwitch，五步见 AGENTS.md 硬约束 14）**：`setTree([])` 先清后拉——不清会残留旧项目文件树；`setCurrentProject(r.path)` 同步侧栏项目名；标题直接用「会话 短码」兜底格式（`SwitchProjectResult` 不含 name/firstMessage，不重推导）。
 - **项目面板复用 `.ask-mask` 遮罩**：与 AskDialog 同一模态遮罩类（z-index 90，见 AGENTS.md 硬约束 6）；无互斥逻辑，同时打开时按 DOM 序叠加（ProjectPanel 挂载于 AskDialog 之后，遮罩在上）。
 - **最近项目打开时才拉取**：不启动预取、不缓存，每次打开刷新（列表上限 8，代价可忽略）；`listProjects` 失败静默 → 面板退化为仅浏览。
+- **侧栏宽度直写 CSS 变量而非 React state**：拖拽期间每帧只改 `.main` 的 style 属性与 aria 值，零组件渲染；持久化只在 pointerup（拖拽）或按键/复位（立即）——拖动过程不写 localStorage。
+- **热区独立条而非 sidebar 子元素**：结构原因（`overflow: hidden` 裁剪 + 不盖内部滚动条）见「侧栏调宽」；条自身 `z-index` 须高于 sidebar/console 内容，负 margin 伸出的 4px 命中区才不被邻居压住（数值见 AGENTS.md 硬约束 6 层级表）。
+- **键盘调宽补齐可访问性**：WAI-ARIA separator 契约（`role="separator"`/`aria-orientation="vertical"`/`aria-valuenow` 实时同步）+ ←/→（Shift 大步进）/Esc 复位——纯鼠标功能补齐键盘路径（焦点归还未豁免 resizer，见「交互细节」：键盘入口靠 Tab 聚焦）。
 
 ## 不变量、安全边界与失败模式
 
@@ -109,6 +138,10 @@
 - `#rain` 负 z-index 的用途：即使 `#stage` 层叠上下文失效，雨幕也恒在 UI 之下；氛围层均 pointer-events:none，不拦截交互（层级数值见 AGENTS.md 硬约束 6）。
 - 状态机终态恒为 READY：`agent_end` / `agent_settled` / `message_end` 错误 / `applySession` / `reset` 均回 READY；busy = `sessionState !== 'READY'`。
 - 同一 toolCallId 蠕虫只触发一次（`wormedRef`）；`revealedEdits` 单调累积、永不清空（依赖 toolCallId 全局唯一）。
+- 每回合至多一条结算行（`!cur.settle` 守卫）；`activeTurnId` 闭环即置 null；`armed` 被消费后复位。
+- 流式期间历史回合对象引用稳定（`turns[tid]` 不变）、`order` 只在新增回合时换引用——TurnView memo 成立的前提。
+- 侧栏宽度恒在 `[SIDE_MIN, min(SIDE_MAX, round(innerWidth/2))]`（`clampSide` 收敛）；`--side-w` 只设在 `.main` 元素上，未设时 CSS 回退 232px。
+- `applySession`/`reset` 丢弃未 flush 的流式队列（防跨会话污染）；`pushUser` 先同步 drain（OPERATOR 回合落在正确位置）。
 - `expandedTools` 随 `applySession` 清空（`reset` 不清——items 已清空，残留键不渲染、无害）。
 - `uiAsk`/`toasts`/`projectOpen` 不随 `applySession`/`reset` 清空：弹层、toast 与项目面板跨会话切换残留，直到应答/取消/计时器到期或切换流程显式 `setProjectOpen(false)`。
 - `currentProject` 只在 App 启动（`getProject`）与项目切换（`applySwitch`）时更新：会话切换/`applySession`/`reset` 均不改动——它描述工作目录而非会话。
@@ -122,16 +155,19 @@
 - `scanTree`/`listSessions`/`switchSession`/`newSession`/`renameSession`/`deleteSession` 失败：各自 catch → `log('err')`，UI 不崩（空列表占位文案）。
 - 启动恢复失败：静默 catch，停留在"会话就绪"空态。
 - 项目切换失败：`switchProject`/`browseProject` reject（如非法路径）→ `log('err')`、busy 复位、面板保持；`browseProject` 取消 → null → 不切换、面板保持。
-- 快速连续工具：`wormedRef` 去重；Feed 每次 items/状态变化自动滚动到底（用户上翻阅读时位置会被拉回）。
+- 快速连续工具：`wormedRef` 去重；Feed 只依赖末回合对象 + 状态变化自动滚动到底（用户上翻阅读时位置会被拉回）。
+- tool_end 迟到（回合闭环后才到达）：`_flush` 倒序扫全部回合回退匹配，仍无匹配（如 toolCallId 从未入 feed）则丢弃。
+- turn_end 迟到（闭环后才到达）：usage 只进状态栏 `tokenCount`，不回溯进结算行（`addUsage` 只查活动回合）。
 - AudioContext 未解锁：`tone()` 静默 no-op，首次手势后恢复。
 - 目标行不可见（侧栏 `<900px` 隐藏时）：蠕虫落 `.trace` 兜底行。
+- `zion.sidebar-w` 读回非数字（`Number.isFinite` 守卫）忽略、回落默认；越界值经 `clampSide` 收敛到区间；拖拽松手在窗口外——监听挂在 window 上，正常收尾持久化。
 - 本地字体加载失败：styles.css 顶部 `@font-face` 引用的 `assets/fonts/ShareTechMono-Regular.woff2` 缺失/损坏时，按 `--font` 回退链走 ui-monospace/Courier New；字体声明只在 styles.css 一处，组件一律 `var(--font)`。
 
 ## 已知限制与技术债
 
 - 单元测试仅覆盖纯函数层（`deriveSessionTitle`、`toolfmt`，node:test）；组件、事件管线、store 逻辑无测试（含命令面板键盘交互、AskDialog 三形态与 toast 自动消失，smoke 不查 `.palette`/`.ask-dialog`），UI 回归依赖 typecheck + smoke + e2e。
 - AskDialog.tsx 头部注释与实现不完全一致：注释声称的「Esc 取消 / select ↑↓/Enter / confirm danger 强调」实际只有 input 形态的 Esc/Enter 真实存在——select 选项纯鼠标（hover/click，`role="listbox"` 仅是标记），confirm 主按钮为 `.primary`（accent 绿）而非 danger 色；改注释或补实现前先认清现状。
-- 会话历史恢复仅 user/assistant 文本，工具链块 / diff 卡不恢复。
+- 会话历史恢复只重建文本回合（无工具卡 / 结算行，`startedAt=0` 不计时）。
 - conv-head「上下文 12.4k / 128k」、「主控会话 #0047」、状态栏「TLS 1.3」为硬编码装饰，非真实数据。
 - `AgentInfo` 类型保留但 Agent 卡片已移除（侧栏改为会话列表），注释注明供未来 agent 注册表。
 - 协议提供 `steer`/`followUp`，UI 未接线；事件流中 steer 相关事件被默认分支忽略。

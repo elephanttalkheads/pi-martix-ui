@@ -74,11 +74,23 @@ body {
 
 /* ---------- 侧栏 ---------- */
 .sidebar {
-  width: 232px; flex: none;
+  width: var(--side-w, 232px); flex: none;
   background: var(--surface-2);
   border-right: 1px solid var(--border);
   display: flex; flex-direction: column;
   font-size: 13px; overflow: hidden; /* 整栏不滚动：Neo 头像/底部固定，列表区各自滚动 */
+}
+
+/* 拖拽热区：.main 布局内独立条（负 margin 视觉零宽、伸出两侧各 4px），hover 双向箭头；
+   双击复位默认宽；键盘 ←/→ 8px（Shift 32px）、Esc 复位（WAI-ARIA separator）。
+   独立于 sidebar 是因 overflow:hidden 会裁剪伸出边界的子元素，且不能盖住内部滚动条。 */
+.side-resizer {
+  flex: none; width: 8px; margin: 0 -4px;
+  cursor: col-resize; position: relative; z-index: 20; touch-action: none;
+}
+.side-resizer:focus-visible {
+  outline: 1px solid var(--accent-muted); outline-offset: -1px;
+  background: rgba(61, 255, 143, 0.08);
 }
 .core-wrap { flex: none; border-bottom: 1px solid var(--border); padding: 10px 0 6px; position: relative; }
 .core-visual { position: relative; width: 100%; height: 140px; }
