@@ -24,6 +24,7 @@ export default function ProjectPanel() {
   const setProjectOpen = useFeed((s) => s.setProjectOpen);
   const applySession = useFeed((s) => s.applySession);
   const setSessions = useFeed((s) => s.setSessions);
+  const setCurrentProject = useFeed((s) => s.setCurrentProject);
   const setTree = useFeed((s) => s.setTree);
   const log = useFeed((s) => s.log);
   const [projects, setProjects] = useState<ProjectInfo[]>([]);
@@ -43,6 +44,7 @@ export default function ProjectPanel() {
   const applySwitch = async (r: Awaited<ReturnType<typeof window.zion.switchProject>>) => {
     applySession(r.id, `会话 ${r.id.slice(0, 4)}`, r.items);
     setTree([]);
+    setCurrentProject(r.path);
     const sessions = await window.zion.listSessions().catch(() => []);
     setSessions(sessions);
     const tree = await window.zion.scanTree().catch(() => []);

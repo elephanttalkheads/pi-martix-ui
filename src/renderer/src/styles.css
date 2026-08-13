@@ -78,7 +78,7 @@ body {
   background: var(--surface-2);
   border-right: 1px solid var(--border);
   display: flex; flex-direction: column;
-  font-size: 13px; overflow-y: auto;
+  font-size: 13px; overflow: hidden; /* 整栏不滚动：Neo 头像/底部固定，列表区各自滚动 */
 }
 .core-wrap { flex: none; border-bottom: 1px solid var(--border); padding: 10px 0 6px; position: relative; }
 .core-visual { position: relative; width: 100%; height: 140px; }
@@ -118,7 +118,9 @@ body {
 }
 .core-label b { color: var(--text-primary); font-weight: normal; }
 
-.side-section { padding: 12px 12px 4px; }
+.side-section { padding: 12px 12px 4px; min-height: 0; display: flex; flex-direction: column; }
+.side-section.sessions { flex: 2 1 0; }
+.side-section.projects { flex: 3 1 0; }
 .side-section h3 {
   color: var(--text-tertiary); font-size: 11px; font-weight: normal;
   text-transform: uppercase; letter-spacing: 0.18em;
@@ -128,7 +130,7 @@ body {
    每卡只露头部（标题 + 2 行摘要），下部被下一张卡以负 margin 盖住（--h = 折叠态完整高度，
    覆盖量 = h - 80px ≤ 4px（含旋转偏移 ≤3px，共 ≤7px < padding 10px），标题必不被盖）；meta 折叠态零占位；
    交错旋转（奇 -1.2° / 偶 +1.1°），hover 拉直 + z 提升 → 完整内容可见 */
-.deck { padding: 10px 10px 4px; position: relative; }
+.deck { padding: 10px 10px 4px; position: relative; flex: 1; min-height: 0; overflow-y: auto; }
 .scard {
   position: relative;
   background: rgba(2, 18, 9, 0.97);
@@ -174,7 +176,7 @@ body {
 .deck .new-btn:disabled { opacity: 0.35; cursor: default; }
 
 /* ---------- 文件树（纯结构，无脉冲装饰） ---------- */
-#file-tree { font-size: 13px; padding-bottom: 6px; }
+#file-tree { font-size: 13px; padding-bottom: 6px; flex: 1; min-height: 0; overflow-y: auto; }
 .ft-row {
   display: flex; align-items: center; gap: 7px;
   padding: 3px 8px 3px 2px;
@@ -194,11 +196,23 @@ body {
 .ft-row.breached { color: var(--bright); background: rgba(61, 255, 143, 0.14); transition: none; }
 
 .side-foot {
-  margin-top: auto; padding: 10px 12px 12px;
+  flex: none; margin-top: auto; padding: 10px 12px 12px;
   font-size: 12px; color: var(--text-tertiary); line-height: 1.8;
   border-top: 1px solid var(--border);
 }
 .side-foot .ok { color: var(--accent-muted); }
+
+/* Project 标题行：真实项目名 + 靠右的切换项目按钮 */
+.side-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.side-head h3 { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.proj-btn {
+  flex: none; display: inline-flex; align-items: center; gap: 4px;
+  background: none; border: 1px solid var(--border); color: var(--text-tertiary); cursor: pointer;
+  font-family: var(--font); font-size: 10px; letter-spacing: 0.08em; padding: 3px 8px;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+.proj-btn:hover { color: var(--text-primary); border-color: rgba(20, 184, 80, 0.5); background: rgba(61, 255, 143, 0.06); }
+.proj-btn .proj-btn-ico { color: var(--accent-muted); font-size: 11px; }
 
 /* ---------- 对话区 ---------- */
 .console { flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--surface); }

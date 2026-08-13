@@ -23,7 +23,7 @@ npm run e2e           # 构建 + 真实 prompt E2E（deepseek → 事件流 → 
 npm run dist           # 打包 NSIS + portable → dist/
 ```
 
-会话工作目录（agent 实际操作的目录）：`D:\zion-workspace`（项目选择 UI 尚未实现）。
+会话工作目录（agent 实际操作的目录）：`D:\zion-workspace`（项目选择 UI 已实现：侧栏「⇄ 切换项目」/ 启动无最近项目自动打开面板，切换 = 会话上下文重建，见 docs/adr/0003）。
 
 ## 必读架构
 
@@ -83,7 +83,7 @@ pi-matrix-demo-handoff.md demo → 正式 UI 交接文档：v3 模块清单、mo
 - ✅ preload/vite 两个坑已修（commit a9c8859）
 - ✅ **TypeScript 重构完成**：renderer 全 TS（strict）+ shared/protocol.ts 类型契约 + main/preload JSDoc 类型 + typecheck/smoke/e2e 回归脚本（typecheck 双配置通过；smoke + 真实 prompt E2E 复验通过）
 - ✅ ui-demo 升级到 index-v3.html：深度分层镜像数字雨 + bloom、CRT 曲率/抖动/开机亮线、WebAudio bleep 音效、蠕虫定位动画（releaseWorm）、diff 修改卡（addDiffCard）、细线条几何 trace 卡片
-- ⬜ 未做：项目选择 UI、工具调用行详情展开（diff 卡已部分覆盖）、会话历史/恢复、扩展 UI 桥、项目信任处理、离线字体、Gitee 备份镜像配置、打包实测（dist）、main 进程 TS 构建管线、v3 残余氛围装饰（3D 神经核心/频谱/视差）
+- ⬜ 未做：工具调用行详情展开（diff 卡已部分覆盖）、会话历史/恢复、扩展 UI 桥、项目信任处理、离线字体、Gitee 备份镜像配置、打包实测（dist）、main 进程 TS 构建管线、v3 残余氛围装饰（3D 神经核心/频谱/视差）
 
 ## Git 约定
 

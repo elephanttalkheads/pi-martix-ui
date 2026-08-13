@@ -188,6 +188,9 @@ export default function App() {
         const title = deriveSessionTitle(info?.name, info?.firstMessage, id);
         applySession(id, title, items);
         useFeed.getState().setSessions(sessions);
+        // 当前项目（侧栏 Project 标题）
+        const proj = await window.zion.getProject().catch(() => null);
+        if (alive && proj) useFeed.getState().setCurrentProject(proj.path);
       })
       .catch(() => {});
     return () => {

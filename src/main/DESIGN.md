@@ -8,7 +8,7 @@
 - 命令面板数据源：`zion:list-commands` 聚合本机全部 skills（用户/共享/项目/扩展包/settings.skills）与命令（内置 + 扩展白名单），`skillscan.mjs` 实现
 - 渲染层零 Node 访问：preload 在 sandbox 下暴露 `window.zion` 白名单桥（安全配置事实归 `src/shared/DESIGN.md` 安全边界）
 - 扩展 UI 桥：`uibridge.mjs` 实现 SDK `ExtensionUIContext` 的 dialog（select/confirm/input）与 notify——请求挂 Promise 表 → 派发 renderer（AskDialog/ToastHost 呈现）→ `zion:ui-answer` 回传；经 `session.bindExtensions({ uiContext })` 注入（官方路径，`CreateAgentSessionOptions` 无 uiContext 字段）。绑定后 SDK `hasUI()` 为 true，扩展对话框真实弹窗、不再 headless 静默落空（项目信任询问未接入，见「已知限制与技术债」）
-- 最近项目切换与持久化：`zion:list-projects` / `zion:switch-project` / `zion:browse-project`（原生目录选择器）支撑工作目录切换；最近清单存 `~/.pi/agent/zion-projects.json`（`{ path, lastUsed }`，上限 8，最近优先去重）
+- 最近项目切换与持久化：`zion:list-projects` / `zion:get-project` / `zion:switch-project` / `zion:browse-project`（原生目录选择器）支撑工作目录选择与当前项目展示；最近清单存 `~/.pi/agent/zion-projects.json`（`{ path, lastUsed }`，上限 8，最近优先去重）
 
 **非目标 / 边界**
 - 不做 UI：渲染层在 `src/renderer`，只经 `window.zion` 与 `src/shared/protocol.ts` 契约交互
@@ -27,7 +27,7 @@
 src/renderer (React/TS)  ⇄  window.zion（preload.cjs, CJS, sandbox）
         │ 契约：src/shared/protocol.ts（ZionAPI / AgentSessionEvent / UiAsk / UiNotify）
         ▼
-main.mjs：ipcMain.handle ×17 + agent:event / zion:ui-ask / zion:ui-notify 转发
+main.mjs：ipcMain.handle ×18 + agent:event / zion:ui-ask / zion:ui-notify 转发
         │ sessions: Map<sessionId, AgentSession>；currentSession 指针
         │ ├─ skillscan.mjs：collectCommands（skills 扫描 + 命令清单，纯 Node）
         │ └─ uibridge.mjs：createUiBridge（dialog Promise 表 + notify，纯 Node）
@@ -68,6 +68,7 @@ IPC 通道全集与返回形状见 `src/shared/DESIGN.md` 接口节（本模块�
 - `zion:switch-session` / `zion:new-session` / `zion:get-current` 的 `{ id, items }` 中 `id` 来自 `sessionManager.getSessionId()`
 - `zion:list-sessions` 映射 `SessionManager.list` 结果：`firstMessage` 截 80 字符、`modified` 转 ISO、按 modified 倒序
 - `zion:list-projects` → `listProjects()`：读 `~/.pi/agent/zion-projects.json`，缺失/损坏 → `[]`；条目过滤非 `string` 的 `path` 后截 `PROJECTS_MAX`（8）条
+- `zion:get-project` → `{ path: WORKSPACE_DIR }`：只读查询当前工作目录，不创建/切换会话、不写最近清单（侧栏 Project 标题的数据源）
 - `zion:switch-project`：仅校验 `typeof dir === 'string' && dir.trim()`（否则抛 `'invalid project path'`）；目录存在性不校验、无路径白名单——不存在的目录会被 `ensureCurrentSession` 的 `mkdirSync recursive` 自建
 - `zion:browse-project`：`dialog.showOpenDialog`（`openDirectory`）取消/空选 → `null`；选中 → `switchProject`；`win` 为 null（未建/已销毁）时走无父窗重载
 - `switchProject` 同目录快速路径：不改 `WORKSPACE_DIR`、不写最近清单、不 dispose；跨目录切换写最近清单（写失败仅 warn，不阻断）
@@ -97,7 +98,7 @@ IPC 通道全集与返回形状见 `src/shared/DESIGN.md` 接口节（本模块�
 - **45s init 超时**：SDK 的 ModelRuntime 目录刷新可能挂（root AGENTS.md「关键 SDK 行为」），超时保护避免 UI 永久等待；失败会话不入 Map，可重试
 - **prompt 不抛错 → IPC 返回 stopReason**：主进程不维护回合状态机，错误检测责任交给渲染层（shared 契约明示）
 - **preload CJS + JSDoc 类型**：`sandbox: true` 强制 CJS 决定文件形态；类型经 `@typedef import('../shared/protocol.ts')` + checkJs 校验，契约单一事实源不落地为运行时模块
-- **WORKSPACE_DIR 可变 + 切换即整体重建**（ADR-0003）：项目选择 UI 落地后不再固定工作区——跨目录切换 dispose 全部旧会话（`wireSession` 订阅随实例销毁，事件不会串台）+ 清空 Map/指针，保证新项目上下文干净；同目录快速路径避免无谓重建。`SessionManager.open(info.path, undefined, WORKSPACE_DIR)` 的第三参 cwdOverride 把会话 cwd 固定到当前工作区
+- **WORKSPACE_DIR 可变 + 切换即整体重建**（ADR-0003）：项目选择 UI 已落地（侧栏 Project 标题 + 切换按钮 + ProjectPanel），工作区不再固定——跨目录切换 dispose 全部旧会话（`wireSession` 订阅随实例销毁，事件不会串台）+ 清空 Map/指针，保证新项目上下文干净；同目录快速路径避免无谓重建。`SessionManager.open(info.path, undefined, WORKSPACE_DIR)` 的第三参 cwdOverride 把会话 cwd 固定到当前工作区
 - **最近项目清单 = 本地 JSON**：`~/.pi/agent/zion-projects.json`（`{ path, lastUsed }[]`，上限 8，最近优先、去重置顶、损坏/缺失视为空列表）——无独立配置库的轻量持久化；写失败仅 warn，不阻断切换
 - **browse 走主进程原生 dialog**：目录选择器在 main 侧（`dialog.showOpenDialog`），渲染层不实现目录浏览器、只消费结果；`win` 为 null（未建/已销毁）时无父窗重载兜底
 - **历史只取 user/assistant 文本**：恢复 feed 的最小契约（`SessionHistoryItem` 无工具细节字段），工具消息与空文本排除
@@ -151,7 +152,7 @@ IPC 通道全集与返回形状见 `src/shared/DESIGN.md` 接口节（本模块�
 
 - 扩展 UI 桥仅覆盖 dialog（select/confirm/input）与 notify：`ExtensionUIContext` 其余方法为 TUI no-op 桩（ZION 无终端 UI），依赖终端能力的扩展功能（setWidget 组件工厂、custom 覆盖层、编辑器集成、主题系统）不可用，`custom()` 抛错
 - 项目信任未接入：main.mjs 未传 `projectTrustContextFactory` / `resourceLoaderReloadOptions`，SDK 的 `resolveProjectTrusted` 不会触发，项目级资源（`.pi` 设置/扩展等）按未信任处理；ZION 未提供信任管理界面（root AGENTS.md「未做」清单；main.mjs 顶部注释的「双注入」说法与代码不符，仅注入 uiContext）
-- 最近项目清单无管理 UI：无删除/固定条目能力，仅靠上限 8 截断自动淘汰；当前项目在面板中无标记（有最近项目时「取消」留在当前项目）
+- 最近项目清单无管理 UI：无删除/固定条目能力，仅靠上限 8 截断自动淘汰；面板卡片列表不标注当前项目（当前项目名常驻侧栏 Project 标题，面板「取消」留在当前项目）
 - main 仍是 JS：`build:main` 只做 typecheck 门禁 + 复制（源码即产物），无 tsc emit；通道名无运行时单一来源的问题仍在——未来迁 TS 时把 build:main 复制步骤替换为 tsc emit（dist-main 布局不变，见 `scripts/build-main.mjs` 注释）
 - abort/steer/followUp 为 fire-and-forget：`true` 不代表 agent 已 idle；若 UI 需要精确状态，后续应 await 或改用 SDK `waitForIdle`
 - 命令清单是静态快照：`BUILTIN_COMMANDS` 随 pi SDK 升级可能漂移（需人工核对）；新增扩展命令需手工追加 `EXTENSION_COMMANDS`，运行时注册的命令无法被发现

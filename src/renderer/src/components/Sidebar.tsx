@@ -64,6 +64,7 @@ export default function Sidebar({ onSelectFile }: { onSelectFile: (path: string)
   const sessionState = useFeed((s) => s.sessionState);
   const sessions = useFeed((s) => s.sessions);
   const currentSessionId = useFeed((s) => s.currentSessionId);
+  const currentProject = useFeed((s) => s.currentProject);
   const setSessions = useFeed((s) => s.setSessions);
   const setSessionTitle = useFeed((s) => s.setSessionTitle);
   const applySession = useFeed((s) => s.applySession);
@@ -193,7 +194,7 @@ export default function Sidebar({ onSelectFile }: { onSelectFile: (path: string)
         </div>
       </div>
 
-      <div className="side-section">
+      <div className="side-section sessions">
         <h3>会话</h3>
         <div className="deck" ref={deckRef}>
           {sessions.map((s) => {
@@ -278,8 +279,13 @@ export default function Sidebar({ onSelectFile }: { onSelectFile: (path: string)
         </div>
       </div>
 
-      <div className="side-section">
-        <h3>Project</h3>
+      <div className="side-section projects">
+        <div className="side-head">
+          <h3 title={currentProject ?? undefined}>{currentProject ? currentProject.split(/[\\/]/).pop() : 'Project'}</h3>
+          <button className="proj-btn" onClick={() => useFeed.getState().setProjectOpen(true)}>
+            <span className="proj-btn-ico">⇄</span> 切换项目
+          </button>
+        </div>
         <div id="file-tree">
           {tree.length === 0 ? (
             <div className="ft-row" style={{ color: 'var(--text-tertiary)' }}>
@@ -295,12 +301,7 @@ export default function Sidebar({ onSelectFile }: { onSelectFile: (path: string)
         <div>
           <span className="ok">● 已连接 zion 主网</span>
         </div>
-        <div className="foot-row">
-          <span>workspace: zion-workspace</span>
-          <button className="st-btn" onClick={() => useFeed.getState().setProjectOpen(true)}>
-            切换项目
-          </button>
-        </div>
+        <div>workspace: zion-workspace</div>
       </div>
     </aside>
   );

@@ -9,10 +9,10 @@ React 18 + TypeScript(strict) 渲染层：v4 四区 UI（标题栏 / 侧栏 / �
 - `src/renderer/index.html` — 唯一 HTML 入口：`#root` + `/src/main.tsx`（模块脚本）
 - `src/renderer/src/main.tsx` — ReactDOM root（StrictMode），引入 `styles.css`
 - `src/renderer/src/App.tsx` — 四区布局 + `useAgentEvents`（事件→store 单一订阅点 + 扩展 UI 订阅：`onUiAsk`→`setUiAsk`、`onUiNotify`→`pushToast`+3s 自动消失）+ 启动会话恢复 + 点击焦点归还 + 挂载 `AskDialog`/`ToastHost`/`ProjectPanel`
-- `src/renderer/src/store.ts` — zustand store（`useFeed`）+ 模块级 `fx` 对象 + 纯函数（`normPath`/`matchTreeRow`/`openAncestors`/`parseEditFromTool`/`upgradeEditFromResult`/`deriveSessionTitle`（来自 `./title`））；状态含 `revealedEdits`、`expandedTools`（工具链块展开态，`toggleToolExpand` 切换）、`sessionTitle`（当前会话显示标题，重命名当前会话时经 `setSessionTitle` 就地更新）、`uiAsk`（扩展对话框单槽，`setUiAsk` 设值）/`toasts`（扩展通知队列，`pushToast`/`dismissToast`）/`projectOpen`（项目选择面板开合，`setProjectOpen`）
+- `src/renderer/src/store.ts` — zustand store（`useFeed`）+ 模块级 `fx` 对象 + 纯函数（`normPath`/`matchTreeRow`/`openAncestors`/`parseEditFromTool`/`upgradeEditFromResult`/`deriveSessionTitle`（来自 `./title`））；状态含 `revealedEdits`、`expandedTools`（工具链块展开态，`toggleToolExpand` 切换）、`sessionTitle`（当前会话显示标题，重命名当前会话时经 `setSessionTitle` 就地更新）、`uiAsk`（扩展对话框单槽，`setUiAsk` 设值）/`toasts`（扩展通知队列，`pushToast`/`dismissToast`）/`projectOpen`（项目选择面板开合，`setProjectOpen`）/`currentProject`（当前项目工作目录，App 启动经 `getProject` 填充、`applySwitch` 更新，`setCurrentProject` 设值）
 - `src/renderer/src/title.ts` — 会话标题推导纯函数 `deriveSessionTitle`（无依赖模块；store.ts re-export；node:test 直测）
 - `src/renderer/src/toolfmt.ts` — 工具参数格式化纯函数 `formatToolArgs`/`toolExpandTitle`（无依赖模块；Feed 工具链块展开区用；node:test 直测）
-- `src/renderer/src/components/` — `RainCanvas` / `SignalCanvas`(releaseWorm) / `NeoAvatar` / `Sidebar`(会话堆叠卡+悬停操作：✎ 重命名 / ✕ 两段删除确认+文件树+底部「切换项目」) / `LogDrawer` / `Feed`(工具链块 step 行可展开) / `DiffCard` / `AskDialog`(扩展对话框三形态 confirm/input/select + `ToastHost` toast 队列) / `ProjectPanel`(项目选择：最近项目卡片 + 「浏览其他目录…」，遮罩复用 `.ask-mask`) / `InputBar`(快捷指令+命令面板：`/` 弹出 skills/命令 listbox，面板 state 全在组件本地) / `SoundFx`(SND + useSoundFx)
+- `src/renderer/src/components/` — `RainCanvas` / `SignalCanvas`(releaseWorm) / `NeoAvatar` / `Sidebar`(两分区：`.side-section.sessions` 会话堆叠卡（悬停操作：✎ 重命名 / ✕ 两段删除确认）+ `.side-section.projects`（`.side-head` 标题行 = 项目名 + 「⇄ 切换项目」按钮 + 文件树）；`.core-wrap`/`.side-foot` 固定，`.deck`/`#file-tree` 各自内部滚动) / `LogDrawer` / `Feed`(工具链块 step 行可展开) / `DiffCard` / `AskDialog`(扩展对话框三形态 confirm/input/select + `ToastHost` toast 队列) / `ProjectPanel`(项目选择：最近项目卡片 + 「浏览其他目录…」，遮罩复用 `.ask-mask`) / `InputBar`(快捷指令+命令面板：`/` 弹出 skills/命令 listbox，面板 state 全在组件本地) / `SoundFx`(SND + useSoundFx)
 - `src/renderer/src/env.d.ts` — `window.zion` 全局声明（type-only import `ZionAPI`）
 - `src/renderer/src/styles.css` — 全部设计令牌与布局数值（令牌数值照 `ui-demo/index-v4.html`，勿改；顶部本地 `@font-face` 为刻意偏离，见 [DESIGN.md](DESIGN.md)「设计决策与权衡」）
 - `src/shared/protocol.ts` — IPC 契约类型（type-only，构建期擦除，无运行时依赖）
@@ -44,6 +44,6 @@ node --test scripts/derive-title.test.mjs scripts/toolfmt.test.mjs # 纯函数�
 11. **`/clear` 仅本地清视图**（store.reset），不触碰主进程会话；其余输入（快捷按钮、命令面板插入文本）一律原样走 `window.zion.prompt`——渲染层不解释任何命令执行语义（归宿主 TUI 层；插入模板见 [DESIGN.md](DESIGN.md)「架构与主要流程」命令面板）。
 12. **类型纪律**：`shared/protocol.ts` 只做 `import type`；运行时能力一律经 `window.zion` 白名单，渲染进程零 Node 访问。
 13. **弹层应答必须成对**：AskDialog 的 `answer()` 同时执行 `window.zion.uiAnswer(ask.id, result)` 与 `setUiAsk(null)`——只清 state 不应答，主进程 Promise 表条目会挂到超时兜底才继续（机制见 [DESIGN.md](DESIGN.md)「设计决策与权衡」）。
-14. **项目切换只经 ProjectPanel 的 `applySwitch` 成套路径**：成功后按 [DESIGN.md](DESIGN.md)「架构与主要流程」项目切换管线四步（feed 重建 → 树先清后拉 → 侧栏重拉 → 关面板）执行，失败只 `log('err')` 且面板保持打开；不要在别处单独调 `switchProject`。
+14. **项目切换只经 ProjectPanel 的 `applySwitch` 成套路径**：成功后按 [DESIGN.md](DESIGN.md)「架构与主要流程」项目切换管线五步（feed 重建 → 树先清后拉 → `setCurrentProject` 更新项目名 → 侧栏重拉 → 关面板）执行，失败只 `log('err')` 且面板保持打开；不要在别处单独调 `switchProject`。
 
 ## 人工补充

@@ -294,6 +294,7 @@ async function switchProject(dir) {
 
 /** 项目选择 IPC */
 ipcMain.handle('zion:list-sessions', () => listSessionInfos());
+ipcMain.handle('zion:get-project', () => ({ path: WORKSPACE_DIR }));
 ipcMain.handle('zion:list-projects', () => listProjects());
 ipcMain.handle('zion:browse-project', async () => {
   /** @type {Electron.OpenDialogOptions} */

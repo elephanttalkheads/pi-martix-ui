@@ -12,7 +12,7 @@
 
 **布局**（App.tsx）：氛围层（`#rain` / `#signal` / `.scanlines`，fixed）与 `#stage`（z-index 5，四区）同级。
 - 区1 标题栏 `.titlebar`（36px）：品牌 + 时钟
-- 区2 侧栏 `.sidebar`（232px）：Neo 头像 `.neo-avatar` + 会话堆叠卡 `.deck` + 文件树 `#file-tree` + 底部信息
+- 区2 侧栏 `.sidebar`（232px，整栏不滚动）：`.core-wrap`（Neo 头像，固定）→ `.side-section.sessions`（flex 2：会话堆叠卡 `.deck` 内部滚动）→ `.side-section.projects`（flex 3：`.side-head` 标题行 = 项目 basename（全路径在 title 属性）+「⇄ 切换项目」按钮 + 文件树 `#file-tree` 内部滚动）→ `.side-foot`（固定，workspace 文案）
 - 区3 对话区 `.console`：`.conv-head`（状态芯片）+ `#feed` + `.inputbar`
 - 区4 `.term` 日志抽屉（默认 height:0，展开 150px）+ `.statusbar`（26px，SND 开关 / 日志按钮）
 
@@ -27,13 +27,13 @@
 
 **FX 派生**：`setSessionState` 同步 `Object.assign` 到模块级 `fx` 对象（READY `{speed:1, energy:0.3}` / 忙碌 `{speed:2.2, energy:0.85}`）；仅 RainCanvas（`90/fx.speed` 帧节流）直接读取，不触发 React 渲染。侧栏顶部为 Vite import 的透明 Neo 双帧 PNG（120×120，容器无底板/描边）；张嘴仅由蠕虫释放驱动（store `wormActive` 计数 > 0，`releaseWorm` 开始 +1、done -1），CSS 以 300ms `steps(1,end)` 在闭嘴/张嘴间切换，释放瞬间附带 700ms 缩放脉冲，reduced-motion 下停在静态张嘴帧且不脉冲。
 
-**启动恢复**（App useEffect）：`getCurrentSession` → `listSessions` → 标题经 `deriveSessionTitle`（title.ts 纯函数，规则见「设计决策与权衡」）→ `applySession(id, title, items)` 以历史重建 feed（仅 user/assistant 文本，无工具卡）+ `setSessions`。
+**启动恢复**（App useEffect）：`getCurrentSession` → `listSessions` → 标题经 `deriveSessionTitle`（title.ts 纯函数，规则见「设计决策与权衡」）→ `applySession(id, title, items)` 以历史重建 feed（仅 user/assistant 文本，无工具卡）+ `setSessions` + `getProject` → `setCurrentProject`（侧栏 Project 标题）。
 
 **会话切换/新建/重命名/删除**（Sidebar）：`selectSession` → `switchSession`（主进程懒创建实例，可能秒级；`switching` 锁防并发）→ `applySession`；`newSession` 同理；失败走 `log('err')`。重命名：`startRename` 以当前显示标题为草稿，`.s-title-edit` 内联输入 Enter/blur 提交 `commitRename`、Esc 取消；`renameSession` → `setSessions`，当前会话另 `setSessionTitle(name)`（只改标题，不重置 feed）。删除：`askDelete` 两段确认——首击进入「确认?」态（2.5s 自动复位），再击 `doDelete` → `deleteSession`（软删，移入 `.trash` 可恢复）→ `setSessions`；删除的是当前会话时主进程指针已落最近会话，`getCurrentSession` 重拉 + `applySession`（标题取新列表匹配，兜底短码）。点文件树行 → `pushUser` + `window.zion.prompt('读取 <path>')`（真实 prompt，无假动画）。
 
-**项目切换管线**（ProjectPanel，App 顶层 fragment 挂载；store `projectOpen` 控制开合，侧栏底部「切换项目」按钮打开）：
+**项目切换管线**（ProjectPanel，App 顶层 fragment 挂载；store `projectOpen` 控制开合，侧栏 `.side-head` 的「⇄ 切换项目」按钮打开）：
 - 打开时 `window.zion.listProjects()` 拉最近项目（effect 按 `[open]` 触发，`alive` 活期守卫；失败静默 → 空列表，仅「浏览其他目录…」可用）。
-- `pick(path)` / `browse()`：`busy` 锁防并发 → `switchProject(path)` 或 `browseProject()`（主进程 `dialog.showOpenDialog` 原生目录选择，取消返回 null 不切换）→ 成功走 `applySwitch`：`applySession(r.id, '会话 ' + r.id.slice(0, 4), r.items)` 重建 feed（状态机回 READY）→ `setTree([])` → 重拉 `listSessions`/`scanTree` 刷新会话卡与文件树 → `log('ok', '[PRJ] 已切换项目 → ' + r.path)` → `setProjectOpen(false)`。
+- `pick(path)` / `browse()`：`busy` 锁防并发 → `switchProject(path)` 或 `browseProject()`（主进程 `dialog.showOpenDialog` 原生目录选择，取消返回 null 不切换）→ 成功走 `applySwitch`：`applySession(r.id, '会话 ' + r.id.slice(0, 4), r.items)` 重建 feed（状态机回 READY）→ `setTree([])` → `setCurrentProject(r.path)`（侧栏 Project 标题同步）→ 重拉 `listSessions`/`scanTree` 刷新会话卡与文件树 → `log('ok', '[PRJ] 已切换项目 → ' + r.path)` → `setProjectOpen(false)`。
 - 失败：`log('err', '[PRJ] …')`，busy 复位，面板保持打开。
 - 关闭条件：`projects.length > 0` 时遮罩 mousedown（`target === currentTarget`）与「取消」按钮可关；无最近项目时必须完成一次选择。
 - 主进程切换语义（`zion:switch-project`，main.mjs）：同目录快速路径（仅刷新会话指针）；异目录 → 全部旧会话 `dispose()` + sessions Map 清空 + 指针重置 + 新目录 `continueRecent`/新建 + `saveProject`（`~/.pi/agent/zion-projects.json`，`{path, lastUsed}` 上限 8、最近优先去重）。
@@ -69,7 +69,7 @@
 
 ## 接口与依赖
 
-**对外消费**（`window.zion`，ZionAPI，env.d.ts 声明）：`ping` / `prompt`（从不抛错，resolve 为 stopReason）/ `abort` / `steer` / `followUp` / `scanTree` / `listCommands`（命令面板数据，`CommandItem[]`）/ `listSessions` / `getCurrentSession` / `switchSession` / `newSession` / `listProjects`（最近项目 `ProjectInfo[]`）/ `browseProject`（原生目录选择，取消返回 null）/ `switchProject`（切换工作目录+会话上下文，返回 `SwitchProjectResult`{path, id, items}）/ `uiAnswer`（扩展对话框应答，取消传 undefined）/ `onUiAsk` / `onUiNotify`（订阅扩展对话框与通知，返回退订函数）/ `renameSession` / `deleteSession`（rename/delete 均返回刷新后的完整会话列表）/ `onAgentEvent`（返回退订函数）。
+**对外消费**（`window.zion`，ZionAPI，env.d.ts 声明）：`ping` / `prompt`（从不抛错，resolve 为 stopReason）/ `abort` / `steer` / `followUp` / `scanTree` / `listCommands`（命令面板数据，`CommandItem[]`）/ `listSessions` / `getCurrentSession` / `switchSession` / `newSession` / `listProjects`（最近项目 `ProjectInfo[]`）/ `getProject`（当前项目工作目录，`{ path: string }`）/ `browseProject`（原生目录选择，取消返回 null）/ `switchProject`（切换工作目录+会话上下文，返回 `SwitchProjectResult`{path, id, items}）/ `uiAnswer`（扩展对话框应答，取消传 undefined）/ `onUiAsk` / `onUiNotify`（订阅扩展对话框与通知，返回退订函数）/ `renameSession` / `deleteSession`（rename/delete 均返回刷新后的完整会话列表）/ `onAgentEvent`（返回退订函数）。
 
 **对外不提供**：无公共导出——本模块是终端 UI。
 
@@ -86,6 +86,7 @@
 - **tokenCount 近似**：delta 字符数 ×2，非真实 token；`applySession`/`reset` 归零。
 - **标题推导收敛为纯函数**（`title.ts` → store re-export 的 `deriveSessionTitle`，App 启动恢复与 Sidebar 会话卡共用）：两处原为各自内联 `slice(0,22)` 截断且行为不一致（App 不补省略号、不清引号），现统一为 name → firstMessage 智能摘要 → `会话 <id 前 4 位>` 兜底。摘要规则：取首行 → 剥含路径/命令特征的内嵌引号对（消除 `为"D:\\...\\..."` 残尾）与成对包裹引号 → 去前导符号（`- # > * · / \`）→ 22 字符截断 + '…'。改规则只动 `title.ts`（node:test 覆盖）。
 - **会话堆叠卡 `--h` 测量**（Sidebar effect，deps `[sessions, currentSessionId]`）：每张 `.scard` 置 `--h = scrollHeight + 2`；CSS `margin-bottom: calc(80px - var(--h, 140px))` 使每卡恒定露出 80px 头部（标题 + 2 行摘要），hover 拉直旋转（`rotate(0) translateY(-4px)`）+ 展开摘要/meta。注意：Sidebar.tsx 注释"露出区 88px"与 CSS 实际 80px 不一致（注释过时，行为以 CSS 为准）。
+- **侧栏分区滚动**（styles.css 注释明示）：`.sidebar` 整栏 `overflow: hidden`，`.core-wrap`/`.side-foot` `flex: none` 固定，会话/项目两区 flex 分割、`.deck`/`#file-tree` 各自 `overflow-y: auto`——列表过长只滚列表区，项目标题行与底部 workspace 行始终可见。
 - **`setSessionTitle` 与 `applySession` 分工**：改名当前会话只走 `setSessionTitle`（仅更新 `sessionTitle`，feed/状态机/token 全不动）——`applySession` 会重建 feed，误用会把正在进行的对话内容冲掉。
 - **删除是软删除 + 两段确认**：`deleteSession` 为软删（主进程语义，UI 只展示 log），侧栏用「首击确认? + 2.5s 自动复位」防误触；删除当前会话后主进程指针自动落回最近会话，渲染层不自行猜 id，`getCurrentSession` 重拉。
 - **日志前端自收集**：`store.logs` 上限 120 行（LOG_MAX），`role="log"`，收起时 `aria-hidden`。
@@ -96,7 +97,7 @@
 - **本地字体替代 Google Fonts**：styles.css 顶部 `@font-face` 引入 `assets/fonts/ShareTechMono-Regular.woff2`（latin 子集 13.5KB，来源 @fontsource/share-tech-mono，font-display: swap），替代 demo（index-v4.html）的 Google Fonts `@import`——离线/墙内可用，「离线字体」未做项闭环；`--font` 回退链不变，latin 子集无 CJK，中文文案走系统字体回退。
 - **弹层应答成对（uiAnswer + setUiAsk(null)）**：主进程 `handleAnswer` 按 id 在 Promise 表查找，只关弹层不应答会让扩展阻塞到超时兜底（undefined）才继续——`answer()` 封装了这一对操作，勿拆开。
 - **单弹层槽**：`uiAsk` 同时只容一个对话框，新 ask 直接覆盖旧 ask；被覆盖的旧 id 失去应答路径，只能等主进程 timeout 兜底。
-- **切换成功后成套刷新（applySwitch，四步见 AGENTS.md 硬约束 14）**：`setTree([])` 先清后拉——不清会残留旧项目文件树；标题直接用「会话 短码」兜底格式（`SwitchProjectResult` 不含 name/firstMessage，不重推导）。
+- **切换成功后成套刷新（applySwitch，五步见 AGENTS.md 硬约束 14）**：`setTree([])` 先清后拉——不清会残留旧项目文件树；`setCurrentProject(r.path)` 同步侧栏项目名；标题直接用「会话 短码」兜底格式（`SwitchProjectResult` 不含 name/firstMessage，不重推导）。
 - **项目面板复用 `.ask-mask` 遮罩**：与 AskDialog 同一模态遮罩类（z-index 90，见 AGENTS.md 硬约束 6）；无互斥逻辑，同时打开时按 DOM 序叠加（ProjectPanel 挂载于 AskDialog 之后，遮罩在上）。
 - **最近项目打开时才拉取**：不启动预取、不缓存，每次打开刷新（列表上限 8，代价可忽略）；`listProjects` 失败静默 → 面板退化为仅浏览。
 
@@ -108,6 +109,7 @@
 - 同一 toolCallId 蠕虫只触发一次（`wormedRef`）；`revealedEdits` 单调累积、永不清空（依赖 toolCallId 全局唯一）。
 - `expandedTools` 随 `applySession` 清空（`reset` 不清——items 已清空，残留键不渲染、无害）。
 - `uiAsk`/`toasts`/`projectOpen` 不随 `applySession`/`reset` 清空：弹层、toast 与项目面板跨会话切换残留，直到应答/取消/计时器到期或切换流程显式 `setProjectOpen(false)`。
+- `currentProject` 只在 App 启动（`getProject`）与项目切换（`applySwitch`）时更新：会话切换/`applySession`/`reset` 均不改动——它描述工作目录而非会话。
 - REDUCED 分支必须在动画路径早期返回且 done 仍执行（蠕虫直接命中）。
 - 渲染进程零 Node 访问：所有数据经 ZionAPI 白名单。
 
@@ -133,7 +135,7 @@
 - 协议提供 `steer`/`followUp`，UI 未接线；事件流中 steer 相关事件被默认分支忽略。
 - 命令面板数据仅启动预取一次（`listCommands`），运行中新增/修改 skills 或命令不刷新，需重启应用。
 - 「启动无最近项目自动打开项目选择面板」未接线：`projectOpen` 初始 false，App 启动仅 `getCurrentSession` 恢复会话，面板目前只有侧栏「切换项目」入口（ADR-0003 决策 4 与 CONTEXT.md「项目」词条声称的启动自动打开尚未实现）。
-- Sidebar 底部 `workspace: zion-workspace` 为硬编码文案，切换项目后不随 `WORKSPACE_DIR` 更新（当前项目路径仅见面板卡片与 `[PRJ]` 日志）。
+- Sidebar `.side-foot` 的 `workspace: zion-workspace` 为硬编码文案，切换项目后不随 `WORKSPACE_DIR` 更新（真实项目路径已显示在 `.side-head` 标题，此行待清理）。
 - 项目面板无测试覆盖（同组件层现状，smoke 不查 `.project-panel`）。
 
 ## 人工补充

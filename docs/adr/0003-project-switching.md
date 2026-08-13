@@ -12,7 +12,7 @@ ZION 的 `WORKSPACE_DIR` 原为硬编码常量（`D:\zion-workspace`），会话
 1. **WORKSPACE_DIR 改为可变 `let`**：9 处引用（会话创建、continueRecent、list、scan-tree、命令面板项目 skills 扫描）自然跟随新值，无额外接线。
 2. **切换 = 会话上下文重建**：旧会话实例逐个 `dispose()`（SDK 提供）、`sessions` Map 清空、`currentSession` 置空 → 新目录 `continueRecent`（无历史则新建）。同目录切换走快速路径（仅刷新指针）。
 3. **最近项目持久化**：`~/.pi/agent/zion-projects.json`（`{ path, lastUsed }[]`，上限 8，最近优先去重）。启动有最近项目 → 自动恢复（原行为）；无 → 打开项目选择面板（ProjectPanel）。
-4. **UI**：模态面板（v4 令牌，会话卡同款样式）= 最近项目卡片 + 「浏览其他目录…」（主进程 `dialog.showOpenDialog` 原生目录选择）；侧栏底部「切换项目」随时可开；切换成功后面板自动关闭并重建 feed/文件树/会话列表。
+4. **UI**：模态面板（v4 令牌，会话卡同款样式）= 最近项目卡片 + 「浏览其他目录…」（主进程 `dialog.showOpenDialog` 原生目录选择）；Project 标题行右侧「⇄ 切换项目」按钮随时可开；切换成功后面板自动关闭并重建 feed/文件树/会话列表。
 5. **不做**（范围外）：多项目并行会话、项目管理（增删改项目条目）、信任流集成（#16 已独立完成）。
 
 ## 失败模式

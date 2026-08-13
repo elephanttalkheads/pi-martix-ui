@@ -67,6 +67,8 @@ export interface ZionAPI {
   uiAnswer(id: string, result: string | boolean | undefined): Promise<void>;
   /** 最近项目列表（~/.pi/agent/zion-projects.json） */
   listProjects(): Promise<ProjectInfo[]>;
+  /** 当前项目工作目录 */
+  getProject(): Promise<{ path: string }>;
   /** 原生目录选择器：选择后直接切换项目；取消返回 null */
   browseProject(): Promise<SwitchProjectResult | null>;
   /** 切换项目（工作目录 + 会话上下文重建）；返回新会话历史 */

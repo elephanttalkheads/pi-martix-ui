@@ -80,6 +80,8 @@ interface FeedState {
   currentSessionId: string | null;
   /** 当前会话显示标题（消息头/芯片/神经核心标签） */
   sessionTitle: string;
+  /** 当前项目工作目录（侧栏 Project 标题显示其目录名） */
+  currentProject: string | null;
   tokenCount: number;
   sndOn: boolean;
   /** 蠕虫命中完成（releaseWorm done 回调）后登记的 toolCallId 集合——diff 卡延迟到命中后渲染 */
@@ -113,6 +115,7 @@ interface FeedState {
   pushToast(n: UiNotify): void;
   dismissToast(id: number): void;
   setProjectOpen(open: boolean): void;
+  setCurrentProject(path: string | null): void;
   setTree(tree: FileNode[]): void;
   setSessions(sessions: SessionInfoLike[]): void;
   /** 仅更新当前会话显示标题（不重置 feed；重命名当前会话时用） */
@@ -136,6 +139,7 @@ export const useFeed = create<FeedState>()((set) => ({
   sessions: [],
   currentSessionId: null,
   sessionTitle: '…',
+  currentProject: null,
   tokenCount: 0,
   sndOn: localStorage.getItem('zion.snd') !== '0',
   revealedEdits: {},
@@ -242,6 +246,7 @@ export const useFeed = create<FeedState>()((set) => ({
     set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) }));
   },
   setProjectOpen(open) { set({ projectOpen: open }); },
+  setCurrentProject(path) { set({ currentProject: path }); },
   setSessions(sessions) { set({ sessions }); },
   setSessionTitle(title) { set({ sessionTitle: title }); },
   setTree(tree) { set({ tree }); },
