@@ -89,7 +89,7 @@ export default function ProjectPanel() {
         if (e.target === e.currentTarget && projects.length > 0) setProjectOpen(false);
       }}
     >
-      <div className="project-panel" role="dialog" aria-label="项目选择">
+      <div className="project-panel corner" role="dialog" aria-label="项目选择">
         <div className="pp-title">SELECT PROJECT</div>
         <div className="pp-sub">选择 agent 的工作目录 · 会话上下文将切换到该项目</div>
         {projects.length > 0 && (

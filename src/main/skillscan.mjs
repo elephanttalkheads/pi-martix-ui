@@ -35,6 +35,7 @@ export const BUILTIN_COMMANDS = /** @type {const} */ ([
   { name: 'compact', description: 'Manually compact the session context' },
   { name: 'resume', description: 'Resume a different session' },
   { name: 'reload', description: 'Reload keybindings, extensions, skills, prompts, themes, and context files' },
+  { name: 'quit', description: 'Quit ZION' },
 ]);
 
 /** 扩展注册命令白名单（运行时注册无法静态枚举；新增扩展命令在此追加） */

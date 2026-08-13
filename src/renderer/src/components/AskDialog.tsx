@@ -37,7 +37,7 @@ export default function AskDialog() {
         if (e.target === e.currentTarget) answer(undefined);
       }}
     >
-      <div className="ask-dialog" role="dialog" aria-label={ask.title}>
+      <div className="ask-dialog corner" role="dialog" aria-label={ask.title}>
         <div className="ask-title">{ask.title}</div>
         {ask.kind === 'confirm' && ask.message && <div className="ask-msg">{ask.message}</div>}
         {ask.kind === 'input' && (

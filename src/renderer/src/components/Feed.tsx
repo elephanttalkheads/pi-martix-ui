@@ -57,7 +57,7 @@ function ToolCard({ item, revealed }: { item: Extract<FeedItem, { kind: 'tool' }
   const onToggle = () => toggleToolExpand(item.toolCallId);
   const detail = item.args === undefined ? '' : formatToolArgs(item.toolName, item.args);
   return (
-    <div className="trace" data-toolcall={item.toolCallId}>
+    <div className="trace corner" data-toolcall={item.toolCallId}>
       <div className="t-head">工具链 · 1 步</div>
       <div
         className={`step ${item.status === 'run' ? 'run' : item.status === 'ok' ? 'done' : 'err'}${expanded ? ' open' : ''}`}

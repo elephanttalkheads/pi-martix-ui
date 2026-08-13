@@ -128,7 +128,8 @@ interface FeedState {
 
 let id = 0;
 const nid = () => `i${++id}`;
-const msgTime = () => new Date().toLocaleTimeString('zh-CN', { hour12: false, hour: '2-digit', minute: '2-digit' });
+const fmtTime = (d: Date) => new Date(d).toLocaleTimeString('zh-CN', { hour12: false, hour: '2-digit', minute: '2-digit' });
+const msgTime = () => fmtTime(new Date());
 const logTime = () => new Date().toLocaleTimeString('zh-CN', { hour12: false });
 
 export const useFeed = create<FeedState>()((set) => ({
@@ -160,8 +161,7 @@ export const useFeed = create<FeedState>()((set) => ({
       if (last && last.kind === 'assistant') {
         items[items.length - 1] = { ...last, text: last.text + delta };
       } else {
-        items.push({ id: nid(), kind: 'assistant', text: delta, time: msgTime() });
-      }
+        items.push({ id: nid(), kind: 'assistant', text: delta, time: msgTime() });      }
       return { items, tokenCount: s.tokenCount + delta.length * 2 };
     });
   },
@@ -255,7 +255,7 @@ export const useFeed = create<FeedState>()((set) => ({
       id: nid(),
       kind: h.role,
       text: h.text,
-      time: h.ts ? new Date(h.ts).toLocaleTimeString('zh-CN', { hour12: false, hour: '2-digit', minute: '2-digit' }) : msgTime(),
+      time: h.ts ? fmtTime(new Date(h.ts)) : msgTime(),
     }));
     set({ currentSessionId: id, sessionTitle: title, items: feedItems, sessionState: 'READY', tokenCount: 0, expandedTools: {} });
   },

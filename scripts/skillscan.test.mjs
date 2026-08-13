@@ -66,6 +66,6 @@ test('collectCommands：聚合 + 去重 + 内置/扩展命令', () => {
   }
 });
 
-test('BUILTIN_COMMANDS 权威清单完整性（21 个）', () => {
-  assert.equal(BUILTIN_COMMANDS.length, 21);
+test('BUILTIN_COMMANDS 权威清单完整性（22 个）', () => {
+  assert.equal(BUILTIN_COMMANDS.length, 22);
 });

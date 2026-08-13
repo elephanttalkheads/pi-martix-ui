@@ -28,6 +28,7 @@ function useAgentEvents() {
   useEffect(() => {
     if (!window.zion?.onAgentEvent) return;
     let replyScheduled = false;
+    let errored = false; // message_end(error) 标记——agent_end 不再补 reply 音/完成日志
 
     // 蠕虫触发（同步路径）：定位文件树目标行 → 命中后登记 revealEdit（diff 卡延迟渲染）
     const triggerWorm = (toolCallId: string, edit: EditInfo) => {
@@ -94,13 +95,16 @@ function useAgentEvents() {
         case 'agent_start':
           setSessionState('RUNNING');
           replyScheduled = false;
+          errored = false;
           break;
         case 'agent_end':
           setSessionState('READY');
-          if (!replyScheduled) {
+          if (!replyScheduled && !errored) {
             replyScheduled = true;
             SND.reply();
             log('ok', '[TURN] 回复完成');
+          } else if (!replyScheduled && errored) {
+            replyScheduled = true; // 错误回合已由 message_end 标记，不再补完成音/日志
           }
           break;
         case 'agent_settled':
@@ -108,10 +112,11 @@ function useAgentEvents() {
           break;
         case 'message_end': {
           // stopReason 只存在于 LLM 助手消息分支（AgentMessage 联合的其他成员没有）；
-          // 用 in 守卫按运行时语义判定，其余消息类型自动跳过。
+          // 运行时按字段存在性判定，其余消息类型自动跳过。
           const stop = ev.message as { stopReason?: string } | null;
           if (stop?.stopReason === 'error') {
             setSessionState('READY');
+            errored = true;
             SND.abort();
             log('err', '[TURN] 回合以错误结束（模型/请求失败）');
           }
@@ -175,8 +180,9 @@ export default function App() {
   const [bootAt] = useState(() => Date.now());
   const [now, setNow] = useState(() => new Date());
 
-  // 启动：恢复当前会话（continueRecent）→ 历史重建 feed
+  // 启动：恢复当前会话（continueRecent）→ 历史重建 feed；桥未注入时优雅降级（空界面）
   useEffect(() => {
+    if (!window.zion?.getCurrentSession) return;
     let alive = true;
     window.zion
       .getCurrentSession()
@@ -191,6 +197,9 @@ export default function App() {
         // 当前项目（侧栏 Project 标题）
         const proj = await window.zion.getProject().catch(() => null);
         if (alive && proj) useFeed.getState().setCurrentProject(proj.path);
+        // 无最近项目 → 自动打开项目选择面板（启动引导）
+        const projs = await window.zion.listProjects().catch(() => []);
+        if (alive && projs.length === 0) useFeed.getState().setProjectOpen(true);
       })
       .catch(() => {});
     return () => {
@@ -204,8 +213,11 @@ export default function App() {
   }, []);
 
   // 点击页面任意处后焦点归还输入框（v4 规格 §7.5）
+  // 豁免弹层（AskDialog/项目面板/命令面板）：其内部输入不得被抢焦
   useEffect(() => {
-    const refocus = () => {
+    const refocus = (e: MouseEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t?.closest?.('.ask-mask, .project-panel, .palette, .s-title-edit')) return;
       window.setTimeout(() => {
         const el = document.getElementById('cmdline') as HTMLInputElement | null;
         if (el && !el.disabled) el.focus();

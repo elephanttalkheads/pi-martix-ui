@@ -47,6 +47,8 @@ notify 单向：uibridge.notify → send('zion:ui-notify') → preload onUiNotif
 
 ### ZionAPI（21 个方法）
 
+通道全集以本表为准：`protocol.ts` 头注释只列示例通道并指向 `src/main/DESIGN.md`「接口」节，后者同样指回本表（完整清单唯一落点）。
+
 | 方法 | 通道 | 返回 |
 |---|---|---|
 | ping | `zion:ping`（invoke） | `{ ok: true, pid }` 连通性自检 |
@@ -57,10 +59,10 @@ notify 单向：uibridge.notify → send('zion:ui-notify') → preload onUiNotif
 | scanTree() | `zion:scan-tree`（invoke） | `FileNode[]`：深度 ≤3，跳过 `node_modules`/`.git`/`dist`/`dist-renderer`/`graphify-out`/`.vite` 与点文件，目录在前 |
 | listCommands() | `zion:list-commands`（invoke） | `CommandItem[]`：本机全部 skills + 内置/扩展命令聚合（main 侧 `src/main/skillscan.mjs` 扫描） |
 | listSessions() | `zion:list-sessions`（invoke） | `SessionInfoLike[]`，按 modified 降序 |
-| getCurrentSession() | `zion:get-current`（invoke） | `{ id, items }`（惰性 ensureCurrentSession：continueRecent 或新建） |
-| switchSession(id) | `zion:switch-session`（invoke） | `{ id, items }`（懒创建实例，慢则秒级；id 不存在抛 `session not found`） |
-| newSession() | `zion:new-session`（invoke） | `{ id, items }` |
-| uiAnswer(id, result) | `zion:ui-answer`（invoke） | `{ ok: boolean }`：应答扩展对话框（结果回传 uiBridge，取消传 undefined）；id 未匹配（已超时/重复应答）返回 `{ ok: false }` |
+| getCurrentSession() | `zion:get-current`（invoke） | `SessionPayload`（惰性 ensureCurrentSession：continueRecent 或新建） |
+| switchSession(id) | `zion:switch-session`（invoke） | `SessionPayload`（懒创建实例，慢则秒级；id 不存在抛 `session not found`） |
+| newSession() | `zion:new-session`（invoke） | `SessionPayload` |
+| uiAnswer(id, result) | `zion:ui-answer`（invoke） | `{ ok: boolean }`（=`{ ok: handled }`，`handleAnswer` 是否命中 Promise 表）：应答扩展对话框（结果回传 uiBridge，取消传 undefined）；id 未匹配（已超时/重复应答）返回 `{ ok: false }` |
 | listProjects() | `zion:list-projects`（invoke） | `ProjectInfo[]`：最近项目（`~/.pi/agent/zion-projects.json`，上限 8，最近优先去重；坏文件/缺失 → 空数组） |
 | getProject() | `zion:get-project`（invoke） | `{ path: string }`：当前工作目录（`WORKSPACE_DIR` 现值，不读盘、不抛错） |
 | browseProject() | `zion:browse-project`（invoke） | `SwitchProjectResult \| null`：原生目录选择（`dialog.showOpenDialog`）后直接切换；取消返回 null |
@@ -81,9 +83,10 @@ notify 单向：uibridge.notify → send('zion:ui-notify') → preload onUiNotif
 - `SessionInfoLike`：`id` / `path` / `name?` / `firstMessage`（首条消息摘要，main 侧截断 80 字符）/ `messageCount` / `modified`（ISO 字符串）
 - `SessionHistoryItem`：`role: 'user' | 'assistant'` / `text` / `ts`（仅文本消息；main 侧 `historyFromSession` 跳过工具消息与空文本）
 - `ProjectInfo`：`path` / `lastUsed`（ISO 字符串；main 侧最近优先去重、上限 8）
-- `SwitchProjectResult`：`path`（切换后的工作目录）/ `id`（新当前会话）/ `items`（该会话历史，同 `SessionHistoryItem[]`）
+- `SessionPayload`：`id` / `items`（该会话历史，同 `SessionHistoryItem[]`；`getCurrentSession`/`switchSession`/`newSession` 的返回载荷，`SwitchProjectResult` 复用同一 id/items 形状）
+- `SwitchProjectResult`：`path`（切换后的工作目录）+ `SessionPayload`（id/items：新当前会话及其历史）
 - `FileNode`：`name` / `path`（相对工作目录的斜杠路径）/ `dir` / `size?`（人类可读字符串，目录无）/ `open?`（目录默认展开）/ `children?`
-- `CommandItem`：`name`（展示名，不含斜杠）/ `description` / `kind: 'skill' | 'command'` / `source`（来源标注：用户/共享/项目/settings/扩展·包名/内置/扩展）
+- `CommandItem`：`name`（展示名，不含斜杠）/ `description` / `kind: 'skill' | 'command'` / `source`（来源标注：skill：用户/共享/项目/settings/扩展·包名；command：内置/扩展，与 `skillscan.mjs` 的 `collectCommands` 一致）
 - `UiAsk`：`id`（`ui<N>` 序号）/ `kind: 'confirm' | 'input' | 'select'` / `title` / `message?`（confirm 消息或 input placeholder）/ `options?`（select 选项）/ `timeoutMs?`（透传扩展 timeout，renderer 侧未消费）
 - `UiNotify`：`message` / `type?: 'info' | 'warning' | 'error'`（`uibridge.mjs` 内部另有 `UiAnswer = { id, result: string | boolean | undefined }`，仅桥内回传、不经 IPC）
 
@@ -127,8 +130,7 @@ notify 单向：uibridge.notify → send('zion:ui-notify') → preload onUiNotif
 
 ## 已知限制与技术债
 
-- `protocol.ts` 头部注释的通道清单不完整：只列了 5 个 invoke + 1 个 send（`agent:event`），缺 `zion:scan-tree` / `zion:list-commands` / `zion:list-sessions` / `zion:get-current` / `zion:switch-session` / `zion:new-session` / `zion:ui-answer` / `zion:rename-session` / `zion:delete-session` / `zion:list-projects` / `zion:get-project` / `zion:browse-project` / `zion:switch-project` 与 send 通道 `zion:ui-ask` / `zion:ui-notify`（会话管理、命令面板、扩展 UI 桥、项目切换/当前项目展示后加时未更新注释）；实际 18 个 invoke + 3 个 send，以 `main.mjs` / `preload.cjs` 字面量为准
-- 通道名无运行时单一来源；根治依赖 main 进程 TS 构建管线（仓库已列为后续步骤）
+- 通道名无运行时单一来源（`protocol.ts` 头注释只列示例、完整清单在本文件接口节）；根治依赖 main 进程 TS 构建管线（仓库已列为后续步骤）
 - `FileNode.size` 是**人类可读字符串**（如 '1.2k'）而非字节数，需要比较/排序时应由 main 侧改进
 - AskDialog 不展示 timeout 倒计时、不自动关闭：SDK `ExtensionUIDialogOptions.timeout` 的文档语义是「自动关闭 + 倒计时」，当前只兑现了扩展侧 Promise 兜底
 - 项目信任未接入：`bindExtensions` 只注入了 `uiContext`，`projectTrustContextFactory`（`CreateAgentSessionOptions` 字段）未传，项目信任处理仍属主仓「未做」清单

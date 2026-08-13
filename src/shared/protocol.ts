@@ -9,7 +9,8 @@
 //   `tsc -p tsconfig.node.json`（checkJs）校验。
 //
 // ⚠️ IPC 通道名字符串（'zion:ping' / 'agent:prompt' / 'agent:abort' / 'agent:steer' /
-// 'agent:followUp' / 'agent:event'）散落在 main.mjs 与 preload.cjs 三处字面量中，
+// 'agent:followUp' / 'agent:event' 等，完整清单见 src/main/DESIGN.md「接口」节）
+// 散落在 main.mjs 与 preload.cjs 两处字面量中，改动须同步两处。
 // 改动时需同步 —— 主进程/preload 均为 JS 无法共享运行时常量，勿试图在此导出后被 .mjs/.cjs import。
 
 // 主进程 → 渲染进程：agent 事件流。
@@ -58,13 +59,13 @@ export interface ZionAPI {
   /** 工作区会话列表（SessionManager.list 精简） */
   listSessions(): Promise<SessionInfoLike[]>;
   /** 当前会话（惰性确保：continueRecent 或新建）+ 其历史；返回会话信息与历史 */
-  getCurrentSession(): Promise<{ id: string; items: SessionHistoryItem[] }>;
+  getCurrentSession(): Promise<SessionPayload>;
   /** 切换到指定会话（首次进入懒创建实例，慢则秒级）；返回历史 */
-  switchSession(id: string): Promise<{ id: string; items: SessionHistoryItem[] }>;
+  switchSession(id: string): Promise<SessionPayload>;
   /** 新建会话并切换 */
-  newSession(): Promise<{ id: string; items: SessionHistoryItem[] }>;
-  /** 应答扩展对话框（结果回传 uiBridge；取消传 undefined） */
-  uiAnswer(id: string, result: string | boolean | undefined): Promise<void>;
+  newSession(): Promise<SessionPayload>;
+  /** 应答扩展对话框（结果回传 uiBridge；取消传 undefined）返回处理结果 */
+  uiAnswer(id: string, result: string | boolean | undefined): Promise<{ ok: boolean }>;
   /** 最近项目列表（~/.pi/agent/zion-projects.json） */
   listProjects(): Promise<ProjectInfo[]>;
   /** 当前项目工作目录 */
@@ -104,7 +105,7 @@ export interface CommandItem {
   name: string;
   description: string;
   kind: 'skill' | 'command';
-  /** 来源标注（用户级/共享/扩展包/项目/内置/扩展） */
+  /** 来源标注（skill：用户/共享/项目/settings/扩展·包名；command：内置/扩展） */
   source: string;
 }
 
@@ -135,6 +136,12 @@ export interface ProjectInfo {
 /** 切换项目结果（新工作目录 + 新当前会话历史） */
 export interface SwitchProjectResult {
   path: string;
+  id: string;
+  items: SessionHistoryItem[];
+}
+
+/** 会话操作载荷：会话 id + 历史（getCurrent/switch/new/项目切换共用） */
+export interface SessionPayload {
   id: string;
   items: SessionHistoryItem[];
 }

@@ -17,7 +17,7 @@
 - 不实现 TUI 专属 UI 能力：`ExtensionUIContext` 的终端方法（setStatus/setWidget/custom 等）为 no-op 桩，ZION 无终端 UI（见「已知限制与技术债」）
 - 不解释/执行命令与技能：面板只提供数据清单，插入与执行语义在渲染层/宿主 TUI
 - main 进程保持 `.mjs` + JSDoc + checkJs：`build:main` 只做 typecheck 门禁 + 复制（源码即产物），无 TS 转译管线（迁移方案见「已知限制与技术债」）
-- IPC 契约本身（通道全集、`ZionAPI`、数据形状、stopReason 语义）不在此重复，见 `src/shared/DESIGN.md`
+- IPC 契约的类型形状与失败语义（`ZionAPI`、数据形状、stopReason）不在此重复，见 `src/shared/DESIGN.md`；通道名字面量全集在本模块（见「接口与依赖」节）
 
 ## 架构与主要流程
 
@@ -41,8 +41,8 @@ main.mjs：ipcMain.handle ×18 + agent:event / zion:ui-ask / zion:ui-notify 转�
 
 **会话生命周期**：
 - `ensureCurrentSession()`：无当前会话 → `fs.mkdirSync(WORKSPACE_DIR, { recursive: true })` → `SessionManager.continueRecent(WORKSPACE_DIR)` → `ensureSessionFor(sm, id)`
-- `ensureSessionFor(sm, id)`：Map 命中 → 置 `currentSession` 直接返回；未命中 → `createAgentSession({ cwd: WORKSPACE_DIR, sessionManager })` 与 **45s 超时**（`Promise.race`，超时 reject `'agent init timeout'`）竞争 → 成功则先 `await session.bindExtensions({ uiContext: uiBridge })`（扩展 UI 桥注入，SDK 官方路径）再 `sessions.set`、置指针、`wireSession(s)`；超时失败不入 Map，下次调用可重试
-- 切换：`zion:switch-session` 先用 `SessionManager.list` 结果校验 id（未知 id 抛 `'session not found: <id>'`）→ `SessionManager.open(info.path, undefined, WORKSPACE_DIR)` → `ensureSessionFor`；`zion:new-session` → `SessionManager.create(WORKSPACE_DIR)`；`zion:get-current` → `ensureCurrentSession`；三者返回 `{ id, items }`（`items` 来自 `historyFromSession`）
+- `ensureSessionFor(sm, id)`：Map 命中 → 置 `currentSession` 直接返回；未命中 → `createAgentSession({ cwd: WORKSPACE_DIR, sessionManager })` 与 **45s 超时**（`Promise.race`，超时 reject `'agent init timeout'`）竞争，`settled` 标志 + `timer` 管理胜负：超时胜出 → `settled = true`、reject；init 完成时先查标志——已超时则 `dispose()` 释放迟到实例、同样抛 `'agent init timeout'`（不 set Map、不覆盖指针，防事件串台），未超时则 `clearTimeout(timer)` 清理计时器，再 `await session.bindExtensions({ uiContext: uiBridge })`（扩展 UI 桥注入，SDK 官方路径）→ `sessions.set`、置指针、`wireSession(s)`。任何失败路径（超时/迟到）都不入 Map，下次调用可重试
+- 切换：`zion:switch-session` 先用 `SessionManager.list` 结果校验 id（未知 id 抛 `'session not found: <id>'`）→ `SessionManager.open(info.path, undefined, WORKSPACE_DIR)` → `ensureSessionFor`；`zion:new-session` → `SessionManager.create(WORKSPACE_DIR)`；`zion:get-current` → `ensureCurrentSession`；三者返回 `SessionPayload`（`{ id, items }`，`items` 来自 `historyFromSession`）
 - 重命名/删除：`zion:rename-session` / `zion:delete-session` 同 switch 的 id 校验；重命名 = `SessionManager.open` + `appendSessionInfo(name)` 持久化显示名（不加载 AgentSession 实例，见接口节）；删除 = 释放 Map 实例 + 删的是当前会话则清指针 + 会话文件移入 `<会话文件目录>/.trash/`（时间戳后缀，可恢复）。SDK 事实：空会话不落盘（无 assistant 消息 → 无 `.jsonl` 文件），rename/delete 只对真实列出的已持久化会话有效（新建即空的会话在列表外）
 - 项目切换：`zion:switch-project` / `zion:browse-project` → `switchProject(dir)`：`path.resolve` 后与当前 `WORKSPACE_DIR` 相同 → 快速路径（仅 `ensureCurrentSession` 刷新指针）；否则逐个 `s.dispose()`（异常捕获忽略）→ `sessions.clear()` + `currentSession = null` → `WORKSPACE_DIR = resolved` → `saveProject(resolved)`（去重置顶写最近清单）→ `ensureCurrentSession()`（新目录 `mkdirSync` + `continueRecent`，无历史则新建）→ 返回 `{ path, id, items }`。`WORKSPACE_DIR` 的全部引用面（`createAgentSession` cwd、continueRecent/list/mkdirSync、`scanDir` 根、命令面板 `projectSkillsDirs`、switch/new/rename 的 SessionManager 调用）读当前值，切换后自动跟随；`browse-project` 复用主进程 `dialog.showOpenDialog`（`win` 存在时带父窗、否则无父窗重载；`openDirectory`），取消返回 `null`，选中即 `switchProject(filePaths[0])`
 
@@ -59,15 +59,21 @@ main.mjs：ipcMain.handle ×18 + agent:event / zion:ui-ask / zion:ui-notify 转�
 - 来源（遵循 pi docs/skills.md 官方加载来源，按序扫描）：`~/.pi/agent/skills`（用户）→ `~/.agents/skills`（共享）→ `WORKSPACE_DIR/.pi/skills` + `.agents/skills`（项目）→ `~/.pi/agent/settings.json` 的 `skills` 数组（`~` 展开为 home，解析失败视为空）→ `~/.pi/agent/npm/node_modules` 各包 `skills/` 目录（扩展，递归支持 `@scope` 包）
 - 技能形态：`<dir>/SKILL.md`（frontmatter 无 name 时回退目录名）；根级 `.md`（带 name frontmatter）也计入；单文件损坏跳过
 - 去重：`kind:name` 先到先得（用户级先扫，优先于共享/项目/settings）；命令最后追加
-- 命令：`BUILTIN_COMMANDS`（21 个，pi 源码 `BUILTIN_SLASH_COMMANDS` 快照）+ `EXTENSION_COMMANDS`（/goal 白名单）；返回 `CommandItem[]`（形状归 shared 契约）
+- 命令：`BUILTIN_COMMANDS`（22 个，pi 源码 `BUILTIN_SLASH_COMMANDS` 快照）+ `EXTENSION_COMMANDS`（/goal 白名单）；返回 `CommandItem[]`（形状归 shared 契约）
 
 ## 接口与依赖
 
-IPC 通道全集与返回形状见 `src/shared/DESIGN.md` 接口节（本模块是字面量与 handler 所在地）。契约未载明的实现侧行为：
+IPC 通道全集（字面量与 handler 所在地；`protocol.ts` 头注释「完整清单」指向本节）：
+
+invoke ×18（`ipcMain.handle`）——会话管理 `zion:list-sessions` / `zion:get-current` / `zion:switch-session` / `zion:new-session` / `zion:rename-session` / `zion:delete-session`；项目 `zion:list-projects` / `zion:get-project` / `zion:browse-project` / `zion:switch-project`；其余 `zion:ping` / `zion:scan-tree` / `zion:list-commands` / `agent:prompt` / `agent:abort` / `agent:steer` / `agent:followUp` / `zion:ui-answer`
+
+send ×3（`webContents.send`；preload 经 `subscribe(channel, cb)` 统一订阅）——`agent:event`（事件流）/ `zion:ui-ask`（扩展对话框）/ `zion:ui-notify`（扩展通知）
+
+各通道的返回形状与失败语义见 `src/shared/DESIGN.md` 接口表。契约未载明的实现侧行为：
 
 - `agent:prompt` 完整 await `s.prompt()`，返回 `stop ?? 'ok'`；不因模型/请求失败 reject（失败表现为末条消息 `stopReason: 'error'` + `errorMessage`，UI 必须查，语义见 shared）
 - `agent:abort` / `agent:steer` / `agent:followUp` **不 await** SDK 调用即返回 `true`（fire-and-forget）：返回不代表 agent 已 idle；无当前会话时静默 no-op
-- `zion:switch-session` / `zion:new-session` / `zion:get-current` 的 `{ id, items }` 中 `id` 来自 `sessionManager.getSessionId()`
+- `zion:switch-session` / `zion:new-session` / `zion:get-current` 的 `SessionPayload`（`{ id, items }`）中 `id` 来自 `sessionManager.getSessionId()`
 - `zion:list-sessions` 映射 `SessionManager.list` 结果：`firstMessage` 截 80 字符、`modified` 转 ISO、按 modified 倒序
 - `zion:list-projects` → `listProjects()`：读 `~/.pi/agent/zion-projects.json`，缺失/损坏 → `[]`；条目过滤非 `string` 的 `path` 后截 `PROJECTS_MAX`（8）条
 - `zion:get-project` → `{ path: WORKSPACE_DIR }`：只读查询当前工作目录，不创建/切换会话、不写最近清单（侧栏 Project 标题的数据源）
@@ -97,7 +103,7 @@ IPC 通道全集与返回形状见 `src/shared/DESIGN.md` 接口节（本模块�
 - **多会话 Map + 当前指针而非单例**：会话懒创建（首次进入秒级），切换后实例保留在 Map 避免重复初始化；代价是旧会话后台任务仍可能运行（其事件被转发过滤，UI 无感知）；`delete-session` 是唯一显式释放路径
 - **重命名走 SDK 的 `appendSessionInfo`、删除走 `.trash` 回收而非硬删**：显示名写进会话 JSONL 的 `session_info` 条目（重启不丢、与 pi 自身命名一致）；删除用 `renameSync` 移入 `<会话文件目录>/.trash/` 加时间戳后缀（误删可手动移回恢复）。代价：`.trash` 只进不出需人工清理（见技术债）
 - **转发期过滤而非按会话路由**：`wireSession` 每会话订阅一次，转发时判 `s === currentSession`；切换无需重订阅，且保证任意时刻至多一个会话的事件到达渲染层
-- **45s init 超时**：SDK 的 ModelRuntime 目录刷新可能挂（root AGENTS.md「关键 SDK 行为」），超时保护避免 UI 永久等待；失败会话不入 Map，可重试
+- **45s init 超时**：SDK 的 ModelRuntime 目录刷新可能挂（root AGENTS.md「关键 SDK 行为」），超时保护避免 UI 永久等待；race 败北后迟到的 init 完成被丢弃（`settled` 检查 + `dispose()` 释放，不 set Map、不覆盖指针）——超时后不被旧初始化接管，防事件串台；失败/迟到会话均不入 Map，下次调用可重试
 - **prompt 不抛错 → IPC 返回 stopReason**：主进程不维护回合状态机，错误检测责任交给渲染层（shared 契约明示）
 - **preload CJS + JSDoc 类型**：`sandbox: true` 强制 CJS 决定文件形态；类型经 `@typedef import('../shared/protocol.ts')` + checkJs 校验，契约单一事实源不落地为运行时模块
 - **WORKSPACE_DIR 可变 + 切换即整体重建**（ADR-0003）：项目选择 UI 已落地（侧栏 Project 标题 + 切换按钮 + ProjectPanel），工作区不再固定——跨目录切换 dispose 全部旧会话（`wireSession` 订阅随实例销毁，事件不会串台）+ 清空 Map/指针，保证新项目上下文干净；同目录快速路径避免无谓重建。`SessionManager.open(info.path, undefined, WORKSPACE_DIR)` 的第三参 cwdOverride 把会话 cwd 固定到当前工作区；模块加载期再从最近项目清单首位恢复 `WORKSPACE_DIR`——重启回到上次项目而非默认工作区（只影响工作目录，会话仍懒创建）
@@ -132,7 +138,7 @@ IPC 通道全集与返回形状见 `src/shared/DESIGN.md` 接口节（本模块�
 - 渲染层输入（prompt/steer/followUp 文本、会话 id）不做信任校验，但 agent 的 cwd 固定在 `WORKSPACE_DIR`，影响范围受限
 
 **失败模式**：
-- `createAgentSession` 超时（45s）→ reject `'agent init timeout'` → 该次 IPC reject；主进程无重试/降级逻辑（下次调用可重试）
+- `createAgentSession` 超时（45s）→ reject `'agent init timeout'` → 该次 IPC reject；主进程无重试/降级逻辑（下次调用可重试）；迟到的 init 完成被 `dispose()` 释放，不会在超时后写入 Map 或覆盖指针
 - **streaming 中再发 prompt**：SDK 的 `prompt()` 在流式中且未指定 `streamingBehavior` 时抛错（SDK d.ts `@throws` 声明），main.mjs 调用未传 options——连续快速发两条指令可能令该次 IPC reject；root AGENTS.md「从不抛错」仅覆盖模型/请求失败场景
 - 模型/请求失败 → prompt 正常 resolve，末条消息 `stopReason: 'error'`；UI 必须检查
 - 窗口销毁后事件到达 → `win.isDestroyed()` 守卫丢弃，不 send
@@ -154,7 +160,7 @@ IPC 通道全集与返回形状见 `src/shared/DESIGN.md` 接口节（本模块�
 ## 已知限制与技术债
 
 - 扩展 UI 桥仅覆盖 dialog（select/confirm/input）与 notify：`ExtensionUIContext` 其余方法为 TUI no-op 桩（ZION 无终端 UI），依赖终端能力的扩展功能（setWidget 组件工厂、custom 覆盖层、编辑器集成、主题系统）不可用，`custom()` 抛错
-- 项目信任未接入：main.mjs 未传 `projectTrustContextFactory` / `resourceLoaderReloadOptions`，SDK 的 `resolveProjectTrusted` 不会触发，项目级资源（`.pi` 设置/扩展等）按未信任处理；ZION 未提供信任管理界面（root AGENTS.md「未做」清单；main.mjs 顶部注释的「双注入」说法与代码不符，仅注入 uiContext）
+- 项目信任未接入：`bindExtensions` 仅注入 `uiContext`，main.mjs 未传 `projectTrustContextFactory` / `resourceLoaderReloadOptions`，SDK 的 `resolveProjectTrusted` 不会触发，项目级资源（`.pi` 设置/扩展等）按未信任处理；ZION 未提供信任管理界面（root AGENTS.md「未做」清单）
 - 最近项目清单无管理 UI：无删除/固定条目能力，仅靠上限 8 截断自动淘汰；面板卡片列表不标注当前项目（当前项目名常驻侧栏 Project 标题，面板「取消」留在当前项目）
 - main 仍是 JS：`build:main` 只做 typecheck 门禁 + 复制（源码即产物），无 tsc emit；通道名无运行时单一来源的问题仍在——未来迁 TS 时把 build:main 复制步骤替换为 tsc emit（dist-main 布局不变，见 `scripts/build-main.mjs` 注释）
 - abort/steer/followUp 为 fire-and-forget：`true` 不代表 agent 已 idle；若 UI 需要精确状态，后续应 await 或改用 SDK `waitForIdle`

@@ -7,13 +7,13 @@ const MAX_JSON = 2000;
 export function formatToolArgs(toolName: string, args: unknown): string {
   const a = (args ?? {}) as Record<string, unknown>;
   if (toolName === 'bash') {
-    return typeof a.command === 'string' ? a.command : JSON.stringify(a, null, 2);
+    return typeof a.command === 'string' ? a.command : JSON.stringify(a, null, 2).slice(0, MAX_JSON);
   }
   if (toolName === 'batch_execute') {
     const cmds = Array.isArray(a.commands)
       ? a.commands.map((c: unknown) => (c && typeof c === 'object' ? String((c as Record<string, unknown>).command ?? '') : String(c)))
       : [];
-    return cmds.length ? cmds.join('\n') : JSON.stringify(a, null, 2);
+    return cmds.length ? cmds.join('\n').slice(0, MAX_JSON) : JSON.stringify(a, null, 2).slice(0, MAX_JSON);
   }
   return JSON.stringify(a, null, 2).slice(0, MAX_JSON);
 }

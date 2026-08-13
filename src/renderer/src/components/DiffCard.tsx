@@ -12,7 +12,7 @@ export default function DiffCard({ file, rows }: { file: string; rows: DiffRow[]
   const dFile = file.startsWith('✎ ') ? file : `✎ ${file}`;
 
   return (
-    <div className="diff reveal">
+    <div className="diff reveal corner">
       <div className="diff-head">
         <span className="d-file">{dFile}</span>
         <span className="d-stat">
@@ -21,7 +21,6 @@ export default function DiffCard({ file, rows }: { file: string; rows: DiffRow[]
         <span className="d-op">modified</span>
       </div>
       <div className="diff-body">
-        {rows.length === 0 && <div className="diff-line ctx"><span className="ln" /><span className="sign" /><span className="code">（无内容变更）</span></div>}
         {rows.map((r, i) => (
           <div key={i} className={`diff-line ${r.t === '+' ? 'add' : r.t === '-' ? 'del' : 'ctx'}`}>
             <span className="ln">{r.n ?? ''}</span>

@@ -35,7 +35,7 @@ try {
   console.warn('[zion] startup project restore failed:', String(e));
 }
 
-// 扩展 UI 桥：dialog 请求 → renderer 弹层（AskDialog）；uiContext + projectTrustContextFactory 双注入
+// 扩展 UI 桥：dialog 请求 → renderer 弹层（AskDialog）；经 session.bindExtensions({ uiContext }) 注入
 // （headless 默认无 UI——扩展 ask 与项目信任询问此前全部静默落空）
 const uiBridge = createUiBridge();
 
@@ -124,12 +124,29 @@ async function ensureSessionFor(sessionManager, id) {
     currentSession = cached;
     return cached;
   }
-  const timeout = new Promise((_, rej) => setTimeout(() => rej(new Error('agent init timeout')), 45000));
+  // 超时胜负判定：race 败（超时）后，迟到的 init 不得再 set/覆盖指针（防事件串台）
+  let settled = false;
+  /** @type {ReturnType<typeof setTimeout> | null} */
+  let timer = null;
+  const timeout = new Promise((_, rej) => {
+    timer = setTimeout(() => {
+      settled = true;
+      rej(new Error('agent init timeout'));
+    }, 45000);
+  });
   const init = (async () => {
     const { session } = await createAgentSession({
       cwd: WORKSPACE_DIR,
       sessionManager,
     });
+    if (settled) {
+      // race 已超时败北：迟到的初始化不接管（释放实例，调用方已收到超时错误）
+      try {
+        session.dispose();
+      } catch { /* 释放异常忽略 */ }
+      throw new Error('agent init timeout');
+    }
+    if (timer) clearTimeout(timer);
     // 扩展 UI 桥注入：bindExtensions 是官方路径（CreateAgentSessionOptions 无 uiContext 字段）——
     // 注入后扩展的 ctx.ui.confirm/select/input/notify 真实弹窗，不再 headless 静默落空
     await session.bindExtensions({ uiContext: uiBridge });

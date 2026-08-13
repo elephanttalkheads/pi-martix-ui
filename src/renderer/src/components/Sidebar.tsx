@@ -84,7 +84,7 @@ export default function Sidebar({ onSelectFile }: { onSelectFile: (path: string)
     window.zion?.listSessions().then(setSessions).catch(() => {});
   }, [setTree, setSessions]);
 
-  // 堆叠卡：测量每卡完整高度 → --h（负 margin 覆盖量 = 完整高 - 露出区 88px）
+  // 堆叠卡：测量每卡完整高度 → --h（负 margin 覆盖量 = 完整高 - 露出区 80px）
   useEffect(() => {
     const deck = deckRef.current;
     if (!deck) return;

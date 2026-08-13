@@ -3,7 +3,6 @@ productName: ZION
 directories:
   output: dist
 files:
-  - src/**/*
   - dist-main/**/*
   - dist-renderer/**/*
   - package.json

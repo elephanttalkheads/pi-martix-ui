@@ -6,7 +6,7 @@
 
 **非目标**：不定义 IPC 契约（`src/shared/protocol.ts` 类型与主进程是事实源）；不提供 Node/凭据能力（隔离在 preload 白名单之后）；不做真实 context 统计（头部「上下文 12.4k / 128k」与「主控会话 #0047」为硬编码装饰）；不实现扩展对话框的 Promise 表/超时/AbortSignal 兜底（主进程 `src/main/uibridge.mjs` 是事实源）——本模块只消费 `UiAsk`/`UiNotify` 类型与 `uiAnswer`/`onUiAsk`/`onUiNotify` 桥面；不实现项目切换的主进程语义（`WORKSPACE_DIR` 变更、旧会话 dispose、`~/.pi/agent/zion-projects.json` 持久化在 `src/main/main.mjs`）——本模块只消费 `listProjects`/`browseProject`/`switchProject` 桥面。
 
-**边界**：渲染层只消费 `window.zion`（ZionAPI）；事件类型源 `@earendil-works/pi-coding-agent`（经 `shared/protocol.ts` re-export）。主进程/preload 为 JS（`main.mjs`/`preload.cjs`），经 `tsconfig.node.json` checkJs 校验，IPC 通道名字面量在 main/preload 三处，本模块不持有。
+**边界**：渲染层只消费 `window.zion`（ZionAPI）；事件类型源 `@earendil-works/pi-coding-agent`（经 `shared/protocol.ts` re-export）。主进程/preload 为 JS（`main.mjs`/`preload.cjs`），经 `tsconfig.node.json` checkJs 校验，IPC 通道名字面量在 main/preload 两处，本模块不持有。
 
 ## 架构与主要流程
 
@@ -17,21 +17,21 @@
 - 区4 `.term` 日志抽屉（默认 height:0，展开 150px）+ `.statusbar`（26px，SND 开关 / 日志按钮）
 
 **事件→状态管线**（`useAgentEvents`，App.tsx 单一订阅点；退订函数在 effect cleanup 调用）：
-- `agent_start` → RUNNING（重置 replyScheduled）
+- `agent_start` → RUNNING（重置 replyScheduled/errored）
 - `tool_execution_start` → RUNNING + `toolStart` 入 feed + 编辑类调用触发蠕虫
 - `message_update`（text_delta / thinking_delta）→ STREAMING + `appendDelta`
 - `tool_execution_end` → `toolEnd`（写 dur、状态 ok/err、尝试 result.patch 升级）；err → SND.abort，ok → SND.step
-- `agent_end` → READY + SND.reply（replyScheduled 防重复）；`agent_settled` → READY
-- `message_end` 中 `stopReason === 'error'` → READY + SND.abort（错误回合）
+- `agent_end` → READY + SND.reply（replyScheduled 防重复）；`errored` 标记的错误回合不再补 reply 音/「回复完成」日志；`agent_settled` → READY
+- `message_end` 中 `stopReason === 'error'` → READY + SND.abort + 置 `errored` 标记（错误回合，由 `agent_end` 消费）
 - CANCELLING 由 InputBar 本地置位（中断按钮或生成中按 Enter，`setSessionState('CANCELLING')` + `markInterrupted` + `window.zion.abort()`），非事件驱动
 
 **FX 派生**：`setSessionState` 同步 `Object.assign` 到模块级 `fx` 对象（READY `{speed:1, energy:0.3}` / 忙碌 `{speed:2.2, energy:0.85}`）；仅 RainCanvas（`90/fx.speed` 帧节流）直接读取，不触发 React 渲染。侧栏顶部为 Vite import 的透明 Neo 双帧 PNG（120×120，容器无底板/描边）；张嘴仅由蠕虫释放驱动（store `wormActive` 计数 > 0，`releaseWorm` 开始 +1、done -1），CSS 以 300ms `steps(1,end)` 在闭嘴/张嘴间切换，释放瞬间附带 700ms 缩放脉冲，reduced-motion 下停在静态张嘴帧且不脉冲。
 
-**启动恢复**（App useEffect）：`getCurrentSession` → `listSessions` → 标题经 `deriveSessionTitle`（title.ts 纯函数，规则见「设计决策与权衡」）→ `applySession(id, title, items)` 以历史重建 feed（仅 user/assistant 文本，无工具卡）+ `setSessions` + `getProject` → `setCurrentProject`（侧栏 Project 标题）。
+**启动恢复**（App useEffect，`window.zion?.getCurrentSession` 守卫——桥未注入直接 return 优雅降级）：`getCurrentSession` → `listSessions` → 标题经 `deriveSessionTitle`（title.ts 纯函数，规则见「设计决策与权衡」）→ `applySession(id, title, items)` 以历史重建 feed（仅 user/assistant 文本，无工具卡）+ `setSessions` + `getProject` → `setCurrentProject`（侧栏 Project 标题）→ `listProjects` 判空：无最近项目 → `setProjectOpen(true)` 自动打开项目选择面板（启动引导，ADR-0003 决策 3）。
 
 **会话切换/新建/重命名/删除**（Sidebar）：`selectSession` → `switchSession`（主进程懒创建实例，可能秒级；`switching` 锁防并发）→ `applySession`；`newSession` 同理；失败走 `log('err')`。重命名：`startRename` 以当前显示标题为草稿，`.s-title-edit` 内联输入 Enter/blur 提交 `commitRename`、Esc 取消；`renameSession` → `setSessions`，当前会话另 `setSessionTitle(name)`（只改标题，不重置 feed）。删除：`askDelete` 两段确认——首击进入「确认?」态（2.5s 自动复位），再击 `doDelete` → `deleteSession`（软删，移入 `.trash` 可恢复）→ `setSessions`；删除的是当前会话时主进程指针已落最近会话，`getCurrentSession` 重拉 + `applySession`（标题取新列表匹配，兜底短码）。点文件树行 → `pushUser` + `window.zion.prompt('读取 <path>')`（真实 prompt，无假动画）。
 
-**项目切换管线**（ProjectPanel，App 顶层 fragment 挂载；store `projectOpen` 控制开合，侧栏 `.side-head` 的「⇄ 切换项目」按钮打开）：
+**项目切换管线**（ProjectPanel，App 顶层 fragment 挂载；store `projectOpen` 控制开合；打开入口：侧栏 `.side-head` 的「⇄ 切换项目」按钮 + 启动无最近项目自动打开）：
 - 打开时 `window.zion.listProjects()` 拉最近项目（effect 按 `[open]` 触发，`alive` 活期守卫；失败静默 → 空列表，仅「浏览其他目录…」可用）。
 - `pick(path)` / `browse()`：`busy` 锁防并发 → `switchProject(path)` 或 `browseProject()`（主进程 `dialog.showOpenDialog` 原生目录选择，取消返回 null 不切换）→ 成功走 `applySwitch`：`applySession(r.id, '会话 ' + r.id.slice(0, 4), r.items)` 重建 feed（状态机回 READY）→ `setTree([])` → `setCurrentProject(r.path)`（侧栏 Project 标题同步）→ 重拉 `listSessions`/`scanTree` 刷新会话卡与文件树 → `log('ok', '[PRJ] 已切换项目 → ' + r.path)` → `setProjectOpen(false)`。
 - 失败：`log('err', '[PRJ] …')`，busy 复位，面板保持打开。
@@ -59,13 +59,13 @@
 - REDUCED：`releaseWorm` 直接命中，跳过动画，done 仍回调。
 
 **diff 数据管线**（store.ts 纯函数）：
-- `tryParseOne` 优先级：`patch`（`^[+@ -]` 判定，`@@` 头追踪行号）→ `edits[]` old/new 逐对展开（无行号）→ old/new/oldText/newText/content 公共前后缀朴素 diff → 仅 file 无内容（rows 空，只渲染头部）。
+- `tryParseOne` 优先级：`patch`（`^[+@ -]` 判定，`@@` 头追踪行号）→ `edits[]` old/new 逐对展开（无行号）→ old/new/oldText/newText/content 公共前后缀朴素 diff → 仅 file 无内容（rows 空）。rows 空时 Feed 门控（`rows.length > 0`）不渲染 diff 卡（DiffCard 空态分支已删，不可达）。
 - `upgradeEditFromResult`：仅当该 tool item 已有 `edit` 时生效，`result.patch` 优先于 `result.diff`。
 - `MAX_DIFF_ROWS = 200` 截断，防大文件撑爆 feed。
 
 **工具链块参数展开**（toolfmt.ts 纯函数，Feed ToolCard 消费）：
 - `.step` 行 `role="button"` + `tabIndex=0` + `aria-expanded`，点击或 Enter/Space 切换 `toggleToolExpand`（store `expandedTools`，toolCallId 键）。
-- 展开渲染 `.trace-expand`：`te-title` = `toolExpandTitle`（args.file/path → `工具名 → 路径`，否则仅工具名）+ `<pre>` 全文 = `formatToolArgs`（bash → `command` 全文不截断；batch_execute → `commands[]` 逐行拼接；其余 → JSON 美化 `slice(0, 2000)`）。`pre` 限高 240px 内滚动、`pre-wrap` 防超宽行撑破卡片。
+- 展开渲染 `.trace-expand`：`te-title` = `toolExpandTitle`（args.file/path → `工具名 → 路径`，否则仅工具名）+ `<pre>` 全文 = `formatToolArgs`（bash → `command` 全文不截断；batch_execute → `commands[]` 逐行拼接；两者缺 command/commands 时与其余工具一致走 JSON 美化兜底，一律 `slice(0, 2000)`（MAX_JSON））。`pre` 限高 240px 内滚动、`pre-wrap` 防超宽行撑破卡片。
 
 ## 接口与依赖
 
@@ -78,20 +78,21 @@
 ## 设计决策与权衡
 
 - **4 态状态机 + 两档 FX**（非连续插值）：ADR 0002 明确"不区分首次/持续 busy"，FX 只有 READY/忙碌两档——勿改回 v3 的 rAF 指数衰减。
-- **错误回合不加第 5 态**：红日志 + 中止音 + 回 READY（ADR 0002 已知取舍）。
+- **错误回合不加第 5 态**：红日志 + 中止音 + `errored` 标记 + 回 READY（ADR 0002 已知取舍）；`agent_end` 见标记后跳过 reply 音/「回复完成」日志（错误回合不被误报完成）。
 - **蠕虫同步触发**（事件回调内而非 useEffect）：防快工具的 `tool_end` 先于 React 渲染到达的时序竞争（App.tsx 头注释明示）。
 - **revealedEdits 延迟渲染**：把"动画命中"与"diff 可见"绑定；目标缺失时 done 仍回调，卡片照样出现。
 - **bash 写操作启发式**：正则提取目标与文本——复杂链式命令可能漏判、纯 echo 到屏幕可能误判，是权衡而非精确解析。
 - **stopReason 运行时判定**：strict 下 AgentMessage 联合无法静态收窄到助手分支，用 cast + 可选链按运行时语义读取。
 - **tokenCount 近似**：delta 字符数 ×2，非真实 token；`applySession`/`reset` 归零。
 - **标题推导收敛为纯函数**（`title.ts` → store re-export 的 `deriveSessionTitle`，App 启动恢复与 Sidebar 会话卡共用）：两处原为各自内联 `slice(0,22)` 截断且行为不一致（App 不补省略号、不清引号），现统一为 name → firstMessage 智能摘要 → `会话 <id 前 4 位>` 兜底。摘要规则：取首行 → 剥含路径/命令特征的内嵌引号对（消除 `为"D:\\...\\..."` 残尾）与成对包裹引号 → 去前导符号（`- # > * · / \`）→ 22 字符截断 + '…'。改规则只动 `title.ts`（node:test 覆盖）。
-- **会话堆叠卡 `--h` 测量**（Sidebar effect，deps `[sessions, currentSessionId]`）：每张 `.scard` 置 `--h = scrollHeight + 2`；CSS `margin-bottom: calc(80px - var(--h, 140px))` 使每卡恒定露出 80px 头部（标题 + 2 行摘要），hover 拉直旋转（`rotate(0) translateY(-4px)`）+ 展开摘要/meta。注意：Sidebar.tsx 注释"露出区 88px"与 CSS 实际 80px 不一致（注释过时，行为以 CSS 为准）。
+- **会话堆叠卡 `--h` 测量**（Sidebar effect，deps `[sessions, currentSessionId]`）：每张 `.scard` 置 `--h = scrollHeight + 2`；CSS `margin-bottom: calc(80px - var(--h, 140px))` 使每卡恒定露出 80px 头部（标题 + 2 行摘要），hover 拉直旋转（`rotate(0) translateY(-4px)`）+ 展开摘要/meta。
 - **侧栏分区滚动**（styles.css 注释明示）：`.sidebar` 整栏 `overflow: hidden`，`.core-wrap`/`.side-foot` `flex: none` 固定，会话/项目两区 flex 分割、`.deck`/`#file-tree` 各自 `overflow-y: auto`——列表过长只滚列表区，项目标题行与底部 workspace 行始终可见。
 - **统一滚动条**（styles.css）：`*::-webkit-scrollbar` 全局 6px 终端绿胶囊（thumb `#00ff66`/hover `#66ff99`、轨道与角落透明，vision 规格），替代旧 feed/侧栏/term-body 分段 8px 规则——侧栏整栏不滚动，旧 `.sidebar` 规则本就无效；新滚动容器（`.palette`/`.ask-options`/`.pp-list`/`.diff-body` 等）自动同款。
+- **对角角标共享 `.corner` 类**（styles.css）：trace/diff/ask-dialog/project-panel 四组件的 8×8 对角角标伪元素收敛为单一 `.corner::before/::after` 规则，组件 JSX 只加 `corner` 类名——新组件要角标只加类名，不复制伪元素块；`.trace`/`.diff` 自身仍需 `position: relative`（类名不复位定位）。
 - **`setSessionTitle` 与 `applySession` 分工**：改名当前会话只走 `setSessionTitle`（仅更新 `sessionTitle`，feed/状态机/token 全不动）——`applySession` 会重建 feed，误用会把正在进行的对话内容冲掉。
 - **删除是软删除 + 两段确认**：`deleteSession` 为软删（主进程语义，UI 只展示 log），侧栏用「首击确认? + 2.5s 自动复位」防误触；删除当前会话后主进程指针自动落回最近会话，渲染层不自行猜 id，`getCurrentSession` 重拉。
 - **日志前端自收集**：`store.logs` 上限 120 行（LOG_MAX），`role="log"`，收起时 `aria-hidden`。
-- **交互细节**：mousedown 全局焦点归还 `#cmdline`（v4 §7.5）；Enter 在 STREAMING/CANCELLING 时切换为中断而非发送；面板打开且有候选时 Enter/Tab 插入选中项（不回发）。
+- **交互细节**：mousedown 全局焦点归还 `#cmdline`（v4 §7.5），豁免 `.ask-mask`/`.project-panel`/`.palette`/`.s-title-edit`——弹层内部输入与内联重命名输入不被抢焦；Enter 在 STREAMING/CANCELLING 时切换为中断而非发送；面板打开且有候选时 Enter/Tab 插入选中项（不回发）。
 - **命令面板只插入、不执行**：选中项仅写入输入框、不触发任何行为，回车后与普通输入同路径 `prompt`；命令执行语义归宿主 TUI 层（InputBar 头注释明示），渲染层不维护命令实现，避免两处命令知识漂移。
 - **command 优先 + 字母序**：面板 max-height 320px 截断时命令恒在可见区（命令少、skills 多），字母序给稳定预期。
 - **启动预取一次**：`listCommands` 主进程聚合扫描较重，仅 mount 调用一次，打开/过滤面板不再查主进程（代价见「已知限制与技术债」）。
@@ -115,7 +116,7 @@
 - 渲染进程零 Node 访问：所有数据经 ZionAPI 白名单。
 
 **失败模式**：
-- 桥未注入（`window.zion` undefined）：`useAgentEvents` 与扩展 UI 订阅 effect 均直接 return（空界面、扩展对话框落空）；smoke 经 `window.zion.ping` 自检——开发中先查 preload 注入。
+- 桥未注入（`window.zion` undefined）：`useAgentEvents`、扩展 UI 订阅与启动恢复 effect 均直接 return（空界面、扩展对话框落空、无项目引导）；smoke 经 `window.zion.ping` 自检——开发中先查 preload 注入。
 - 主进程超时兜底不通知渲染层：timeout 只 resolve 扩展 Promise，弹层保持打开（残留）直到用户点取消/遮罩——无害但可见；单弹层槽被新 ask 覆盖后，旧 Promise 同样只能等超时。
 - prompt 错误回合：不抛错（SDK 语义），由 `message_end` stopReason 处理；InputBar 另有 catch 兜底日志。
 - `scanTree`/`listSessions`/`switchSession`/`newSession`/`renameSession`/`deleteSession` 失败：各自 catch → `log('err')`，UI 不崩（空列表占位文案）。
@@ -135,7 +136,6 @@
 - `AgentInfo` 类型保留但 Agent 卡片已移除（侧栏改为会话列表），注释注明供未来 agent 注册表。
 - 协议提供 `steer`/`followUp`，UI 未接线；事件流中 steer 相关事件被默认分支忽略。
 - 命令面板数据仅启动预取一次（`listCommands`），运行中新增/修改 skills 或命令不刷新，需重启应用。
-- 「启动无最近项目自动打开项目选择面板」未接线：`projectOpen` 初始 false，App 启动仅 `getCurrentSession` 恢复会话，面板目前只有侧栏「切换项目」入口（ADR-0003 决策 4 与 CONTEXT.md「项目」词条声称的启动自动打开尚未实现）。
 - Sidebar `.side-foot` 的 `workspace: zion-workspace` 为硬编码文案，切换项目后不随 `WORKSPACE_DIR` 更新（真实项目路径已显示在 `.side-head` 标题，此行待清理）。
 - 项目面板无测试覆盖（同组件层现状，smoke 不查 `.project-panel`）。
 

@@ -27,31 +27,25 @@ const api = {
   newSession: () => ipcRenderer.invoke('zion:new-session'),
   renameSession: (id, name) => ipcRenderer.invoke('zion:rename-session', id, name),
   deleteSession: (id) => ipcRenderer.invoke('zion:delete-session', id),
-  onAgentEvent: (cb) => {
-    const listener = (
-      /** @type {import('electron').IpcRendererEvent} */ _e,
-      /** @type {import('../shared/protocol.ts').AgentSessionEvent} */ event,
-    ) => cb(event);
-    ipcRenderer.on('agent:event', listener);
-    return () => ipcRenderer.removeListener('agent:event', listener);
-  },
+  onAgentEvent: (cb) => subscribe('agent:event', cb),
   uiAnswer: (id, result) => ipcRenderer.invoke('zion:ui-answer', id, result),
-  onUiAsk: (cb) => {
-    const listener = (
-      /** @type {import('electron').IpcRendererEvent} */ _e,
-      /** @type {import('../shared/protocol.ts').UiAsk} */ ask,
-    ) => cb(ask);
-    ipcRenderer.on('zion:ui-ask', listener);
-    return () => ipcRenderer.removeListener('zion:ui-ask', listener);
-  },
-  onUiNotify: (cb) => {
-    const listener = (
-      /** @type {import('electron').IpcRendererEvent} */ _e,
-      /** @type {import('../shared/protocol.ts').UiNotify} */ n,
-    ) => cb(n);
-    ipcRenderer.on('zion:ui-notify', listener);
-    return () => ipcRenderer.removeListener('zion:ui-notify', listener);
-  },
+  onUiAsk: (cb) => subscribe('zion:ui-ask', cb),
+  onUiNotify: (cb) => subscribe('zion:ui-notify', cb),
 };
+
+/** 订阅样板：注册 ipcRenderer.on + 返回退订（通道名与回调载荷类型在调用点注入）
+ * @template T
+ * @param {string} channel
+ * @param {(payload: T) => void} cb
+ * @returns {() => void}
+ */
+function subscribe(channel, cb) {
+  const listener = (
+    /** @type {import('electron').IpcRendererEvent} */ _e,
+    /** @type {T} */ payload,
+  ) => cb(payload);
+  ipcRenderer.on(channel, listener);
+  return () => ipcRenderer.removeListener(channel, listener);
+}
 
 contextBridge.exposeInMainWorld('zion', api);
