@@ -18,7 +18,10 @@ import { useFeed, parseEditFromTool, normPath, matchTreeRow, openAncestors, deri
 import { releaseWorm } from './components/SignalCanvas';
 
 function useAgentEvents() {
-  const appendDelta = useFeed((s) => s.appendDelta);
+  const queueDelta = useFeed((s) => s.queueDelta);
+  const armTurn = useFeed((s) => s.armTurn);
+  const closeTurn = useFeed((s) => s.closeTurn);
+  const addUsage = useFeed((s) => s.addUsage);
   const toolStart = useFeed((s) => s.toolStart);
   const toolEnd = useFeed((s) => s.toolEnd);
   const setSessionState = useFeed((s) => s.setSessionState);
@@ -69,7 +72,7 @@ function useAgentEvents() {
         case 'message_update': {
           const e = ev.assistantMessageEvent;
           if (e.type === 'text_delta' || e.type === 'thinking_delta') {
-            appendDelta(e.delta);
+            queueDelta(e.delta, e.type === 'thinking_delta' ? 'thinking' : 'text');
             setSessionState('STREAMING');
           }
           break;
@@ -93,11 +96,13 @@ function useAgentEvents() {
           }
           break;
         case 'agent_start':
+          armTurn(); // 回合起点（队列化，与后续 delta/tool 保序）
           setSessionState('RUNNING');
           replyScheduled = false;
           errored = false;
           break;
         case 'agent_end':
+          closeTurn(); // 回合闭环 → 结算行（中断判定在 store 内按 interrupted 标记）
           setSessionState('READY');
           if (!replyScheduled && !errored) {
             replyScheduled = true;
@@ -108,13 +113,22 @@ function useAgentEvents() {
           }
           break;
         case 'agent_settled':
+          closeTurn();
           setSessionState('READY');
           break;
+        case 'turn_end': {
+          // 每个 LLM turn 的 usage 累积进活动回合（结算行 Σtokens；多 turn 工具循环求和）
+          const m = ev.message as { usage?: { totalTokens?: number } } | null;
+          const tk = m?.usage?.totalTokens;
+          if (typeof tk === 'number') addUsage(tk);
+          break;
+        }
         case 'message_end': {
           // stopReason 只存在于 LLM 助手消息分支（AgentMessage 联合的其他成员没有）；
           // 运行时按字段存在性判定，其余消息类型自动跳过。
           const stop = ev.message as { stopReason?: string } | null;
           if (stop?.stopReason === 'error') {
+            closeTurn('error');
             setSessionState('READY');
             errored = true;
             SND.abort();
@@ -127,7 +141,7 @@ function useAgentEvents() {
       }
     };
     return window.zion.onAgentEvent(handle);
-  }, [appendDelta, toolStart, toolEnd, setSessionState, log]);
+  }, [queueDelta, armTurn, closeTurn, addUsage, toolStart, toolEnd, setSessionState, log]);
 
   // 扩展 UI 桥：对话框 + 通知订阅
   const setUiAsk = useFeed((s) => s.setUiAsk);
@@ -172,6 +186,8 @@ export default function App() {
   const sessionTitle = useFeed((s) => s.sessionTitle);
   const sndOn = useFeed((s) => s.sndOn);
   const setSndOn = useFeed((s) => s.setSndOn);
+  const decOn = useFeed((s) => s.decOn);
+  const setDecOn = useFeed((s) => s.setDecOn);
   const tokenCount = useFeed((s) => s.tokenCount);
   const pushUser = useFeed((s) => s.pushUser);
   const log = useFeed((s) => s.log);
@@ -312,6 +328,13 @@ export default function App() {
             title="切换 UI 音效"
           >
             SND: {sndOn ? 'ON' : 'OFF'}
+          </button>
+          <button
+            className="st-btn"
+            onClick={() => setDecOn(!decOn)}
+            title="切换 OPERATOR 消息注入解码动画"
+          >
+            DEC: {decOn ? 'ON' : 'OFF'}
           </button>
           <span id="st-state" className={sessionState === 'READY' ? 'ready' : 'run'}>
             {sessionState}

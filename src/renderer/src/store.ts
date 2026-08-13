@@ -36,24 +36,64 @@ export interface EditInfo {
   rows: DiffRow[];
 }
 
-/** feed 消息项 —— 渲染层数据模型（与 SDK 事件解耦，只保留 UI 所需字段） */
-export type FeedItem =
-  | { id: string; kind: 'user'; text: string; time: string }
-  | { id: string; kind: 'assistant'; text: string; time: string; interrupted?: boolean }
+/** 内容段：正文 / 思考（SDK thinking_start/delta/end 干净拆分；渲染层思考段折叠展示） */
+export interface TurnSegment {
+  id: string;
+  kind: 'text' | 'thinking';
+  text: string;
+  time: string;
+}
+
+/** 工具调用条目（回合 content 内的工具卡数据，原 tool FeedItem） */
+export interface TurnTool {
+  id: string;
+  kind: 'tool';
+  toolCallId: string;
+  toolName: string;
+  args?: unknown;
+  status: ToolStatus;
+  time: string;
+  /** 开始时刻（performance.now()，用于「完成 · X.Xs」真实计时） */
+  startAt: number;
+  /** 耗时秒数（tool_execution_end 时写入） */
+  dur?: number;
+  /** 编辑类工具调用时携带，渲染为 diff 卡；tool_execution_end 可用 result.patch 升级 */
+  edit?: EditInfo;
+}
+
+/** 回合内容：内容段与工具调用按到达顺序保序排列 */
+export type TurnEntry = TurnSegment | TurnTool;
+
+/** 结算行数据（见 CONTEXT.md「结算行」）：回合闭环时统计 */
+export interface TurnSettle {
+  tools: number;
+  /** 回合内各 LLM turn 的 usage.totalTokens 求和；null = 未收到 usage 数据 */
+  tokens: number | null;
+  /** agent_start→闭环实测秒数 */
+  dur: number;
+  /** 中断/错误回合照常结算（标「已中断」/「错误」） */
+  outcome: 'ok' | 'interrupted' | 'error';
+}
+
+/**
+ * 回合 —— feed 的聚合单元（见 CONTEXT.md「agent 回合」）。
+ * operator = 一次用户输入；agent = 一次 prompt 驱动的执行周期（agent_start→agent_end）。
+ * 回合边界即 React.memo 边界：流式期间只有活动回合对象被替换，历史回合零渲染成本。
+ */
+export type Turn =
+  | { id: string; kind: 'operator'; text: string; time: string }
   | {
       id: string;
-      kind: 'tool';
-      toolCallId: string;
-      toolName: string;
-      args?: unknown;
-      status: ToolStatus;
+      kind: 'agent';
       time: string;
-      /** 开始时刻（performance.now()，用于「完成 · X.Xs」真实计时） */
-      startAt: number;
-      /** 耗时秒数（tool_execution_end 时写入） */
-      dur?: number;
-      /** 编辑类工具调用时携带，渲染为 diff 卡；tool_execution_end 可用 result.patch 升级 */
-      edit?: EditInfo;
+      content: TurnEntry[];
+      interrupted?: boolean;
+      /** 回合起点（performance.now()，结算行耗时基准） */
+      startedAt: number;
+      /** Σ usage.totalTokens（turn_end 累积；seenUsage=false 时结算行 tokens 显示 null） */
+      tokens: number;
+      seenUsage: boolean;
+      settle?: TurnSettle;
     };
 
 /** 派生信号 FX（v4：模块级对象广播，不进 React 渲染路径；组件直接 import fx 读取） */
@@ -70,7 +110,12 @@ export const fx: FxState = { ...FX_IDLE };
 const LOG_MAX = 120;
 
 interface FeedState {
-  items: FeedItem[];
+  /** 回合表（id → Turn）；流式期间仅活动回合对象被替换 */
+  turns: Record<string, Turn>;
+  /** 回合渲染顺序（仅在新增回合时换引用） */
+  order: string[];
+  /** 活动（未闭环）agent 回合 id；null = 无 */
+  activeTurnId: string | null;
   sessionState: SessionState;
   logs: LogLine[];
   tree: FileNode[];
@@ -84,6 +129,8 @@ interface FeedState {
   currentProject: string | null;
   tokenCount: number;
   sndOn: boolean;
+  /** 注入解码开关（见 CONTEXT.md「注入解码」；localStorage.zion.dec，默认开） */
+  decOn: boolean;
   /** 蠕虫命中完成（releaseWorm done 回调）后登记的 toolCallId 集合——diff 卡延迟到命中后渲染 */
   revealedEdits: Record<string, true>;
   /** 工具链块展开态（trace 行点击展开完整参数） */
@@ -98,12 +145,20 @@ interface FeedState {
   wormActive: number;
 
   pushUser(text: string): void;
-  /** 流式增量追加到末条 assistant 消息（无则新建）；每字符 token +2 */
-  appendDelta(delta: string): void;
-  /** 中断时给末条 assistant 消息追加红色中断标记 */
+  /** 流式增量进入渲染队列（rAF 合帧 flush；无活动回合则新建 agent 回合） */
+  queueDelta(delta: string, kind?: 'text' | 'thinking'): void;
+  /** agent_start：下一个内容开启新回合（队列化，保序） */
+  armTurn(): void;
+  /** agent_end / agent_settled / message_end(error)：闭环当前回合并写结算行（队列化，保序） */
+  closeTurn(outcome?: 'ok' | 'error'): void;
+  /** turn_end 携带的 usage.totalTokens 累积进活动回合（结算行 Σtokens + 状态栏真实计数） */
+  addUsage(tokens: number): void;
+  /** 中断时给活动回合打中断标记（队列化，保序） */
   markInterrupted(): void;
   toolStart(ev: Pick<ToolExecutionStartEvent, 'toolCallId' | 'toolName' | 'args'>, edit?: EditInfo): void;
   toolEnd(toolCallId: string, isError: boolean, result?: unknown): void;
+  /** 内部：应用一帧的事件队列（勿直接调用；pushUser/applySession/reset 会先同步 flush） */
+  _flush(ops: PendingOp[]): void;
   setSessionState(state: SessionState): void;
   log(level: LogLine['level'], text: string): void;
   revealEdit(toolCallId: string): void;
@@ -123,6 +178,7 @@ interface FeedState {
   /** 切换/新建会话：设置当前会话 + 以历史重建 feed（清 token/状态机回 READY） */
   applySession(id: string, title: string, items: SessionHistoryItem[]): void;
   setSndOn(on: boolean): void;
+  setDecOn(on: boolean): void;
   reset(): void;
 }
 
@@ -132,8 +188,46 @@ const fmtTime = (d: Date) => new Date(d).toLocaleTimeString('zh-CN', { hour12: f
 const msgTime = () => fmtTime(new Date());
 const logTime = () => new Date().toLocaleTimeString('zh-CN', { hour12: false });
 
+/* ---------------- 流式渲染队列（rAF 合帧，保序） ----------------
+ * agent 事件逐条到达（每条 IPC 一个宏任务），若每条都 set() 则长会话下整树重渲染成为主瓶颈。
+ * 这里把一帧内的事件攒成 op 队列，rAF 时一次性 flush：每帧至多一次 store 更新，
+ * 且只有活动回合对象被替换（回合级 memo 的前提）。 */
+type PendingOp =
+  | { t: 'arm' }
+  | { t: 'delta'; delta: string; kind: 'text' | 'thinking' }
+  | { t: 'toolStart'; ev: Pick<ToolExecutionStartEvent, 'toolCallId' | 'toolName' | 'args'>; edit?: EditInfo }
+  | { t: 'toolEnd'; toolCallId: string; isError: boolean; result?: unknown }
+  | { t: 'usage'; tokens: number }
+  | { t: 'interrupt' }
+  | { t: 'close'; outcome?: 'ok' | 'error' };
+
+const opQueue: PendingOp[] = [];
+let flushScheduled = false;
+/** 下一个内容开启新回合（agent_start 置位；消费后复位） */
+let armed = false;
+/** agent_start 时刻（flush 时记录；结算行耗时基准） */
+let armAt = 0;
+
+function scheduleFlush() {
+  if (flushScheduled) return;
+  flushScheduled = true;
+  requestAnimationFrame(() => {
+    flushScheduled = false;
+    flushNow();
+  });
+}
+
+/** 同步 drain 队列（pushUser / applySession / reset 等非流式动作调用，保证全局顺序） */
+function flushNow() {
+  if (!opQueue.length) return;
+  const ops = opQueue.splice(0);
+  useFeed.getState()._flush(ops);
+}
+
 export const useFeed = create<FeedState>()((set) => ({
-  items: [],
+  turns: {},
+  order: [],
+  activeTurnId: null,
   sessionState: 'READY',
   logs: [],
   tree: [],
@@ -143,6 +237,7 @@ export const useFeed = create<FeedState>()((set) => ({
   currentProject: null,
   tokenCount: 0,
   sndOn: localStorage.getItem('zion.snd') !== '0',
+  decOn: localStorage.getItem('zion.dec') !== '0',
   revealedEdits: {},
   expandedTools: {},
   uiAsk: null,
@@ -151,65 +246,180 @@ export const useFeed = create<FeedState>()((set) => ({
   wormActive: 0,
 
   pushUser(text) {
-    set((s) => ({ items: [...s.items, { id: nid(), kind: 'user', text, time: msgTime() }] }));
-  },
-  appendDelta(delta) {
-    if (!delta) return;
+    flushNow(); // 先 drain 流式队列，保证 OPERATOR 回合落在正确位置
     set((s) => {
-      const items = [...s.items];
-      const last = items[items.length - 1];
-      if (last && last.kind === 'assistant') {
-        items[items.length - 1] = { ...last, text: last.text + delta };
-      } else {
-        items.push({ id: nid(), kind: 'assistant', text: delta, time: msgTime() });      }
-      return { items, tokenCount: s.tokenCount + delta.length * 2 };
+      const t: Turn = { id: nid(), kind: 'operator', text, time: msgTime() };
+      return { turns: { ...s.turns, [t.id]: t }, order: [...s.order, t.id] };
     });
+  },
+  queueDelta(delta, kind = 'text') {
+    if (!delta) return;
+    opQueue.push({ t: 'delta', delta, kind });
+    scheduleFlush();
+  },
+  armTurn() {
+    opQueue.push({ t: 'arm' });
+    scheduleFlush();
+  },
+  closeTurn(outcome) {
+    opQueue.push({ t: 'close', outcome });
+    scheduleFlush();
+  },
+  addUsage(tokens) {
+    if (!(tokens > 0)) return;
+    opQueue.push({ t: 'usage', tokens });
+    scheduleFlush();
   },
   markInterrupted() {
-    set((s) => {
-      const items = [...s.items];
-      const last = items[items.length - 1];
-      if (last && last.kind === 'assistant') {
-        items[items.length - 1] = { ...last, interrupted: true };
-      }
-      return { items };
-    });
+    opQueue.push({ t: 'interrupt' });
+    scheduleFlush();
   },
   toolStart(ev, edit) {
-    set((s) => ({
-      items: [
-        ...s.items,
-        {
-          id: nid(),
-          kind: 'tool',
-          toolCallId: ev.toolCallId,
-          toolName: ev.toolName,
-          args: ev.args,
-          status: 'run',
-          time: msgTime(),
-          startAt: performance.now(),
-          edit,
-        },
-      ],
-    }));
+    opQueue.push({ t: 'toolStart', ev, edit });
+    scheduleFlush();
   },
   toolEnd(toolCallId, isError, result) {
+    opQueue.push({ t: 'toolEnd', toolCallId, isError, result });
+    scheduleFlush();
+  },
+  _flush(ops) {
     set((s) => {
-      const items = [...s.items];
-      for (let i = items.length - 1; i >= 0; i--) {
-        const it = items[i];
-        if (it.kind === 'tool' && it.toolCallId === toolCallId && it.status === 'run') {
-          const upgrade = upgradeEditFromResult(it, result);
-          items[i] = {
-            ...it,
-            status: isError ? 'err' : 'ok',
-            dur: (performance.now() - it.startAt) / 1000,
-            edit: upgrade ?? it.edit,
+      const turns = { ...s.turns };
+      let order = s.order;
+      let activeId = s.activeTurnId;
+      let tokenCount = s.tokenCount;
+      const cloned = new Set<string>();
+
+      /** 取回合的可变工作副本（首次访问时克隆换引用——回合 memo 只认新对象） */
+      const edit = (tid: string) => {
+        let t = turns[tid] as Extract<Turn, { kind: 'agent' }>;
+        if (!cloned.has(tid)) {
+          t = { ...t, content: [...t.content] };
+          turns[tid] = t;
+          cloned.add(tid);
+        }
+        return t;
+      };
+      /** 取/建活动 agent 回合（armed 或无活动回合时新建） */
+      const ensureTurn = () => {
+        const cur = activeId ? turns[activeId] : undefined;
+        if (!cur || cur.kind !== 'agent' || armed) {
+          const t: Turn = {
+            id: nid(),
+            kind: 'agent',
+            time: msgTime(),
+            content: [],
+            startedAt: armAt || performance.now(),
+            tokens: 0,
+            seenUsage: false,
           };
-          break;
+          turns[t.id] = t;
+          order = [...order, t.id];
+          activeId = t.id;
+          armed = false;
+          cloned.add(t.id);
+        }
+        return edit(activeId as string);
+      };
+
+      for (const op of ops) {
+        switch (op.t) {
+          case 'arm':
+            armed = true;
+            armAt = performance.now();
+            break;
+          case 'close': {
+            // 回合闭环：写结算行（中断/错误照常结算，见 CONTEXT.md「结算行」）
+            const cur = activeId ? turns[activeId] : undefined;
+            if (cur?.kind === 'agent' && !cur.settle) {
+              const t = edit(cur.id);
+              t.settle = {
+                tools: t.content.filter((e) => e.kind === 'tool').length,
+                tokens: t.seenUsage ? t.tokens : null,
+                dur: (performance.now() - t.startedAt) / 1000,
+                outcome: op.outcome === 'error' ? 'error' : t.interrupted ? 'interrupted' : 'ok',
+              };
+            }
+            activeId = null;
+            armed = false;
+            break;
+          }
+          case 'delta': {
+            const t = ensureTurn();
+            const last = t.content[t.content.length - 1];
+            if (last && last.kind === op.kind) {
+              t.content[t.content.length - 1] = { ...last, text: last.text + op.delta };
+            } else {
+              t.content.push({ id: nid(), kind: op.kind, text: op.delta, time: msgTime() });
+            }
+            break;
+          }
+          case 'usage': {
+            const cur = activeId ? turns[activeId] : undefined;
+            if (cur?.kind === 'agent') {
+              const t = edit(cur.id);
+              t.tokens += op.tokens;
+              t.seenUsage = true;
+            }
+            tokenCount += op.tokens; // 状态栏真实 token 计数（替换原伪计数）
+            break;
+          }
+          case 'toolStart': {
+            const t = ensureTurn();
+            t.content.push({
+              id: nid(),
+              kind: 'tool',
+              toolCallId: op.ev.toolCallId,
+              toolName: op.ev.toolName,
+              args: op.ev.args,
+              status: 'run',
+              time: msgTime(),
+              startAt: performance.now(),
+              edit: op.edit,
+            });
+            break;
+          }
+          case 'toolEnd': {
+            // 优先活动回合；找不到（回合闭环后的迟到事件）倒序扫全部回合
+            const hasRun = (tid: string | null) => {
+              const t = tid ? turns[tid] : undefined;
+              return (
+                t?.kind === 'agent' &&
+                t.content.some((e) => e.kind === 'tool' && e.toolCallId === op.toolCallId && e.status === 'run')
+              );
+            };
+            let target: string | null = hasRun(activeId) ? activeId : null;
+            if (target === null) {
+              for (let i = order.length - 1; i >= 0; i--) {
+                if (hasRun(order[i])) {
+                  target = order[i];
+                  break;
+                }
+              }
+            }
+            if (target === null) break;
+            const t = edit(target);
+            for (let i = t.content.length - 1; i >= 0; i--) {
+              const e = t.content[i];
+              if (e.kind === 'tool' && e.toolCallId === op.toolCallId && e.status === 'run') {
+                const upgrade = upgradeEditFromResult(e, op.result);
+                t.content[i] = {
+                  ...e,
+                  status: op.isError ? 'err' : 'ok',
+                  dur: (performance.now() - e.startAt) / 1000,
+                  edit: upgrade ?? e.edit,
+                };
+                break;
+              }
+            }
+            break;
+          }
+          case 'interrupt':
+            if (activeId) edit(activeId).interrupted = true;
+            break;
         }
       }
-      return { items };
+      return { turns, order, activeTurnId: activeId, tokenCount };
     });
   },
   setSessionState(sessionState) {
@@ -251,19 +461,43 @@ export const useFeed = create<FeedState>()((set) => ({
   setSessionTitle(title) { set({ sessionTitle: title }); },
   setTree(tree) { set({ tree }); },
   applySession(id, title, items) {
-    const feedItems: FeedItem[] = items.map((h) => ({
-      id: nid(),
-      kind: h.role,
-      text: h.text,
-      time: h.ts ? fmtTime(new Date(h.ts)) : msgTime(),
-    }));
-    set({ currentSessionId: id, sessionTitle: title, items: feedItems, sessionState: 'READY', tokenCount: 0, expandedTools: {} });
+    // 历史重建：丢弃旧会话的流式队列（防跨会话污染），回合只重建文本（共识 Q12）
+    opQueue.length = 0;
+    armed = false;
+    const turns: Record<string, Turn> = {};
+    const order: string[] = [];
+    for (const h of items) {
+      const time = h.ts ? fmtTime(new Date(h.ts)) : msgTime();
+      const t: Turn =
+        h.role === 'user'
+          ? { id: nid(), kind: 'operator', text: h.text, time }
+          : {
+              id: nid(),
+              kind: 'agent',
+              time,
+              content: [{ id: nid(), kind: 'text', text: h.text, time }],
+              startedAt: 0, // 历史回合不计时（共识 Q12：只重建文本，无结算行）
+              tokens: 0,
+              seenUsage: false,
+            };
+      turns[t.id] = t;
+      order.push(t.id);
+    }
+    set({ currentSessionId: id, sessionTitle: title, turns, order, activeTurnId: null, sessionState: 'READY', tokenCount: 0, expandedTools: {} });
   },
   setSndOn(sndOn) {
     localStorage.setItem('zion.snd', sndOn ? '1' : '0');
     set({ sndOn });
   },
-  reset() { set({ items: [], sessionState: 'READY', tokenCount: 0 }); },
+  setDecOn(decOn) {
+    localStorage.setItem('zion.dec', decOn ? '1' : '0');
+    set({ decOn });
+  },
+  reset() {
+    opQueue.length = 0;
+    armed = false;
+    set({ turns: {}, order: [], activeTurnId: null, sessionState: 'READY', tokenCount: 0 });
+  },
 }));
 
 /* ---------------- 蠕虫目标定位（事件层同步调用，不依赖 React 渲染时序） ---------------- */
@@ -394,7 +628,7 @@ function tryParseOne(a: Record<string, unknown>): EditInfo | undefined {
 
 /** tool_execution_end 的 result（如 EditToolDetails { diff, patch }）→ 升级 diff 行；无则 undefined */
 export function upgradeEditFromResult(
-  item: Extract<FeedItem, { kind: 'tool' }>,
+  item: TurnTool,
   result: unknown,
 ): EditInfo | undefined {
   if (!item.edit || result === undefined || result === null) return undefined;

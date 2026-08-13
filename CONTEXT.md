@@ -72,6 +72,18 @@ _Avoid_: 音效系统、beep
 以 `stopReason: "error"` 结束的 agent 回合（模型/请求失败）。UI 记录红色日志并发出中止音，状态机仍回 READY。
 _Avoid_: 异常、失败对话
 
+**凝结雨轨**：
+agent 回合左侧的活动指示轨：回合流式期间一条迷你数字雨下落，回合闭环时雨消散、凝结为 ◆。是回合活动状态的可视化，不承载额外业务信息；同一时刻只有活动回合持有雨轨 canvas。
+_Avoid_: 进度条、loading 条
+
+**结算行**：
+回合闭环时的统计尾行：`◆ 已结算 · N tools · Σtokens · 耗时`（tokens 为回合内各 LLM turn 的 usage 求和，耗时为 agent_start→agent_end 实测）。中断回合与错误回合照常结算，标「已中断」/「错误」。
+_Avoid_: 汇总、footer
+
+**注入解码**：
+OPERATOR 消息入场时假名乱码逐位还原为文字的短动画（约 450ms）。有全局开关 DEC，状态持久化在本地（localStorage），默认开。
+_Avoid_: 打字机、乱码特效
+
 ## Rules
 
 - 氛围资产（数字雨/Neo 头像/蠕虫/SND/扫描线）不得承载业务状态——业务状态只走 feed、会话状态机与日志抽屉。

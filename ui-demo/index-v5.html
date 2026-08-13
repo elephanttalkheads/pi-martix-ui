@@ -1,0 +1,804 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ZION — 会话区 v5（信号凝结）</title>
+<!--
+  v5 demo：只重设计「会话区」，不改动实际代码。
+  方向：从日志流升级为真实 agent 会话界面 ——
+    · OPERATOR / ZION 双角色结构化（右框注入 vs 左轨凝结）
+    · 思考块折叠 / 工具调用一行卡 / diff 卡（沿用线上 §5.8 结构）/ 授权闸
+    · 回合结算行（◆ 已结算 · tools · tokens · 耗时）
+  签名元素：凝结雨轨 —— agent 流式生成时回合左侧一条迷你数字雨下落，
+  回合结束时雨消散、凝结为 ◆。隐喻：操作员看着代码雨凝结成可读的思想。
+  融合层：液态玻璃 × 磷光终端 —— 矩阵的骨（直角、发线、单色）+ 玻璃的光
+  （背透模糊透出数字雨、顶边镜面高光、状态跃迁涟漪）。玻璃只给
+  agent 凝结出的实体（工具卡/diff/授权闸），消息流保持纯平终端。
+-->
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
+
+:root {
+  /* 磷光单色体系（沿用 brand-spec / v4，层级只靠明度；琥珀仅授权警示） */
+  --bg: #010a04;
+  --surface: rgba(2, 18, 9, 0.92);
+  --surface-2: rgba(3, 26, 13, 0.94);
+  --text-primary: #3dff8f;
+  --text-secondary: #23c468;
+  --text-tertiary: #1da754;
+  --accent: #00ff41;
+  --accent-muted: #14b850;
+  --bright: #c2ffd9;
+  --warning: #ffb000;
+  --danger: #ff5555;
+  --border: rgba(61, 255, 143, 0.18);
+  --border-lit: rgba(61, 255, 143, 0.38);
+  --font: "Share Tech Mono", ui-monospace, "Courier New", monospace;
+  --rail-w: 26px; /* 凝结雨轨宽度 + 间距 */
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { height: 100%; }
+
+body {
+  background: var(--bg);
+  color: var(--text-primary);
+  font-family: var(--font);
+  overflow: hidden;
+}
+
+:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
+
+::selection { background: rgba(0, 255, 65, 0.25); }
+
+/* ---------- 环境层 ---------- */
+#rain { position: fixed; inset: 0; z-index: 0; opacity: 0.55; }
+.scanlines {
+  position: fixed; inset: 0; z-index: 40; pointer-events: none;
+  background: repeating-linear-gradient(0deg,
+    rgba(0, 0, 0, 0.10) 0px, rgba(0, 0, 0, 0.10) 1px,
+    transparent 1px, transparent 4px);
+}
+
+#stage { position: relative; z-index: 5; height: 100vh; display: flex; flex-direction: column; }
+
+/* ---------- 标题栏 ---------- */
+.titlebar {
+  height: 36px; flex: none;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 14px; user-select: none; font-size: 13px;
+}
+.window-controls { display: flex; gap: 8px; }
+.dot { width: 10px; height: 10px; border-radius: 50%; }
+.dot.close { background: var(--danger); }
+.dot.min { background: var(--accent-muted); }
+.dot.max { background: var(--accent); }
+.brand { letter-spacing: 0.22em; text-transform: uppercase; font-size: 13px; }
+.brand .proto { color: var(--text-tertiary); letter-spacing: 0.1em; text-transform: none; }
+.titlebar .clock { color: var(--text-secondary); letter-spacing: 0.08em; }
+
+/* ---------- 会话区框架 ---------- */
+.console { flex: 1; min-height: 0; display: flex; flex-direction: column; background: var(--surface); }
+
+.conv-head {
+  flex: none; display: flex; align-items: center; gap: 12px;
+  padding: 8px 20px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
+  font-size: 12px;
+}
+.conv-head .c-title { color: var(--text-primary); letter-spacing: 0.12em; font-size: 13px; }
+.chip {
+  border: 1px solid var(--border);
+  padding: 2px 10px; font-size: 11px;
+  color: var(--text-secondary); letter-spacing: 0.08em;
+}
+.chip.on { color: var(--accent-muted); border-color: var(--border-lit); }
+.chip.ctx { margin-left: auto; color: var(--text-tertiary); }
+
+/* ---------- 消息流 ---------- */
+#feed { flex: 1; overflow-y: auto; padding: 22px 28px 16px; scroll-behavior: smooth; }
+#feed::-webkit-scrollbar { width: 8px; }
+#feed::-webkit-scrollbar-thumb { background: var(--text-tertiary); }
+#feed::-webkit-scrollbar-track { background: transparent; }
+
+/* 回合 = 一次发言。OPERATOR 右框，ZION 左轨。 */
+.turn { margin-bottom: 26px; animation: blockIn 0.2s ease-out; }
+@keyframes blockIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+.turn-head {
+  display: flex; align-items: baseline; gap: 10px;
+  font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase;
+  margin-bottom: 6px; color: var(--text-tertiary);
+}
+.turn-head .who { letter-spacing: 0.22em; }
+.turn-head .t-time { letter-spacing: 0.05em; text-transform: none; }
+
+/* --- OPERATOR：右侧信号框，四角括线 --- */
+.turn.operator { display: flex; flex-direction: column; align-items: flex-end; }
+.turn.operator .turn-head { color: var(--text-secondary); }
+.op-frame {
+  position: relative;
+  max-width: min(640px, 78%);
+  border: 1px solid var(--border-lit);
+  background: rgba(61, 255, 143, 0.05);
+  padding: 10px 14px;
+}
+.op-frame::before, .op-frame::after {
+  content: ""; position: absolute; width: 10px; height: 10px; pointer-events: none;
+}
+.op-frame::before { left: -1px; top: -1px; border-left: 1px solid var(--accent); border-top: 1px solid var(--accent); }
+.op-frame::after { right: -1px; bottom: -1px; border-right: 1px solid var(--accent); border-bottom: 1px solid var(--accent); }
+.op-frame .op-body {
+  font-size: 15px; line-height: 1.75; color: var(--bright);
+  white-space: pre-wrap; word-break: break-word;
+}
+
+/* --- ZION：左轨凝结流 --- */
+.turn.zion { position: relative; padding-left: calc(var(--rail-w) + 14px); max-width: 900px; }
+.turn.zion .turn-head .who { color: var(--accent-muted); }
+.turn.zion .turn-head .glyph { color: var(--accent-muted); }
+
+/* 凝结雨轨：流式时迷你雨下落，结算后让位给 ◆ */
+.rail {
+  position: absolute; left: 0; top: 22px; bottom: 2px;
+  width: var(--rail-w);
+  border-left: 1px solid var(--border);
+  overflow: hidden;
+}
+.rail canvas { display: block; width: 100%; height: 100%; }
+.rail .seal {
+  position: absolute; inset: 0; display: none;
+  align-items: flex-start; justify-content: center;
+  padding-top: 2px; color: var(--accent-muted); font-size: 14px;
+  animation: sealIn 0.5s ease-out;
+}
+.rail.settled canvas { display: none; }
+.rail.settled .seal { display: flex; }
+@keyframes sealIn { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
+
+.z-body { font-size: 15px; line-height: 1.8; white-space: pre-wrap; word-break: break-word; }
+.z-body + .z-body { margin-top: 10px; }
+.z-body code {
+  background: rgba(61, 255, 143, 0.08);
+  border: 1px solid var(--border);
+  padding: 0 5px; font-size: 13px;
+}
+.z-body .hl { color: var(--bright); }
+
+.caret {
+  display: inline-block; width: 8px; height: 1.05em;
+  background: var(--accent);
+  vertical-align: text-bottom;
+  animation: blink 0.9s step-end infinite;
+}
+@keyframes blink { 50% { opacity: 0; } }
+
+/* --- 思考块：默认折叠 --- */
+.think { margin: 10px 0 4px; font-size: 13px; }
+.think > summary {
+  cursor: pointer; list-style: none; user-select: none;
+  color: var(--text-tertiary); letter-spacing: 0.1em;
+  display: flex; gap: 8px; align-items: baseline;
+}
+.think > summary::-webkit-details-marker { display: none; }
+.think > summary::before { content: "▸"; transition: transform 0.15s; }
+.think[open] > summary::before { content: "▾"; }
+.think > summary:hover { color: var(--text-secondary); }
+.think .think-body {
+  margin: 6px 0 2px 14px; padding: 6px 12px;
+  border-left: 1px dashed var(--border);
+  color: var(--text-tertiary); line-height: 1.7;
+  white-space: pre-wrap;
+}
+
+/* --- 工具调用卡：一行折叠，点击展开输出 --- */
+.tool {
+  margin: 6px 0;
+  border: 1px solid var(--border);
+  background: rgba(0, 12, 4, 0.3);
+  font-size: 13px;
+  animation: blockIn 0.2s ease-out;
+}
+.tool > summary {
+  cursor: pointer; list-style: none; user-select: none;
+  display: flex; gap: 10px; align-items: baseline;
+  padding: 6px 12px; color: var(--text-secondary);
+}
+.tool > summary::-webkit-details-marker { display: none; }
+.tool > summary:hover { background: rgba(61, 255, 143, 0.04); }
+.tool .st { flex: none; font-size: 12px; letter-spacing: 0.08em; }
+.tool .st.ok { color: var(--accent-muted); }
+.tool .st.err { color: var(--danger); }
+.tool .st.run { color: var(--warning); animation: blink 1s step-end infinite; }
+.tool .t-name { color: var(--text-primary); flex: none; }
+.tool .t-cmd { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tool .t-dur { margin-left: auto; flex: none; color: var(--text-tertiary); font-size: 12px; padding-left: 12px; }
+.tool .t-out {
+  border-top: 1px solid var(--border);
+  padding: 8px 12px;
+  color: var(--text-tertiary); line-height: 1.65;
+  white-space: pre-wrap; word-break: break-all;
+  font-size: 12.5px;
+  background: rgba(0, 6, 2, 0.5);
+}
+.tool .t-out .k { color: var(--text-secondary); }
+
+/* --- 液态玻璃 × 磷光终端（融合层） ---
+   矩阵的骨：直角、发线边框、单色磷光；
+   玻璃的光：背透模糊（透出背后的数字雨）、顶边镜面高光、底边折射暗线。
+   只给「agent 凝结出的实体」（工具卡 / diff / 授权闸）上玻璃，消息流保持纯平终端。 */
+.glass {
+  position: relative;
+  background:
+    linear-gradient(155deg, rgba(61, 255, 143, 0.055), rgba(61, 255, 143, 0.012) 42%, rgba(0, 0, 0, 0.14)),
+    rgba(2, 14, 7, 0.5);
+  backdrop-filter: blur(9px) saturate(1.25) brightness(1.05);
+  -webkit-backdrop-filter: blur(9px) saturate(1.25) brightness(1.05);
+  box-shadow:
+    inset 0 1px 0 rgba(194, 255, 217, 0.14),   /* 顶边镜面高光 */
+    inset 0 -1px 0 rgba(0, 0, 0, 0.42),         /* 底边折射暗线 */
+    inset 1px 0 0 rgba(194, 255, 217, 0.05),
+    0 0 26px rgba(0, 255, 65, 0.05);
+}
+/* 状态跃迁涟漪：玻璃「凝结完成」瞬间荡开的一圈光（JS 触发一次） */
+.glass > .ripple {
+  position: absolute; inset: -1px; pointer-events: none;
+  border: 1px solid rgba(194, 255, 217, 0.5);
+  animation: rippleOut 0.7s ease-out forwards;
+}
+@keyframes rippleOut {
+  from { opacity: 0.85; transform: scale(0.985); filter: blur(0); }
+  to   { opacity: 0;    transform: scale(1.035); filter: blur(2px); }
+}
+
+/* --- diff 卡：沿用线上 §5.8 结构（行号列 + 符号列 + 代码列、对角角标、glitchIn 扫入） --- */
+.diff {
+  margin: 10px 0 4px;
+  border: 1px solid var(--border);
+  font-size: 13px; line-height: 1.55;
+}
+.diff::before, .diff::after {
+  content: ""; position: absolute; width: 8px; height: 8px; pointer-events: none; z-index: 2;
+}
+.diff::before { left: -1px; top: -1px; border-left: 1px solid var(--accent-muted); border-top: 1px solid var(--accent-muted); }
+.diff::after { right: -1px; bottom: -1px; border-right: 1px solid var(--accent-muted); border-bottom: 1px solid var(--accent-muted); }
+.diff.reveal { animation: glitchIn 0.5s steps(7) both; }
+@keyframes glitchIn { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 0 0 0); } }
+.diff .d-head {
+  display: flex; gap: 10px; align-items: baseline;
+  padding: 6px 12px; border-bottom: 1px solid var(--border);
+  font-size: 12px; letter-spacing: 0.1em;
+}
+.diff .d-head .d-file { color: var(--text-primary); letter-spacing: 0.02em; }
+.diff .d-head .d-stat { margin-left: auto; }
+.diff .d-head .d-stat .plus { color: var(--accent-muted); }
+.diff .d-head .d-stat .minus { color: var(--danger); }
+.diff .d-head .d-op { color: var(--warning); text-transform: uppercase; font-size: 11px; letter-spacing: 0.16em; }
+.diff .d-body { padding: 6px 0; overflow-x: auto; }
+.diff .dl { display: flex; padding: 0 12px; white-space: pre; }
+.diff .dl .ln { flex: none; width: 44px; text-align: right; padding-right: 10px; color: rgba(29, 167, 84, 0.55); user-select: none; }
+.diff .dl .sign { flex: none; width: 14px; text-align: center; user-select: none; }
+.diff .dl.ctx { color: var(--text-secondary); }
+.diff .dl.ctx .sign { color: transparent; }
+.diff .dl.add { background: rgba(61, 255, 143, 0.07); color: var(--text-primary); }
+.diff .dl.add .sign { color: var(--accent); }
+.diff .dl.del { background: rgba(255, 85, 85, 0.08); color: #e89a9a; }
+.diff .dl.del .sign { color: var(--danger); }
+
+/* --- 授权闸：琥珀，全场唯一暖色 --- */
+.gate {
+  margin: 10px 0 4px;
+  border: 1px solid rgba(255, 176, 0, 0.4);
+  background: rgba(255, 176, 0, 0.04);
+  padding: 10px 14px;
+  font-size: 13px;
+  animation: blockIn 0.2s ease-out;
+}
+.gate .g-head {
+  display: flex; gap: 10px; align-items: baseline;
+  color: var(--warning); font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase;
+  margin-bottom: 6px;
+}
+.gate .g-cmd { color: var(--text-primary); white-space: pre-wrap; word-break: break-all; line-height: 1.6; }
+.gate .g-why { color: var(--text-tertiary); margin-top: 4px; line-height: 1.6; }
+.gate .g-actions { display: flex; gap: 10px; margin-top: 10px; }
+.gate button {
+  font-family: var(--font); font-size: 12px; letter-spacing: 0.14em;
+  padding: 4px 16px; cursor: pointer;
+  background: transparent;
+}
+.gate .g-allow { border: 1px solid rgba(255, 176, 0, 0.55); color: var(--warning); }
+.gate .g-allow:hover { background: rgba(255, 176, 0, 0.12); }
+.gate .g-deny { border: 1px solid var(--border); color: var(--text-tertiary); }
+.gate .g-deny:hover { color: var(--danger); border-color: rgba(255, 85, 85, 0.4); }
+.gate.decided { border-color: var(--border); background: rgba(0, 12, 4, 0.3); }
+.gate.decided .g-head { color: var(--text-tertiary); }
+.gate.decided .g-actions { display: none; }
+.gate .g-verdict { display: none; margin-top: 8px; font-size: 12px; letter-spacing: 0.1em; }
+.gate.decided .g-verdict { display: block; }
+.gate .g-verdict.allow { color: var(--accent-muted); }
+.gate .g-verdict.deny { color: var(--danger); }
+
+/* --- 回合结算行 --- */
+.settle {
+  display: flex; align-items: center; gap: 12px;
+  margin-top: 14px;
+  color: var(--text-tertiary); font-size: 12px; letter-spacing: 0.1em;
+  animation: blockIn 0.3s ease-out;
+}
+.settle::after { content: ""; flex: 1; border-top: 1px solid var(--border); }
+.settle .seal-glyph { color: var(--accent-muted); }
+
+/* ---------- 输入区 ---------- */
+.inputbar { flex: none; border-top: 1px solid var(--border); background: var(--surface-2); }
+.quick-cmds {
+  display: flex; gap: 8px; padding: 8px 20px 0; flex-wrap: wrap;
+}
+.qcmd {
+  border: 1px solid var(--border); background: transparent;
+  color: var(--text-secondary); font-family: var(--font); font-size: 12px;
+  padding: 3px 12px; cursor: pointer; letter-spacing: 0.06em;
+}
+.qcmd:hover { color: var(--bright); border-color: var(--border-lit); background: rgba(61, 255, 143, 0.06); }
+.qcmd b { color: var(--accent-muted); font-weight: normal; }
+.input-row { display: flex; gap: 10px; padding: 10px 20px 4px; }
+.prompt-sign { color: var(--accent); font-size: 14px; line-height: 32px; user-select: none; }
+#input {
+  flex: 1; background: transparent; border: none; outline: none;
+  color: var(--bright); font-family: var(--font); font-size: 14px; line-height: 32px;
+}
+#input::placeholder { color: rgba(29, 167, 84, 0.55); }
+.send-btn {
+  flex: none; border: 1px solid var(--border); background: transparent;
+  color: var(--text-secondary); font-family: var(--font); font-size: 13px;
+  padding: 0 18px; cursor: pointer; letter-spacing: 0.2em;
+}
+.send-btn:hover { color: var(--bright); border-color: var(--border-lit); }
+.send-btn.busy { color: var(--danger); border-color: rgba(255, 85, 85, 0.4); }
+.input-hint { padding: 0 20px 10px; font-size: 11px; color: rgba(29, 167, 84, 0.6); letter-spacing: 0.06em; }
+
+/* ---------- 状态栏 ---------- */
+.statusbar {
+  height: 26px; flex: none;
+  background: var(--surface-2);
+  border-top: 1px solid var(--border);
+  display: flex; align-items: center; gap: 18px;
+  padding: 0 14px; font-size: 11px; color: var(--text-tertiary);
+  user-select: none;
+}
+.statusbar .sb { letter-spacing: 0.08em; }
+.statusbar .sb b { color: var(--text-secondary); font-weight: normal; }
+.statusbar .right { margin-left: auto; display: flex; gap: 18px; }
+.statusbar .ready { color: var(--accent-muted); letter-spacing: 0.14em; }
+
+@media (prefers-reduced-motion: reduce) {
+  .caret, .tool .st.run { animation: none; }
+  .turn, .tool, .diff, .gate, .settle { animation: none; }
+}
+</style>
+</head>
+<body>
+
+<canvas id="rain"></canvas>
+<div class="scanlines"></div>
+
+<div id="stage">
+  <header class="titlebar">
+    <div class="window-controls">
+      <span class="dot close"></span><span class="dot min"></span><span class="dot max"></span>
+    </div>
+    <div class="brand">ZION <span class="proto">// agent-console v5 · liquid-glass × matrix</span></div>
+    <div class="clock" id="clock">--:--:--</div>
+  </header>
+
+  <section class="console">
+    <div class="conv-head">
+      <span class="c-title">主控会话 #0047</span>
+      <span class="chip on">SESS</span>
+      <span class="chip">deepseek-chat</span>
+      <span class="chip on" id="head-state">READY</span>
+      <span class="chip ctx">上下文 12.4K / 128K</span>
+    </div>
+
+    <div id="feed"><!-- 回合由 JS 渲染，便于演示流式 --></div>
+
+    <div class="inputbar">
+      <div class="quick-cmds">
+        <button class="qcmd"><b>/status</b> 系统状态</button>
+        <button class="qcmd"><b>/trace</b> 回放链路</button>
+        <button class="qcmd">检索记忆库</button>
+        <button class="qcmd">扫描项目风险</button>
+      </div>
+      <div class="input-row">
+        <span class="prompt-sign">❯</span>
+        <input id="input" autocomplete="off" spellcheck="false"
+               placeholder="输入 / 查看 skills 与命令 · 指令给 ZION…" />
+        <button class="send-btn" id="send">发送</button>
+      </div>
+      <div class="input-hint">Enter 发送 · 生成中按钮切换为「中断」 · 授权闸等待时琥珀色高亮</div>
+    </div>
+  </section>
+
+  <footer class="statusbar">
+    <span class="sb">tokens: <b id="sb-tokens">0</b></span>
+    <span class="sb">uptime: <b id="sb-uptime">00:00</b></span>
+    <span class="sb">工作目录: <b>D:\zion-workspace</b></span>
+    <span class="right">
+      <span class="sb">日志 ▾</span>
+      <span class="sb">SND: ON</span>
+      <span class="sb ready" id="sb-state">READY</span>
+    </span>
+  </footer>
+</div>
+
+<script>
+"use strict";
+const KATA = "アイウエオカキクケコサシスセソタチツテトナニヌネノ0123456789ZION:*+-<>";
+const rkata = () => KATA[Math.floor(Math.random() * KATA.length)];
+const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+/* ================= 背景数字雨（低对比氛围层，同 v4 定位） ================= */
+(function bgRain() {
+  const cv = document.getElementById("rain");
+  const cx = cv.getContext("2d");
+  let w, h, cols, drops;
+  function resize() {
+    w = cv.width = innerWidth; h = cv.height = innerHeight;
+    cols = Math.floor(w / 18);
+    drops = Array.from({ length: cols }, () => Math.random() * -60);
+  }
+  resize(); addEventListener("resize", resize);
+  function tick() {
+    cx.fillStyle = "rgba(1,10,4,0.12)"; cx.fillRect(0, 0, w, h);
+    cx.font = "15px 'Share Tech Mono', monospace";
+    for (let i = 0; i < cols; i++) {
+      const y = drops[i] * 18;
+      cx.fillStyle = Math.random() < 0.03 ? "rgba(194,255,217,0.5)" : "rgba(0,255,65,0.28)";
+      cx.fillText(rkata(), i * 18, y);
+      drops[i] = y > h + Math.random() * 4000 ? 0 : drops[i] + 0.55;
+    }
+  }
+  if (!reduceMotion) setInterval(tick, 66);
+})();
+
+/* ================= 凝结雨轨（签名元素） =================
+   agent 流式回合左侧的迷你数字雨；settle() 时雨向下消散，凝结成 ◆ */
+class Rail {
+  constructor(host) {
+    this.el = document.createElement("div");
+    this.el.className = "rail";
+    this.cv = document.createElement("canvas");
+    this.seal = document.createElement("div");
+    this.seal.className = "seal";
+    this.seal.textContent = "◆";
+    this.el.append(this.cv, this.seal);
+    host.appendChild(this.el);
+    this.cx = this.cv.getContext("2d");
+    this.chars = [];
+    this.alive = true;
+    this.fade = 1;
+    this._loop = this._loop.bind(this);
+    requestAnimationFrame(() => {
+      this.cv.width = this.el.clientWidth; this.cv.height = this.el.clientHeight;
+      this.cols = 2; this.cw = this.cv.width / this.cols;
+      this.drops = Array.from({ length: this.cols }, () => Math.random() * -20);
+      if (!reduceMotion) requestAnimationFrame(this._loop);
+    });
+  }
+  _loop() {
+    if (!this.alive) return;
+    const { cx, cv } = this;
+    cx.fillStyle = `rgba(1,10,4,${this.fade < 1 ? 0.3 : 0.18})`;
+    cx.fillRect(0, 0, cv.width, cv.height);
+    cx.font = "11px 'Share Tech Mono', monospace";
+    for (let i = 0; i < this.cols; i++) {
+      const y = this.drops[i] * 12;
+      cx.fillStyle = Math.random() < 0.08
+        ? `rgba(194,255,217,${0.7 * this.fade})`
+        : `rgba(0,255,65,${0.55 * this.fade})`;
+      cx.fillText(rkata(), i * this.cw + 3, y);
+      this.drops[i] = y > cv.height + Math.random() * 300 ? 0 : this.drops[i] + (this.fade < 1 ? 1.6 : 0.8);
+    }
+    if (this.fade < 1) {
+      this.fade = Math.max(0, this.fade - 0.04);
+      if (this.fade === 0) { this.el.classList.add("settled"); this.alive = false; return; }
+    }
+    requestAnimationFrame(this._loop);
+  }
+  settle() {           // 回合结束：雨消散 → ◆
+    if (reduceMotion) { this.el.classList.add("settled"); this.alive = false; return; }
+    this.fade = 0.999;
+  }
+}
+
+/* ================= 回合渲染 ================= */
+const feed = document.getElementById("feed");
+const scrollDown = () => { feed.scrollTop = feed.scrollHeight; };
+
+/* 玻璃化：挂上玻璃材质类 */
+function makeGlass(el) {
+  el.classList.add("glass");
+  return el;
+}
+/* 凝结涟漪：状态跃迁（RUN→OK / 授权通过）时荡开一圈光 */
+function ripple(el) {
+  if (reduceMotion) return;
+  const r = document.createElement("div");
+  r.className = "ripple";
+  el.appendChild(r);
+  r.addEventListener("animationend", () => r.remove());
+}
+
+function operatorTurn(text, time) {
+  const t = document.createElement("div");
+  t.className = "turn operator";
+  t.innerHTML = `
+    <div class="turn-head"><span class="who">OPERATOR ▸</span><span class="t-time">${time}</span></div>
+    <div class="op-frame"><div class="op-body"></div></div>`;
+  feed.appendChild(t);
+  decodeIn(t.querySelector(".op-body"), text);   // 信号注入：乱码解码为文字
+  scrollDown();
+  return t;
+}
+
+/* 注入解码：假名乱码逐位解析为最终文字（450ms，一次性） */
+function decodeIn(el, text) {
+  if (reduceMotion) { el.textContent = text; return; }
+  const chars = [...text];
+  const start = performance.now();
+  const dur = Math.min(700, 240 + chars.length * 6);
+  (function step(now) {
+    const p = (now - start) / dur;
+    const locked = Math.floor(p * chars.length);
+    el.textContent = chars.map((c, i) =>
+      i < locked ? c : (c === " " || c === "\n" ? c : rkata())).join("");
+    if (p < 1) requestAnimationFrame(step); else el.textContent = text;
+  })(start);
+}
+
+function zionTurn(time) {
+  const t = document.createElement("div");
+  t.className = "turn zion";
+  t.innerHTML = `
+    <div class="turn-head"><span class="glyph">◈</span><span class="who">ZION</span><span class="t-time">${time}</span></div>
+    <div class="z-flow"></div>`;
+  const rail = new Rail(t);
+  feed.appendChild(t);
+  scrollDown();
+  const flow = t.querySelector(".z-flow");
+  return {
+    el: t, rail,
+    body() {
+      const d = document.createElement("div");
+      d.className = "z-body";
+      flow.appendChild(d); scrollDown();
+      return d;
+    },
+    think(label, lines) {
+      const d = document.createElement("details");
+      d.className = "think";
+      d.innerHTML = `<summary>思路 · ${label}</summary><div class="think-body">${lines}</div>`;
+      flow.appendChild(d); scrollDown();
+    },
+    tool(name, cmd, out, dur, state = "ok") {
+      const d = document.createElement("details");
+      d.className = "tool";
+      const st = state === "run" ? `<span class="st run">[RUN]</span>`
+               : state === "err" ? `<span class="st err">[ERR]</span>`
+               : `<span class="st ok">[OK]</span>`;
+      d.innerHTML = `<summary>${st}<span class="t-name">${name}</span>
+          <span class="t-cmd">${cmd}</span><span class="t-dur">${dur}</span></summary>
+        <div class="t-out">${out}</div>`;
+      makeGlass(d);
+      flow.appendChild(d); scrollDown();
+      return d;
+    },
+    settleLine(stats) {
+      const d = document.createElement("div");
+      d.className = "settle";
+      d.innerHTML = `<span class="seal-glyph">◆</span><span>已结算 · ${stats}</span>`;
+      flow.appendChild(d);
+      this.rail.settle();
+      scrollDown();
+    }
+  };
+}
+
+/* 流式写入（带 caret） */
+function streamInto(el, html, cps = 60) {
+  return new Promise(res => {
+    // 以纯文本流式，最后一次性替换为 HTML（demo 简化）
+    const plain = html.replace(/<[^>]+>/g, "");
+    const caret = document.createElement("span"); caret.className = "caret";
+    if (reduceMotion) { el.innerHTML = html; res(); return; }
+    const node = document.createTextNode("");
+    el.append(node, caret);
+    let i = 0;
+    const iv = setInterval(() => {
+      i = Math.min(plain.length, i + Math.max(1, Math.round(cps / 30)));
+      node.textContent = plain.slice(0, i);
+      scrollDown();
+      if (i >= plain.length) { clearInterval(iv); caret.remove(); el.innerHTML = html; res(); }
+    }, 33);
+  });
+}
+
+const wait = ms => new Promise(r => setTimeout(r, ms));
+const now = () => new Date().toTimeString().slice(0, 5);
+
+/* ================= diff / 授权闸 构造 ================= */
+function diffCard(file, rows) {   // rows: [行号|null, '+'|'-'|' ', 代码]
+  let plus = 0, minus = 0;
+  for (const r of rows) { if (r[1] === "+") plus++; else if (r[1] === "-") minus++; }
+  const d = document.createElement("div");
+  d.className = "diff reveal";
+  d.innerHTML = `
+    <div class="d-head"><span class="d-file">✎ ${file}</span>
+      <span class="d-stat"><span class="plus">+${plus}</span> <span class="minus">−${minus}</span></span>
+      <span class="d-op">modified</span></div>
+    <div class="d-body">${rows.map(r => {
+      const cls = r[1] === "+" ? "add" : r[1] === "-" ? "del" : "ctx";
+      const sign = r[1] === "+" ? "+" : r[1] === "-" ? "−" : "";
+      return `<div class="dl ${cls}"><span class="ln">${r[0] ?? ""}</span><span class="sign">${sign}</span><span class="code">${r[2]}</span></div>`;
+    }).join("")}</div>`;
+  return makeGlass(d);
+}
+
+function gateCard(cmd, why) {
+  const d = document.createElement("div");
+  d.className = "gate";
+  d.innerHTML = `
+    <div class="g-head"><span>⚠</span><span>需要授权 · AUTHORIZATION REQUIRED</span></div>
+    <div class="g-cmd">${cmd}</div>
+    <div class="g-why">${why}</div>
+    <div class="g-actions">
+      <button class="g-allow">允许执行 [Y]</button>
+      <button class="g-deny">拒绝 [N]</button>
+    </div>
+    <div class="g-verdict"></div>`;
+  return makeGlass(d);
+}
+
+/* ================= 演示剧本：复刻截图中的真实会话 ================= */
+const sbState = document.getElementById("sb-state");
+const headState = document.getElementById("head-state");
+const sendBtn = document.getElementById("send");
+const setBusy = b => {
+  sbState.textContent = b ? "STREAMING" : "READY";
+  headState.textContent = b ? "STREAMING" : "READY";
+  headState.classList.toggle("on", !b);
+  sendBtn.textContent = b ? "中断" : "发送";
+  sendBtn.classList.toggle("busy", b);
+};
+
+async function script() {
+  // —— 回合 1：OPERATOR ——
+  operatorTurn("监测一下此时此刻后台有没有 claude-cli 被调用", "19:12");
+
+  // —— 回合 2：ZION 完整侦察回合（历史，直接静态呈现） ——
+  const z1 = zionTurn("19:12");
+  const b1 = z1.body();
+  b1.innerHTML = `收到。先扫进程快照，再逐条核对命令行，最后确认有没有 <code>node</code> 在跑 claude 主程序。`;
+  z1.think("12s · 4 步侦察",
+`用户要的是"此时此刻"的快照，不是历史记录 → 直接读进程表
+先粗筛名字含 claude 的进程，命中再展开命令行
+排除近似名干扰（Apple 的 AMPLibraryAgent 之类）
+最后反向确认：claude CLI 是 node 脚本，活着必有 node 进程带 claude 路径`);
+  z1.tool("bash", "tasklist | findstr /i \"claude\"",
+`<span class="k">命中 1 个:</span>  bun.exe  PID 15748  15:26 启动`, "0.4s");
+  z1.tool("bash", "Get-CimInstance Win32_Process -Filter \"Name='bun.exe'\" | % CommandLine",
+`<span class="k">C:\\Users\\zyf\\.claude\\plugins\\cache\\thedotmack\\claude-mem\\13.13.1\\scripts\\worker-service.cjs --daemon</span>
+→ 这是 claude-mem 插件的常驻守护进程（插件机制装的后台服务），一直挂着待命，不代表此刻有 CLI 会话被启动。`, "1.1s");
+  z1.tool("bash", "Get-CimInstance Win32_Process -Filter \"Name='node.exe'\" | % CommandLine",
+`<span class="k">查询结果为零。</span>  没有任何 node.exe 的命令行带 claude 路径`, "0.8s");
+  const b2 = z1.body();
+  b2.innerHTML = `<span class="hl">结论：此时此刻后台没有 claude-cli 被调用。</span>已扫描全部进程的命令行，证据：唯一的 claude 字样进程是 claude-mem 守护（bun 托管，非 CLI）；claude CLI 本体是 node 脚本，若有调用必有 node 进程带 claude 路径——查询结果为零。`;
+  z1.settleLine("3 tools · 2,318 tok · 8.4s");
+
+  // —— 回合 3：OPERATOR 追问 ——
+  operatorTurn("把这个扫描固化成脚本，以后我直接跑", "19:14");
+
+  // —— 回合 4：ZION 写文件 + 授权闸（开场流式演示） ——
+  setBusy(true);
+  const z2 = zionTurn("19:14");
+  const b3 = z2.body();
+  await streamInto(b3, `好，固化成 <code>monitor-claude.ps1</code>，规则跟刚才人工侦察一致：`, 70);
+  await wait(250);
+
+  z2.el.querySelector(".z-flow").appendChild(diffCard("monitor-claude.ps1", [
+    [1, " ", "# 监测后台是否有 claude-cli 被调用"],
+    [2, "+", "$hits = Get-CimInstance Win32_Process |"],
+    [3, "+", "  Where-Object { $_.CommandLine -match 'claude' }"],
+    [4, "+", "$cli = $hits | Where-Object {"],
+    [5, "+", "  $_.Name -eq 'node.exe' -and"],
+    [6, "+", "  $_.CommandLine -notmatch 'claude-mem' }"],
+    [7, "+", "if ($cli) { $cli | Select-Object ProcessId, CommandLine }"],
+    [8, "+", "else { 'CLEAN: no claude-cli running' }"],
+  ]));
+  await wait(400);
+
+  const b4 = z2.body();
+  await streamInto(b4, `试运行一次验证输出（会读进程表，只读不写）：`, 70);
+  const gate = gateCard(
+    "powershell -File monitor-claude.ps1",
+    "首次运行新脚本。只读查询 Win32_Process，无写操作。以后可用 /trust 免问。");
+  z2.el.querySelector(".z-flow").appendChild(gate);
+  scrollDown();
+
+  // 等待授权决策
+  await new Promise(res => {
+    gate.querySelector(".g-allow").onclick = () => { decide(true); res(); };
+    gate.querySelector(".g-deny").onclick = () => { decide(false); res(); };
+    function decide(ok) {
+      gate.classList.add("decided");
+      const v = gate.querySelector(".g-verdict");
+      v.className = "g-verdict " + (ok ? "allow" : "deny");
+      v.textContent = ok ? "→ 已授权，执行中…" : "→ 已拒绝，跳过试运行";
+      if (ok) ripple(gate);
+      scrollDown();
+    }
+  });
+
+  if (gate.querySelector(".g-verdict").classList.contains("allow")) {
+    const t = z2.tool("bash", "powershell -File monitor-claude.ps1", "", "…", "run");
+    t.open = true;
+    await wait(1400);
+    t.querySelector(".st").className = "st ok";
+    t.querySelector(".st").textContent = "[OK]";
+    t.querySelector(".t-dur").textContent = "1.2s";
+    t.querySelector(".t-out").innerHTML = `<span class="k">CLEAN: no claude-cli running</span>`;
+    ripple(t);   // 凝结完成：玻璃荡开一圈光
+  }
+
+  const b5 = z2.body();
+  await streamInto(b5, `<span class="hl">脚本可用。</span>放在 <code>D:\\zion-workspace\\monitor-claude.ps1</code>，以后直接跑，或让我 /trace 时自动带上。`, 70);
+  z2.settleLine("2 tools · 1,042 tok · 6.1s · 1 次授权");
+  setBusy(false);
+}
+
+/* ================= 输入交互（mock 回合） ================= */
+const input = document.getElementById("input");
+let busy = false;
+
+async function mockReply(userText) {
+  busy = true; setBusy(true);
+  const z = zionTurn(now());
+  const b = z.body();
+  await streamInto(b, `收到：<code>${userText.slice(0, 60)}</code>。这是 demo 的 mock 应答 —— 真实实现里这里接 <code>session.prompt()</code> 的事件流。`, 70);
+  await wait(300);
+  z.tool("bash", "echo mock-trace --dry-run", `<span class="k">mock ok</span>（演示工具卡折叠/展开）`, "0.1s");
+  const b2 = z.body();
+  await streamInto(b2, `回合结束，雨轨凝结为 ◆。`, 70);
+  z.settleLine("1 tool · 312 tok · 2.0s");
+  busy = false; setBusy(false);
+}
+
+function send() {
+  const v = input.value.trim();
+  if (!v || busy) return;
+  input.value = "";
+  operatorTurn(v, now());
+  setTimeout(() => mockReply(v), 500);
+}
+sendBtn.onclick = () => busy ? setBusy(false) /* demo 仅切状态 */ : send();
+input.addEventListener("keydown", e => { if (e.key === "Enter") send(); });
+
+/* ================= 时钟 / 状态栏 ================= */
+const t0 = Date.now();
+setInterval(() => {
+  document.getElementById("clock").textContent = new Date().toTimeString().slice(0, 8);
+  const s = Math.floor((Date.now() - t0) / 1000);
+  document.getElementById("sb-uptime").textContent =
+    String(Math.floor(s / 60)).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0");
+}, 1000);
+document.getElementById("sb-tokens").textContent = (2318 + 1042).toLocaleString();
+
+/* 开场：稍候即播 */
+setTimeout(script, 700);
+</script>
+</body>
+</html>

@@ -277,6 +277,52 @@ body {
 }
 @keyframes blink { 50% { opacity: 0; } }
 
+/* ---------- 回合容器 + 凝结雨轨（见 CONTEXT.md「凝结雨轨」） ---------- */
+.turn-agent { position: relative; padding-left: 40px; }
+.rail {
+  position: absolute; left: 0; top: 20px; bottom: 2px;
+  width: 26px;
+  border-left: 1px solid var(--border);
+  overflow: hidden;
+}
+.rail canvas { display: block; width: 100%; height: 100%; }
+.rail .seal {
+  display: flex; justify-content: center;
+  padding-top: 2px; color: var(--accent-muted); font-size: 14px;
+  animation: sealIn 0.5s ease-out;
+}
+@keyframes sealIn { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
+
+/* ---------- 思考块（thinking 段，默认折叠） ---------- */
+.think { margin: 0 0 12px; font-size: 13px; max-width: 820px; }
+.think > summary {
+  cursor: pointer; list-style: none; user-select: none;
+  color: var(--text-tertiary); letter-spacing: 0.1em;
+  display: flex; gap: 8px; align-items: baseline;
+}
+.think > summary::-webkit-details-marker { display: none; }
+.think > summary::before { content: "▸"; }
+.think[open] > summary::before { content: "▾"; }
+.think > summary:hover { color: var(--text-secondary); }
+.think .think-body {
+  margin: 6px 0 2px 14px; padding: 6px 12px;
+  border-left: 1px dashed var(--border);
+  color: var(--text-tertiary); line-height: 1.7;
+  white-space: pre-wrap; word-break: break-word;
+}
+
+/* ---------- 结算行（见 CONTEXT.md「结算行」） ---------- */
+.settle {
+  display: flex; align-items: center; gap: 12px;
+  margin: 4px 0 22px;
+  color: var(--text-tertiary); font-size: 12px; letter-spacing: 0.1em;
+  animation: blockIn 0.3s ease-out;
+}
+.settle::after { content: ""; flex: 1; border-top: 1px solid var(--border); }
+.settle .seal-glyph { color: var(--accent-muted); }
+.settle.interrupted, .settle.error { color: var(--danger); }
+.settle.interrupted .seal-glyph, .settle.error .seal-glyph { color: var(--danger); }
+
 /* ---------- 工具链块：细线 + 对角角标（仅可检查执行对象） ---------- */
 /* 对角角标（8×8 定位线）——trace/diff/对话框/项目面板共享 */
 .corner { position: relative; }
@@ -292,7 +338,6 @@ body {
   margin: 8px 0 12px 2px;
   padding: 8px 12px;
   font-size: 13px; color: var(--text-secondary); line-height: 1.8;
-  background: rgba(0, 12, 4, 0.3);
   animation: blockIn 0.2s ease-out;
 }
 .trace .t-head { font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--text-tertiary); margin-bottom: 4px; }
@@ -315,7 +360,6 @@ body {
 .diff {
   margin: 10px 0 4px 2px;
   border: 1px solid var(--border);
-  background: rgba(0, 6, 2, 0.55);
   font-size: 13px; line-height: 1.55;
   position: relative;
   animation: blockIn 0.2s ease-out;
@@ -348,6 +392,34 @@ body {
 @keyframes glitchIn {
   0% { opacity: 0; clip-path: inset(0 100% 0 0); }
   100% { opacity: 1; clip-path: inset(0 0 0 0); }
+}
+
+/* ---------- 液态玻璃（融合层：矩阵的骨 + 玻璃的光） ----------
+   工具链块/diff 卡 = agent 凝结出的实体：静态态为半透明磷光底 + 顶边镜面高光/底边折射暗线；
+   仅活动回合的卡开 backdrop-filter（性能分级：长会话任意时刻 blur 卡数 ≤ 活动回合卡数）。 */
+.trace, .diff {
+  background:
+    linear-gradient(155deg, rgba(61, 255, 143, 0.05), rgba(61, 255, 143, 0.012) 42%, rgba(0, 0, 0, 0.14)),
+    rgba(2, 14, 7, 0.5);
+  box-shadow:
+    inset 0 1px 0 rgba(194, 255, 217, 0.12),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.4),
+    inset 1px 0 0 rgba(194, 255, 217, 0.05),
+    0 0 22px rgba(0, 255, 65, 0.04);
+}
+.turn-agent.is-active .trace, .turn-agent.is-active .diff {
+  backdrop-filter: blur(9px) saturate(1.25) brightness(1.05);
+  -webkit-backdrop-filter: blur(9px) saturate(1.25) brightness(1.05);
+}
+/* 凝结涟漪：工具收尾（run→ok/err）时挂载一次，玻璃荡开一圈光 */
+.ripple {
+  position: absolute; inset: -1px; pointer-events: none;
+  border: 1px solid rgba(194, 255, 217, 0.5);
+  animation: rippleOut 0.7s ease-out forwards;
+}
+@keyframes rippleOut {
+  from { opacity: 0.85; transform: scale(0.985); }
+  to { opacity: 0; transform: scale(1.035); filter: blur(2px); }
 }
 
 /* ---------- 蠕虫画布（神经核心释放，一次性，不拦截交互） ---------- */
@@ -465,7 +537,7 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .msg, .trace, .diff, .diff.reveal { animation: none; }
+  .msg, .trace, .diff, .diff.reveal, .settle, .rail .seal, .ripple { animation: none; }
   .caret { animation: none; }
   .term { transition: none; }
   .neo-avatar.is-talking .neo-frame-talking { animation: none; opacity: 1; }
