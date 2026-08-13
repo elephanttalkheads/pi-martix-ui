@@ -4,7 +4,8 @@
 import { useEffect, useRef } from 'react';
 import { fx } from '../store';
 
-const CHARS = 'アイウエオカキクケコサシスセソ0123456789<>+*';
+const CHARS = 'アウエオカキケコサシスセソタツテナニヌネハヒホマミムメモヤヨラリワー012345789*+<>:|';
+const RAIL_FONT = '"Matrix Code", "Share Tech Mono", monospace';
 const REDUCED =
   typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -33,7 +34,7 @@ export default function TurnRail({ active }: { active: boolean }) {
       cx.fillStyle = 'rgba(0,0,0,0.14)';
       cx.fillRect(0, 0, w, h);
       cx.globalCompositeOperation = 'source-over';
-      cx.font = "11px 'Share Tech Mono', monospace";
+      cx.font = `11px ${RAIL_FONT}`;
       cx.textAlign = 'center';
       for (let i = 0; i < 2; i++) {
         const y = drops[i] * 12;

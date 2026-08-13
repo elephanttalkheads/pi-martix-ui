@@ -2,10 +2,13 @@
 // 算法：FS=18 逐列下落；0.035 半透明拖尾（数值越小尾巴越长）；90/FX.speed 帧节流；
 // 12% 概率"亮头"（近白磷光 + shadowBlur 8 辉光）；落出屏底 96.5% 概率重置。
 // FX 读模块级对象（store.fx），不触发 React 渲染。
+// 字形：Matrix Code（真·电影镜像片假名，本地打包）——只映射全角片假名 34 字 +
+// 数字 012345789（无 6）+ *+<>:|，字符集必须落在其 cmap 内，否则回退系统字体穿帮。
 import { useEffect, useRef } from 'react';
 import { fx } from '../store';
 
-const CHARS = 'ｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿﾀﾁﾂﾃﾄﾅﾆﾇﾈﾉ0123456789ABCDEFXYZ<>+*';
+const CHARS = 'アウエオカキケコサシスセソタツテナニヌネハヒホマミムメモヤヨラリワー012345789*+<>:|';
+const RAIN_FONT = '"Matrix Code", "Share Tech Mono", monospace';
 const FS = 18;
 const REDUCED = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -42,7 +45,7 @@ export default function RainCanvas() {
 
     if (REDUCED) {
       // reduced-motion：只绘制一帧静态雨幕
-      ctx.font = `${FS}px monospace`;
+      ctx.font = `${FS}px ${RAIN_FONT}`;
       ctx.fillStyle = 'rgba(61,255,143,0.6)';
       for (let k = 0; k < cols.length; k++) {
         for (let y = -FS * 2; y < canvas.height; y += FS * 2) {
@@ -58,7 +61,7 @@ export default function RainCanvas() {
       last = ts;
       ctx.fillStyle = 'rgba(1,10,4,0.035)';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
-      ctx.font = `${FS}px monospace`;
+      ctx.font = `${FS}px ${RAIN_FONT}`;
       for (let k = 0; k < cols.length; k++) {
         const c = cols[k];
         const ch = CHARS[(Math.random() * CHARS.length) | 0];

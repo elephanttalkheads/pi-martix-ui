@@ -1,8 +1,25 @@
 /* ZION v4 —— 极简 × 黑客帝国 × Pip-Boy（令牌照 ui-demo/index-v4.html，勿改数值） */
-/* 本地字体：Share Tech Mono latin 子集（离线/墙内可用），来源 @fontsource/share-tech-mono */
+/* 本地字体（离线/墙内可用）：
+   - Share Tech Mono latin 子集（@fontsource/share-tech-mono）——拉丁正文
+   - Sarasa Term SC GB2312 子集（Sarasa-Gothic, OFL）——CJK 回退
+   - Matrix Code（Rezmason/matrix, MIT）——真·电影镜像片假名，仅数字雨/雨轨 canvas 用 */
 @font-face {
   font-family: "Share Tech Mono";
   src: url("./assets/fonts/ShareTechMono-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Sarasa Term SC";
+  src: url("./assets/fonts/SarasaTermSC-Regular.subset.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Matrix Code";
+  src: url("./assets/fonts/Matrix-Code.ttf") format("truetype");
   font-weight: 400;
   font-style: normal;
   font-display: swap;

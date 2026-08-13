@@ -16,7 +16,7 @@ React 18 + TypeScript(strict) 渲染层：v4 四区骨架（标题栏 / 侧栏 /
 - `src/renderer/src/mockBridge.ts` — 纯浏览器调试桥 `installMockBridge`（`window.zion` 缺失时注入 mock ZionAPI，Electron 有 preload 自动跳过；mock 数据与事件派发语义见 [DESIGN.md](DESIGN.md)「浏览器调试桥」）
 - `src/renderer/src/components/` — `RainCanvas` / `SignalCanvas`(releaseWorm) / `NeoAvatar` / `Sidebar`(两分区：`.side-section.sessions` 会话堆叠卡（悬停操作：✎ 重命名 / ✕ 两段删除确认）+ `.side-section.projects`（`.side-head` 标题行 = 项目名 + 「⇄ 切换项目」按钮 + 文件树）；`.core-wrap`/`.side-foot` 固定，`.deck`/`#file-tree` 各自内部滚动) / `LogDrawer` / `Feed`(回合化消息流：TurnView memo 边界 + 注入解码 `OperatorBody` + thinking 折叠块 + 结算行 + 工具收尾凝结涟漪) / `TurnRail`(凝结雨轨：活动回合迷你数字雨，闭环凝 ◆，`90/fx.speed` 节流) / `DiffCard` / `AskDialog`(扩展对话框三形态 confirm/input/select + `ToastHost` toast 队列) / `ProjectPanel`(项目选择：最近项目卡片 + 「浏览其他目录…」，遮罩复用 `.ask-mask`；启动无最近项目自动打开) / `InputBar`(快捷指令+命令面板：`/` 弹出 skills/命令 listbox，面板 state 全在组件本地) / `SoundFx`(SND + useSoundFx)
 - `src/renderer/src/env.d.ts` — `window.zion` 全局声明（type-only import `ZionAPI`）
-- `src/renderer/src/styles.css` — 全部设计令牌与布局数值（令牌数值照 `ui-demo/index-v4.html`，勿改；顶部本地 `@font-face` 为刻意偏离，见 [DESIGN.md](DESIGN.md)「设计决策与权衡」）
+- `src/renderer/src/styles.css` — 全部设计令牌与布局数值（令牌数值照 `ui-demo/index-v4.html`，勿改；顶部三个本地 `@font-face` 为刻意偏离：Share Tech Mono 拉丁 / Sarasa Term SC GB2312 子集 CJK 回退 / Matrix Code 电影雨字形仅 canvas 用，见 [DESIGN.md](DESIGN.md)「设计决策与权衡」）
 - `src/shared/protocol.ts` — IPC 契约类型（type-only，构建期擦除，无运行时依赖）
 - 规格基线：`ui-demo/index-v4.html` + `ui-demo/index-v5.html`（会话区 v5「信号凝结」原型：雨轨/思考块/结算行/液态玻璃/注入解码）+ `ui-demo/react/agent-ui-design-spec.md` + `docs/adr/0002-v4-convergence.md` + `docs/adr/0003-project-switching.md`（项目切换决策）
 

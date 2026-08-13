@@ -55,7 +55,8 @@ font-family: "Share Tech Mono", ui-monospace, "Courier New", "Sarasa Term SC", "
 ```
 
 - 拉丁字形**只用 Share Tech Mono 这一种等宽字体**（本地 `@font-face` 打包，离线可用）。
-- **CJK 回退链**：前三者均无中文字形 → 依次回退「更纱黑体 Sarasa Term SC」（等宽，用户自装则生效）→「微软雅黑 Microsoft YaHei」（Windows 必带）→ generic `monospace`。不回退则中文落到 Chromium 的 monospace 默认映射（宋体），观感单薄——必须保留这条链。
+- **CJK 回退链**：前三者均无中文字形 → 回退「Sarasa Term SC」（更纱黑体终端版，**GB2312 子集已本地打包** `SarasaTermSC-Regular.subset.woff2`，离线生效）→「微软雅黑」（系统兜底）→ generic `monospace`。无此链中文会落到 Chromium 的 monospace 默认映射（宋体），观感单薄。
+- **数字雨/雨轨字形**：canvas 用 `"Matrix Code"`（本地打包 `Matrix-Code.ttf`，Rezmason/matrix，MIT——电影官方镜像片假名字形）。其 cmap 只覆盖全角片假名 34 字 + 数字 `012345789`（无 6）+ `*+<>:|`，**雨的字符集必须落在这个映射内**，否则回退系统字体穿帮。
 - 字重全部为 normal，靠颜色和字号分层，不用粗体。
 - 大写英文标签必须加字距：品牌 `0.22em`，区块标题 `0.18em`，消息头 `0.14em`，芯片/日志头 `0.16em`，发送按钮 `0.2em`。
 
@@ -115,9 +116,9 @@ font-family: "Share Tech Mono", ui-monospace, "Courier New", "Sarasa Term SC", "
 
 ### 4.1 数字雨 `#rain`（全屏 canvas，招牌之一）
 
-**字符集**：
+**字符集**（Matrix Code 字体的 cmap 映射内，见 §2.2）：
 ```
-ｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿﾀﾁﾂﾃﾄﾅﾆﾇﾈﾉ0123456789ABCDEFXYZ<>+*
+アウエオカキケコサシスセソタツテナニヌネハヒホマミムメモヤヨラリワー012345789*+<>:|
 ```
 
 **算法**（逐列下落，单层）：
