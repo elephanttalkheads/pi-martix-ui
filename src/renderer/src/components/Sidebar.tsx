@@ -3,7 +3,7 @@
 // 「新建会话」按钮。文件树行带 data-path 供蠕虫定位；点击文件行发读取指令。
 import { useEffect, useRef, useState } from 'react';
 import type { FileNode, SessionInfoLike } from '../../../shared/protocol';
-import { useFeed, deriveSessionTitle } from '../store';
+import { useFeed, deriveSessionTitle, mergeTreeOpen } from '../store';
 import NeoAvatar from './NeoAvatar';
 
 /** 会话显示标题：name → firstMessage 摘要 → 会话短码（统一 deriveSessionTitle，store.ts 单测覆盖） */
@@ -78,10 +78,14 @@ export default function Sidebar({ onSelectFile }: { onSelectFile: (path: string)
   const confirmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const deckRef = useRef<HTMLDivElement | null>(null);
 
-  // 初始：文件树 + 会话列表
+  // 初始：文件树 + 会话列表；实时监听工作区变化（新建/删除/改名 → 主进程防抖推送）
   useEffect(() => {
     window.zion?.scanTree().then(setTree).catch(() => {});
     window.zion?.listSessions().then(setSessions).catch(() => {});
+    const offTree = window.zion?.onTreeChanged((fresh) => {
+      setTree(mergeTreeOpen(useFeed.getState().tree, fresh));
+    });
+    return () => offTree?.();
   }, [setTree, setSessions]);
 
   // 堆叠卡：测量每卡完整高度 → --h（负 margin 覆盖量 = 完整高 - 露出区 80px）
@@ -114,7 +118,7 @@ export default function Sidebar({ onSelectFile }: { onSelectFile: (path: string)
       log('err', `[SESS] 切换失败: ${String(e)}`);
     }
     setSwitching(false);
-    void window.zion.listSessions().then(setSessions).catch(() => {});
+    void window.zion?.listSessions?.()?.then(setSessions)?.catch(() => {});
   };
 
   const newSession = async () => {
@@ -129,7 +133,7 @@ export default function Sidebar({ onSelectFile }: { onSelectFile: (path: string)
       log('err', `[SESS] 新建失败: ${String(e)}`);
     }
     setSwitching(false);
-    void window.zion.listSessions().then(setSessions).catch(() => {});
+    void window.zion?.listSessions?.()?.then(setSessions)?.catch(() => {});
   };
 
   // 删除两段确认：第一击进入确认态（2.5s 复位），确认态下再击执行

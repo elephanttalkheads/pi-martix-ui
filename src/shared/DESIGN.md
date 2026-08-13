@@ -9,6 +9,7 @@
 - 不实现扩展 UI 桥本身（Promise 表 `uibridge.mjs`、弹层 `AskDialog.tsx`、toast `ToastHost`）：本契约只定义其 IPC 类型（`UiAsk`/`UiNotify`）与桥面方法（`uiAnswer`/`onUiAsk`/`onUiNotify`）
 - 不提供通道名的运行时共享来源：通道名只能是 `main.mjs` / `preload.cjs` 两侧字面量（理由见「设计决策与权衡」）
 - 不实现项目切换的主进程语义（`WORKSPACE_DIR` 变更、旧会话 dispose、`zion-projects.json` 持久化在 `src/main/main.mjs`；渲染侧管线见 `src/renderer/DESIGN.md` 项目切换节）——本契约只定义 `ProjectInfo`/`SwitchProjectResult` 形状与 `listProjects`/`getProject`/`browseProject`/`switchProject` 桥面
+- 不实现工作区文件树监听本身（`fs.watch` 防抖重扫在 `src/main/main.mjs`）：本契约只定义 `onTreeChanged` 桥面与推送形状（`FileNode[]`）
 - 不本地重定义 SDK 类型：`AgentSessionEvent` 直接 re-export（理由见「设计决策与权衡」）
 
 ## 架构与主要流程
@@ -31,6 +32,8 @@ env.d.ts 声明 Window.zion: ZionAPI  ◄─────────┘         
 
 当前项目展示数据流：App 启动时 `window.zion.getProject()` → `invoke('zion:get-project')` → main 直接返回 `{ path: WORKSPACE_DIR }`（当前值，不读盘、不抛错）→ `store.currentProject` 驱动侧栏项目标题（渲染侧细节见 `src/renderer/DESIGN.md` 项目切换节）
 
+文件树数据流（实时刷新）：main 启动恢复与 `switchProject` 时 `watchWorkspaceTree()` —— `fs.watch(WORKSPACE_DIR, { recursive: true })`，事件顶层名 ∈ `SCAN_SKIP` 或点文件开头直接跳过 → 400ms 防抖后重扫（与 `scanTree` 同一 `scanDir`，同深度/跳过规则）→ 重扫结果与上次 JSON 串相同则不推送，否则 `send('zion:tree-changed', fresh)` → preload `onTreeChanged` → Sidebar 用 `mergeTreeOpen(旧树, fresh)` 保留目录展开态后 `setTree`（直接替换会重置用户展开）。`fs.watch` 不可用（如平台不支持 recursive）→ console.warn 退化为手动刷新，渲染层仍可调 `scanTree` 兜底。
+
 扩展 UI 桥数据流（dialog 双向 + notify 单向）：
 
 ```
@@ -45,7 +48,7 @@ notify 单向：uibridge.notify → send('zion:ui-notify') → preload onUiNotif
 
 ## 接口与依赖
 
-### ZionAPI（21 个方法）
+### ZionAPI（22 个方法）
 
 通道全集以本表为准：`protocol.ts` 头注释只列示例通道并指向 `src/main/DESIGN.md`「接口」节，后者同样指回本表（完整清单唯一落点）。
 
@@ -72,6 +75,7 @@ notify 单向：uibridge.notify → send('zion:ui-notify') → preload onUiNotif
 | renameSession(id, name) | `zion:rename-session`（invoke） | `SessionInfoLike[]`：刷新后的会话列表 |
 | deleteSession(id) | `zion:delete-session`（invoke） | `SessionInfoLike[]`：刷新后的会话列表 |
 | onAgentEvent(cb) | `agent:event`（send） | 退订函数 `() => void` |
+| onTreeChanged(cb) | `zion:tree-changed`（send） | 退订函数：工作区文件树变化推送（主进程 fs.watch 防抖重扫，重扫结果无变化则不推送） |
 
 **会话重命名/删除语义**（main.mjs 实现）：
 - `renameSession`：`SessionManager.open(info.path, undefined, WORKSPACE_DIR)` + `appendSessionInfo(name)` —— 向会话 JSONL 追加 `session_info` 条目持久化显示名（重启不丢，`listSessionInfos` 直接映射 `name`）；SDK 会清洗名字（换行折叠为空格 + trim，空名清除标题）
@@ -121,6 +125,7 @@ notify 单向：uibridge.notify → send('zion:ui-notify') → preload onUiNotif
 - 会话懒创建：首次 `getCurrentSession` / `switchSession` 可能长达 45s（main 侧 `ensureSessionFor` 超时保护，超时 reject `agent init timeout`）；`switchSession` / `renameSession` / `deleteSession` 传未知 id 抛 `session not found: <id>`
 - `window.zion` 可能为 undefined（preload 注入失败）→ renderer 需可选链 `window.zion?.` 或显式判空（见 App.tsx / Sidebar.tsx 现有用法）
 - `onAgentEvent` 返回退订函数：组件卸载时必须调用，否则 preload 的 `ipcRenderer.on` listener 泄漏
+- `onTreeChanged` 同 `onAgentEvent`：Sidebar 卸载时必须调用退订函数，否则 listener 泄漏（Sidebar.tsx 的 effect 已按此实现）
 - `onUiAsk` / `onUiNotify` 同样返回退订函数：App 卸载时必须调用，否则 listener 泄漏
 - **超时只解决扩展侧 Promise，不强制关闭弹层**：`timeoutMs` 到点后 uibridge 删除 pending 条目并 resolve undefined，但 AskDialog 不自动关闭、不展示倒计时；用户稍后应答命中未匹配 id → main 侧 `console.warn('[zion] ui-answer 未匹配 dialog')` + `{ ok: false }`，弹层随 `setUiAsk(null)` 关闭，不会误答新对话框
 - **窗口未就绪/已关闭时 ask 悬挂**：派发器未注入或 `win` 为空时 send 不投递，ask 悬挂到 timeout 兜底；notify 单向静默丢弃
@@ -131,7 +136,7 @@ notify 单向：uibridge.notify → send('zion:ui-notify') → preload onUiNotif
 ## 已知限制与技术债
 
 - 通道名无运行时单一来源（`protocol.ts` 头注释只列示例、完整清单在本文件接口节）；根治依赖 main 进程 TS 构建管线（仓库已列为后续步骤）
-- `FileNode.size` 是**人类可读字符串**（如 '1.2k'）而非字节数，需要比较/排序时应由 main 侧改进
+- `FileNode.size` 是**人类可读字符串**（如 '1.2k'）而非字节数，需要比较/排序时应由 main 侧改进；`onTreeChanged` 以重扫 JSON 串去重，size 字符串不变的细微内容改动不触发推送（文件树是结构级实时，非内容级）
 - AskDialog 不展示 timeout 倒计时、不自动关闭：SDK `ExtensionUIDialogOptions.timeout` 的文档语义是「自动关闭 + 倒计时」，当前只兑现了扩展侧 Promise 兜底
 - 项目信任未接入：`bindExtensions` 只注入了 `uiContext`，`projectTrustContextFactory`（`CreateAgentSessionOptions` 字段）未传，项目信任处理仍属主仓「未做」清单
 

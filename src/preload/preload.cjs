@@ -28,6 +28,7 @@ const api = {
   renameSession: (id, name) => ipcRenderer.invoke('zion:rename-session', id, name),
   deleteSession: (id) => ipcRenderer.invoke('zion:delete-session', id),
   onAgentEvent: (cb) => subscribe('agent:event', cb),
+  onTreeChanged: (cb) => subscribe('zion:tree-changed', cb),
   uiAnswer: (id, result) => ipcRenderer.invoke('zion:ui-answer', id, result),
   onUiAsk: (cb) => subscribe('zion:ui-ask', cb),
   onUiNotify: (cb) => subscribe('zion:ui-notify', cb),

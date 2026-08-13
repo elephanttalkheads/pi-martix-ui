@@ -506,6 +506,18 @@ export const useFeed = create<FeedState>()((set) => ({
 export { deriveSessionTitle } from './title';
 
 /** 归一化工具路径：反斜杠→正斜杠、去盘符、去前导斜杠 */
+/** 树刷新时合并展开态：新树中同路径目录若旧树 open → 保持展开（实时推送不重置用户展开） */
+export function mergeTreeOpen(prev: FileNode[], next: FileNode[]): FileNode[] {
+  const prevMap = new Map(prev.map((n) => [n.path, n]));
+  return next.map((n) => {
+    if (!n.dir) return n;
+    const p = prevMap.get(n.path);
+    const merged: FileNode = { ...n, open: p?.open ?? n.open };
+    if (n.children) merged.children = mergeTreeOpen(p?.children ?? [], n.children);
+    return merged;
+  });
+}
+
 export function normPath(p: string): string {
   return p.replace(/\\/g, '/').replace(/^[A-Za-z]:/, '').replace(/^\/+/, '');
 }

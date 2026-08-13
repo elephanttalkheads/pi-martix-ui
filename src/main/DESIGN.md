@@ -6,6 +6,7 @@
 - 进程内接入 pi SDK：`createAgentSession` 复用 `~/.pi/agent` 配置（auth/models/settings）；会话创建/恢复/列举/打开/重命名/删除全部经 `SessionManager`，工作目录为可变 `WORKSPACE_DIR`（默认 `D:\zion-workspace`；模块加载期从最近项目清单首位恢复，运行时仅经 `zion:switch-project` / `zion:browse-project` 更新；切换 = 废弃全部旧会话 + 按新目录重建，见 ADR-0003）
 - 多会话并存：`Map<sessionId, AgentSession>` 懒创建 + `currentSession` 指针切换；事件流只转发当前会话
 - 命令面板数据源：`zion:list-commands` 聚合本机全部 skills（用户/共享/项目/扩展包/settings.skills）与命令（内置 + 扩展白名单），`skillscan.mjs` 实现
+- 工作区文件树：`zion:scan-tree` 同步快照 + `zion:tree-changed` 实时推送（`fs.watch` recursive + 400ms 防抖重扫 + JSON 对比，只推真实变化）——agent 非编辑工具与外部编辑器改文件也能反映到侧栏
 - 渲染层零 Node 访问：preload 在 sandbox 下暴露 `window.zion` 白名单桥（安全配置事实归 `src/shared/DESIGN.md` 安全边界）
 - 扩展 UI 桥：`uibridge.mjs` 实现 SDK `ExtensionUIContext` 的 dialog（select/confirm/input）与 notify——请求挂 Promise 表 → 派发 renderer（AskDialog/ToastHost 呈现）→ `zion:ui-answer` 回传；经 `session.bindExtensions({ uiContext })` 注入（官方路径，`CreateAgentSessionOptions` 无 uiContext 字段）。绑定后 SDK `hasUI()` 为 true，扩展对话框真实弹窗、不再 headless 静默落空（项目信任询问未接入，见「已知限制与技术债」）
 - 最近项目切换与持久化：`zion:list-projects` / `zion:get-project` / `zion:switch-project` / `zion:browse-project`（原生目录选择器）支撑工作目录选择与当前项目展示；最近清单存 `~/.pi/agent/zion-projects.json`（`{ path, lastUsed }`，上限 8，最近优先去重）
@@ -27,7 +28,7 @@
 src/renderer (React/TS)  ⇄  window.zion（preload.cjs, CJS, sandbox）
         │ 契约：src/shared/protocol.ts（ZionAPI / AgentSessionEvent / UiAsk / UiNotify）
         ▼
-main.mjs：ipcMain.handle ×18 + agent:event / zion:ui-ask / zion:ui-notify 转发
+main.mjs：ipcMain.handle ×18 + agent:event / zion:ui-ask / zion:ui-notify / zion:tree-changed 转发
         │ sessions: Map<sessionId, AgentSession>；currentSession 指针
         │ ├─ skillscan.mjs：collectCommands（skills 扫描 + 命令清单，纯 Node）
         │ └─ uibridge.mjs：createUiBridge（dialog Promise 表 + notify，纯 Node）
@@ -44,7 +45,7 @@ main.mjs：ipcMain.handle ×18 + agent:event / zion:ui-ask / zion:ui-notify 转�
 - `ensureSessionFor(sm, id)`：Map 命中 → 置 `currentSession` 直接返回；未命中 → `createAgentSession({ cwd: WORKSPACE_DIR, sessionManager })` 与 **45s 超时**（`Promise.race`，超时 reject `'agent init timeout'`）竞争，`settled` 标志 + `timer` 管理胜负：超时胜出 → `settled = true`、reject；init 完成时先查标志——已超时则 `dispose()` 释放迟到实例、同样抛 `'agent init timeout'`（不 set Map、不覆盖指针，防事件串台），未超时则 `clearTimeout(timer)` 清理计时器，再 `await session.bindExtensions({ uiContext: uiBridge })`（扩展 UI 桥注入，SDK 官方路径）→ `sessions.set`、置指针、`wireSession(s)`。任何失败路径（超时/迟到）都不入 Map，下次调用可重试
 - 切换：`zion:switch-session` 先用 `SessionManager.list` 结果校验 id（未知 id 抛 `'session not found: <id>'`）→ `SessionManager.open(info.path, undefined, WORKSPACE_DIR)` → `ensureSessionFor`；`zion:new-session` → `SessionManager.create(WORKSPACE_DIR)`；`zion:get-current` → `ensureCurrentSession`；三者返回 `SessionPayload`（`{ id, items }`，`items` 来自 `historyFromSession`）
 - 重命名/删除：`zion:rename-session` / `zion:delete-session` 同 switch 的 id 校验；重命名 = `SessionManager.open` + `appendSessionInfo(name)` 持久化显示名（不加载 AgentSession 实例，见接口节）；删除 = 释放 Map 实例 + 删的是当前会话则清指针 + 会话文件移入 `<会话文件目录>/.trash/`（时间戳后缀，可恢复）。SDK 事实：空会话不落盘（无 assistant 消息 → 无 `.jsonl` 文件），rename/delete 只对真实列出的已持久化会话有效（新建即空的会话在列表外）
-- 项目切换：`zion:switch-project` / `zion:browse-project` → `switchProject(dir)`：`path.resolve` 后与当前 `WORKSPACE_DIR` 相同 → 快速路径（仅 `ensureCurrentSession` 刷新指针）；否则逐个 `s.dispose()`（异常捕获忽略）→ `sessions.clear()` + `currentSession = null` → `WORKSPACE_DIR = resolved` → `saveProject(resolved)`（去重置顶写最近清单）→ `ensureCurrentSession()`（新目录 `mkdirSync` + `continueRecent`，无历史则新建）→ 返回 `{ path, id, items }`。`WORKSPACE_DIR` 的全部引用面（`createAgentSession` cwd、continueRecent/list/mkdirSync、`scanDir` 根、命令面板 `projectSkillsDirs`、switch/new/rename 的 SessionManager 调用）读当前值，切换后自动跟随；`browse-project` 复用主进程 `dialog.showOpenDialog`（`win` 存在时带父窗、否则无父窗重载；`openDirectory`），取消返回 `null`，选中即 `switchProject(filePaths[0])`
+- 项目切换：`zion:switch-project` / `zion:browse-project` → `switchProject(dir)`：`path.resolve` 后与当前 `WORKSPACE_DIR` 相同 → 快速路径（仅 `ensureCurrentSession` 刷新指针）；否则逐个 `s.dispose()`（异常捕获忽略）→ `sessions.clear()` + `currentSession = null` → `WORKSPACE_DIR = resolved` → `saveProject(resolved)`（去重置顶写最近清单）→ `ensureCurrentSession()`（新目录 `mkdirSync` + `continueRecent`，无历史则新建）→ 返回 `{ path, id, items }`。`WORKSPACE_DIR` 的全部引用面（`createAgentSession` cwd、continueRecent/list/mkdirSync、`scanDir` 根、命令面板 `projectSkillsDirs`、switch/new/rename 的 SessionManager 调用）读当前值，切换后自动跟随；文件树监听不在此列——跨目录分支显式重建 watcher（见「文件树实时监听」节）；`browse-project` 复用主进程 `dialog.showOpenDialog`（`win` 存在时带父窗、否则无父窗重载；`openDirectory`），取消返回 `null`，选中即 `switchProject(filePaths[0])`
 
 **prompt 主流程**：`agent:prompt` → `ensureCurrentSession` → `s.prompt(text)` → 取末条消息 stopReason（仅 LLM 助手消息分支有该字段，守卫规则见 `src/shared/DESIGN.md` 失败模式）→ 返回 `stop ?? 'ok'`。SDK 事件：`s.subscribe` 回调 → 过滤（`win` 未销毁且 `s === currentSession`）→ `win.webContents.send('agent:event', event)` → preload `ipcRenderer.on('agent:event')` 剥掉 `IpcRendererEvent` → `onAgentEvent` 回调（返回退订函数）。过滤是转发期判断而非订阅期判断：`wireSession` 每会话只订阅一次，切换会话不重订阅，旧会话事件被过滤不污染当前 feed。
 
@@ -54,6 +55,12 @@ main.mjs：ipcMain.handle ×18 + agent:event / zion:ui-ask / zion:ui-notify 转�
 - `SCAN_SKIP` 集合（node_modules / .git / dist / dist-renderer / graphify-out / .vite）+ 一切点文件（`e.name.startsWith('.')`）
 - 深度上限 `SCAN_MAX_DEPTH = 3`，越界目录 `children: []`；目录 `open: depth < 2`（前两层默认展开）
 - 文件大小经 `humanSize`（b / k / M）；目录优先、按名排序；单条 readdir/stat 失败 try/catch 静默跳过，不中断整树
+
+**文件树实时监听**：`watchWorkspaceTree()` 挂 `fs.watch(WORKSPACE_DIR, { recursive: true }, onTreeChange)`（先 `unwatchWorkspaceTree` 再挂、重置 `lastTreeJson`；挂接失败 catch → warn「文件树监听失败（watch 不可用，退化为手动刷新）」，不中断启动）：
+- 回调预过滤：`filename` 顶层段（`split(/[\\/]/)[0]`）在 `SCAN_SKIP` 或点前缀 → 直接丢弃（重扫结果必不变，省无谓扫描）；`filename` 为 null 时不过滤，走完整流程
+- 400ms 防抖：`clearTimeout` 重排单计时器，批量变化只重扫一次
+- JSON 对比：重扫结果 `JSON.stringify` 与 `lastTreeJson` 比对，无变化不推送（预过滤漏网的重复事件在此兜底）；有变化则更新 `lastTreeJson` 并 `win?.webContents.send('zion:tree-changed', fresh)`（整树快照，形状与 scan-tree 相同）
+- 挂接点三处：模块加载期（启动恢复改写 `WORKSPACE_DIR` 之后、`treeWatcher` 等 `let` 声明之后——调用点前置会因 TDZ 抛 ReferenceError）；`switchProject` 跨目录分支在 `WORKSPACE_DIR = resolved` 后重建（同目录快速路径不重建）；`window-all-closed` 时 `unwatchWorkspaceTree()`（关 watcher + 清防抖，退出不残留回调）
 
 **命令聚合**：`zion:list-commands` → `collectCommands`（skillscan.mjs，纯 Node 同步扫描）：
 - 来源（遵循 pi docs/skills.md 官方加载来源，按序扫描）：`~/.pi/agent/skills`（用户）→ `~/.agents/skills`（共享）→ `WORKSPACE_DIR/.pi/skills` + `.agents/skills`（项目）→ `~/.pi/agent/settings.json` 的 `skills` 数组（`~` 展开为 home，解析失败视为空）→ `~/.pi/agent/npm/node_modules` 各包 `skills/` 目录（扩展，递归支持 `@scope` 包）
@@ -67,7 +74,7 @@ IPC 通道全集（字面量与 handler 所在地；`protocol.ts` 头注释「�
 
 invoke ×18（`ipcMain.handle`）——会话管理 `zion:list-sessions` / `zion:get-current` / `zion:switch-session` / `zion:new-session` / `zion:rename-session` / `zion:delete-session`；项目 `zion:list-projects` / `zion:get-project` / `zion:browse-project` / `zion:switch-project`；其余 `zion:ping` / `zion:scan-tree` / `zion:list-commands` / `agent:prompt` / `agent:abort` / `agent:steer` / `agent:followUp` / `zion:ui-answer`
 
-send ×3（`webContents.send`；preload 经 `subscribe(channel, cb)` 统一订阅）——`agent:event`（事件流）/ `zion:ui-ask`（扩展对话框）/ `zion:ui-notify`（扩展通知）
+send ×4（`webContents.send`；preload 经 `subscribe(channel, cb)` 统一订阅）——`agent:event`（事件流）/ `zion:ui-ask`（扩展对话框）/ `zion:ui-notify`（扩展通知）/ `zion:tree-changed`（工作区文件树变化：整树 `FileNode[]` 快照，与 scan-tree 同形状）
 
 各通道的返回形状与失败语义见 `src/shared/DESIGN.md` 接口表。契约未载明的实现侧行为：
 
@@ -83,6 +90,7 @@ send ×3（`webContents.send`；preload 经 `subscribe(channel, cb)` 统一订�
 - `zion:rename-session` 校验 id 后 `SessionManager.open` + `appendSessionInfo`，**不加载 AgentSession 实例**（不入 `sessions` Map、不动 `currentSession` 指针），返回 `listSessionInfos()`
 - `zion:delete-session` **先断引用后移文件**：`sessions.delete(id)`、当前会话则 `currentSession = null`，再 `mkdirSync` + `renameSync` 移入 `<会话文件目录>/.trash/<原名>.<时间戳>.jsonl`；不 abort 被删会话可能的后台任务（引用已断，事件无转发资格），返回 `listSessionInfos()`
 - `zion:ui-answer` → `uiBridge.handleAnswer(id, result)`：命中 Promise 表 → cleanup + resolve(result)，返回 `{ ok: true }`；未知 id（已超时清理/重复应答）返回 `{ ok: false }` 并 warn，不抛错
+- `zion:tree-changed`：推送整树快照（形状同 scan-tree）；主进程不感知订阅方数量——渲染层须先 `onTreeChanged` 订阅，未订阅则消息丢弃；窗口已销毁时经 `win?.` 静默丢弃；触发机制（防抖/JSON 对比/预过滤）见「架构与主要流程」文件树实时监听节
 
 依赖：
 - `@earendil-works/pi-coding-agent`（^0.84.1）：`createAgentSession`、`AgentSession`（prompt/steer/followUp/abort/subscribe/state）、`SessionManager` static create/open/continueRecent/list + 实例方法 `appendSessionInfo`（重命名持久化）
@@ -111,6 +119,7 @@ send ×3（`webContents.send`；preload 经 `subscribe(channel, cb)` 统一订�
 - **browse 走主进程原生 dialog**：目录选择器在 main 侧（`dialog.showOpenDialog`），渲染层不实现目录浏览器、只消费结果；`win` 为 null（未建/已销毁）时无父窗重载兜底
 - **历史只取 user/assistant 文本**：恢复 feed 的最小契约（`SessionHistoryItem` 无工具细节字段），工具消息与空文本排除
 - **scan-tree 同步 fs + 深度/跳过限制**：主进程阻塞式扫描换实现简单，深度上限 + 跳过集合（清单见 shared）把代价限制在可控范围
+- **文件树监听 = fs.watch 目录级事件 + 全量重扫，而非事件级增量**：fs.watch 只报「某处变化」与文件名，rename/外部保存下事件级增量易漏，重扫整树保证与 `zion:scan-tree` 同源一致（renderer 可直接 merge 或整体替换）；400ms 防抖聚合批量变化、JSON 对比过滤重复事件、回调期 `SCAN_SKIP`/点文件预过滤省无谓扫描；recursive 挂接失败仅 warn 退化为手动刷新——同步快照 `zion:scan-tree` 本就是兜底路径
 - **abort/steer/followUp fire-and-forget**：与 prompt 的完整 await 不对称——主进程不维护回合状态，UI 交互即时返回；需要精确 idle 状态时 SDK 提供 `waitForIdle`
 - **命令清单 = 内置权威快照 + 扩展白名单**：扩展运行时注册的命令无法静态枚举，`EXTENSION_COMMANDS` 是唯一静态入口；`BUILTIN_COMMANDS` 从 pi 源码提取快照，SDK 升级需人工核对漂移
 - **skillscan 纯 Node、零 electron 依赖**：`node --test scripts/skillscan.test.mjs` 直接单测，不依赖 Electron 启动；同步 `readdirSync` 扫描仅限本机 skills 小目录，阻塞可接受（与 scan-tree 同步扫描同款权衡）
@@ -126,6 +135,7 @@ send ×3（`webContents.send`；preload 经 `subscribe(channel, cb)` 统一订�
 **不变量**：
 - 任意时刻至多一个会话（`currentSession`）的事件被转发；`sessions` Map 实例仅被 `zion:delete-session` 显式释放或 `switchProject` 整体清空（会话切换 `switch-session` 不丢实例；无自动淘汰策略）
 - `WORKSPACE_DIR` 仅两处赋值：模块加载期启动恢复（whenReady 前，取最近项目清单首位）与 `switchProject`（`zion:switch-project` / `zion:browse-project` 两条入口）；同目录切换不重建会话、不写最近清单
+- 文件树监听实例至多一个且始终指向当前 `WORKSPACE_DIR`：`watchWorkspaceTree` 先 unwatch 再挂新 watcher，挂接点（模块加载、`switchProject` 跨目录分支）都在 `WORKSPACE_DIR` 更新之后；`window-all-closed` 时 unwatch 并清防抖计时器
 - `window.zion` 方法集合与 `ZionAPI` 一一对应（preload 以 `/** @type {ZionAPI} */` 注解，checkJs 强制）
 - `agent:prompt` 不因模型/请求失败 reject；abort/steer/followUp 无会话时返回 `true`
 - 每个 dialog 请求至多一次有效应答：`handleAnswer` 命中即清表，二次应答返回 false 不重复 resolve
@@ -145,6 +155,8 @@ send ×3（`webContents.send`；preload 经 `subscribe(channel, cb)` 统一订�
 - ask 派发时窗口未创建/已销毁 → dispatch 落到 no-op（`win?.` 可选链），扩展调用挂起至 timeout 兜底 resolve undefined（不 reject）；notify 静默丢弃
 - `zion:ui-answer` 未知 id（已超时清理/重复应答）→ `{ ok: false }` + warn 日志，无副作用
 - 扫描遇不可读目录/文件 → 静默跳过单条目，整树不中断
+- `fs.watch` recursive 不可用/挂接失败（平台或目录不支持）→ `watchWorkspaceTree` catch → warn「文件树监听失败（watch 不可用，退化为手动刷新）」，无 watcher、不自动重试；`zion:scan-tree` 手动刷新路径不受影响
+- 监听关闭异常（`treeWatcher.close()` 抛错）→ 捕获忽略；unwatch 先清防抖——切换项目/退出后旧目录的迟到推送不会发出
 - `continueRecent` 无历史 → 返回新会话 id，走正常创建路径
 - `switchProject` 中旧会话 dispose 异常 → 捕获忽略（实例随进程回收），不阻断切换
 - 切换后新目录 `ensureCurrentSession` 失败（init 超时）→ IPC reject；此时 `WORKSPACE_DIR` 已更新、旧会话已全部清空（半完成状态，重试即走新目录创建路径）

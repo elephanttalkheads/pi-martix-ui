@@ -2,17 +2,17 @@
 
 本模块是 ZION 的进程边界：主进程进程内接入 pi SDK（`createAgentSession`，复用 `~/.pi/agent` 配置），经 IPC 把 agent 会话管理、事件流与扩展 UI 请求（dialog/notify）暴露给渲染层；preload 在 sandbox 下实现渲染进程唯一入口 `window.zion`。不含 UI 逻辑，不管理模型/凭据配置。IPC 契约（通道清单、类型形状、stopReason 语义）由 `src/shared` 模块拥有，本模块是契约的实现方。
 
-> 任务涉及本模块架构（会话模型、项目切换、事件转发、扫描与命令聚合）、接口实现或设计决策时，先读 [DESIGN.md](DESIGN.md)；
+> 任务涉及本模块架构（会话模型、项目切换、事件转发、文件树监听、扫描与命令聚合）、接口实现或设计决策时，先读 [DESIGN.md](DESIGN.md)；
 > 涉及 IPC 契约本身（通道名、`ZionAPI`、类型形状）时读 `src/shared/AGENTS.md` / `src/shared/DESIGN.md`；
 > 仅改本模块实现细节（不动会话模型、不加通道、不改契约）时可跳过两者。
 
 ## 关键入口
 
-- `src/main/main.mjs` —— 主进程全部逻辑：`sessions` Map + `currentSession` 指针、`ensureCurrentSession`/`ensureSessionFor`（会话创建后 `bindExtensions({ uiContext })` 注入 UI 桥；init 45s 超时，败北后迟到的初始化 `dispose()` 丢弃、不 set 不接管）、18 组 `ipcMain.handle` + 3 条 send 转发（`wireSession` / `dispatchUi`；通道全集见 [DESIGN.md](DESIGN.md)「接口与依赖」节）、`listProjects`/`saveProject`/`switchProject`（项目切换：dispose 旧会话 + 重建）、启动恢复（模块加载期读 `zion-projects.json` 首位重置 `WORKSPACE_DIR`）、`historyFromSession`、`scanDir`
+- `src/main/main.mjs` —— 主进程全部逻辑：`sessions` Map + `currentSession` 指针、`ensureCurrentSession`/`ensureSessionFor`（会话创建后 `bindExtensions({ uiContext })` 注入 UI 桥；init 45s 超时，败北后迟到的初始化 `dispose()` 丢弃、不 set 不接管）、18 组 `ipcMain.handle` + 4 条 send 转发（`wireSession` / `dispatchUi` / `onTreeChange`；通道全集见 [DESIGN.md](DESIGN.md)「接口与依赖」节）、`listProjects`/`saveProject`/`switchProject`（项目切换：dispose 旧会话 + 重建）、启动恢复（模块加载期读 `zion-projects.json` 首位重置 `WORKSPACE_DIR`）、`historyFromSession`、`scanDir`、`watchWorkspaceTree`/`unwatchWorkspaceTree`/`onTreeChange`（文件树实时监听：fs.watch + 防抖重扫 + 变化推送，机制见 [DESIGN.md](DESIGN.md) 架构节）
 - `src/main/uibridge.mjs` —— 扩展 UI 桥（纯 Node、无 electron 依赖）：`createUiBridge` 把 `select`/`confirm`/`input` 挂 Promise 表 → 经注入的 `dispatch` 派发 renderer；timeout/AbortSignal 兜底 resolve `undefined`；`notify` 单向派发；`handleAnswer` 回传应答；其余 `ExtensionUIContext` 方法为 TUI no-op 桩
 - `src/main/skillscan.mjs` —— 命令面板数据源（纯 Node、无 electron 依赖）：`parseSkillFrontmatter`/`scanSkillsDir`/`collectCommands` + `BUILTIN_COMMANDS`/`EXTENSION_COMMANDS`（命令清单维护规则见「本模块硬约束」）
 - `scripts/build-main.mjs` —— main/preload 产物构建脚本（构建管线/产物布局见 [DESIGN.md](DESIGN.md) 启动节）
-- `src/preload/preload.cjs` —— 安全桥实现：`contextBridge.exposeInMainWorld('zion', api)`；方法集合必须与 `ZionAPI`（`src/shared/protocol.ts`）一一对应；三个订阅方法（`onAgentEvent`/`onUiAsk`/`onUiNotify`）统一经 `subscribe(channel, cb)` 样板（注册 `ipcRenderer.on` → 剥 `IpcRendererEvent` → 返回退订函数）
+- `src/preload/preload.cjs` —— 安全桥实现：`contextBridge.exposeInMainWorld('zion', api)`；方法集合必须与 `ZionAPI`（`src/shared/protocol.ts`）一一对应；四个订阅方法（`onAgentEvent`/`onTreeChanged`/`onUiAsk`/`onUiNotify`）统一经 `subscribe(channel, cb)` 样板（注册 `ipcRenderer.on` → 剥 `IpcRendererEvent` → 返回退订函数）
 - `src/shared/protocol.ts` —— 契约单一事实源（属 `src/shared` 模块，本模块只做 JSDoc 类型引用；`CommandItem` 形状归它）
 - `tsconfig.node.json` —— main/preload 的 checkJs 配置（include `src/main` + `src/preload` + `src/shared`）
 
@@ -36,8 +36,7 @@
 - **IPC 通道名字符串散落两处字面量**（main.mjs 的 `handle`/`send` 与 preload.cjs 的 `invoke`/`on`，JS 无法共享运行时常量）：新增/改名通道必须两处同步，且同步更新 `ZionAPI`（契约归 `src/shared`；通道全集见 [DESIGN.md](DESIGN.md)「接口与依赖」节）
 - **扩展对话框形态三处同步**：`uibridge.mjs` 的 `ask()` kind、`src/shared/protocol.ts` 的 `UiAsk.kind`、`AskDialog.tsx` 渲染分支（confirm/input/select）必须一致；新增形态三处同改（形状契约归 `src/shared`）
 - **命令清单人工维护**：新增扩展命令必须追加 `skillscan.mjs` 的 `EXTENSION_COMMANDS`（运行时注册的命令无法静态枚举，漏加则面板不显示）；升级 pi SDK 后核对 `BUILTIN_COMMANDS` 是否漂移（快照来源见 DESIGN.md）
-- **`WORKSPACE_DIR` 运行时只经 `switchProject` 更新**（main.mjs，默认 `D:\zion-workspace`；唯一入口是 `zion:switch-project` / `zion:browse-project`；例外：模块加载期启动恢复会从最近项目清单首位改写一次，流程见 [DESIGN.md](DESIGN.md) 启动节）：跨目录切换 = 废弃全部旧会话并按新目录重建（dispose/清空/continueRecent 细节见 [DESIGN.md](DESIGN.md) 架构节）；同目录切换走快速路径、不写最近清单
-- **项目相关逻辑必须读 `WORKSPACE_DIR` 当前值**：该值可变（启动恢复与切换项目都会更新）——不要在模块加载期缓存它的快照（启动恢复会改写），否则 scan-tree / list-commands（项目级 skills）/ 会话归属指向错误目录
+- **`WORKSPACE_DIR` 可变，项目相关逻辑必须读当前值**（默认值、两处赋值点、跨目录切换重建与同目录快速路径见 [DESIGN.md](DESIGN.md) 不变量节）：不要在模块加载期缓存它的快照（启动恢复会改写），否则 scan-tree / 文件树监听 / list-commands（项目级 skills）/ 会话归属指向错误目录
 - **`window.zion` 之外的渲染层通道不可新增**：渲染进程只能经该白名单触达主进程（`contextIsolation`/`sandbox` 等安全配置事实见 `src/shared/DESIGN.md` 安全边界，改动 `webPreferences` 前先读）
 - **改 `src/main` / `src/preload` 后必须 `npm run build:main` 再验证**：运行时加载的是 `dist-main/` 产物（dev/smoke/e2e 自动先构建；`npm start` 不会，直接跑旧产物）
 

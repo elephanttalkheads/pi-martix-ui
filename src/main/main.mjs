@@ -35,6 +35,7 @@ try {
   console.warn('[zion] startup project restore failed:', String(e));
 }
 
+
 // 扩展 UI 桥：dialog 请求 → renderer 弹层（AskDialog）；经 session.bindExtensions({ uiContext }) 注入
 // （headless 默认无 UI——扩展 ask 与项目信任询问此前全部静默落空）
 const uiBridge = createUiBridge();
@@ -234,6 +235,57 @@ function scanDir(dir, base, depth) {
 }
 ipcMain.handle('zion:scan-tree', () => scanDir(WORKSPACE_DIR, WORKSPACE_DIR, 0));
 
+// ---- 文件树实时监听：项目内新建/删除/改名（含 agent 非编辑工具、外部编辑器）→ 防抖重扫 → 变化推 renderer ----
+let /** @type {import('node:fs').FSWatcher | null} */ treeWatcher = null;
+let /** @type {ReturnType<typeof setTimeout> | null} */ treeDebounce = null;
+let /** @type {string | null} */ lastTreeJson = null;
+
+function watchWorkspaceTree() {
+  unwatchWorkspaceTree();
+  lastTreeJson = null;
+  try {
+    treeWatcher = fs.watch(WORKSPACE_DIR, { recursive: true }, onTreeChange);
+    console.log('[zion] tree watcher on →', WORKSPACE_DIR);
+  } catch (e) {
+    console.warn('[zion] 文件树监听失败（watch 不可用，退化为手动刷新）:', String(e));
+  }
+}
+
+/** @param {string | null} _ev @param {string | null} filename */
+function onTreeChange(_ev, filename) {
+  // 跳过忽略目录内的变化（node_modules/.git/dist 等）：重扫结果不变，无需浪费
+  if (filename) {
+    const top = filename.split(/[\\/]/)[0];
+    if (SCAN_SKIP.has(top) || top.startsWith('.')) return;
+  }
+  if (treeDebounce) clearTimeout(treeDebounce);
+  treeDebounce = setTimeout(() => {
+    treeDebounce = null;
+    const fresh = scanDir(WORKSPACE_DIR, WORKSPACE_DIR, 0);
+    const json = JSON.stringify(fresh);
+    if (json !== lastTreeJson) {
+      lastTreeJson = json;
+      win?.webContents.send('zion:tree-changed', fresh);
+    }
+  }, 400);
+}
+
+function unwatchWorkspaceTree() {
+  if (treeDebounce) {
+    clearTimeout(treeDebounce);
+    treeDebounce = null;
+  }
+  if (treeWatcher) {
+    try {
+      treeWatcher.close();
+    } catch { /* 忽略关闭异常 */ }
+    treeWatcher = null;
+  }
+}
+
+// 文件树实时监听（启动恢复 WORKSPACE_DIR 后；切换项目时经 switchProject 重建）
+watchWorkspaceTree();
+
 // 命令面板：聚合本机全部 skills + 命令（用户级/共享/项目/扩展包/settings.skills + 内置/扩展命令）
 ipcMain.handle('zion:list-commands', () => {
   const home = os.homedir();
@@ -328,6 +380,7 @@ async function switchProject(dir) {
   currentSession = null;
   WORKSPACE_DIR = resolved;
   saveProject(resolved);
+  watchWorkspaceTree();
   console.log('[zion] switch project →', resolved);
   const s = await ensureCurrentSession();
   return { path: WORKSPACE_DIR, id: s.sessionManager.getSessionId(), items: historyFromSession(s) };
@@ -415,5 +468,6 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', () => {
+  unwatchWorkspaceTree();
   if (process.platform !== 'darwin') app.quit();
 });

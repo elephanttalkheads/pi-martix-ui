@@ -84,6 +84,8 @@ export interface ZionAPI {
   deleteSession(id: string): Promise<SessionInfoLike[]>;
   /** 订阅主进程转发的 agent 事件流；返回取消订阅函数（App 卸载时调用） */
   onAgentEvent(cb: (event: AgentSessionEvent) => void): () => void;
+  /** 订阅工作区文件树变化（主进程 fs.watch 防抖重扫后推送，覆盖新建/删除/改名） */
+  onTreeChanged(cb: (tree: FileNode[]) => void): () => void;
 }
 
 /** 文件树节点（主进程扫描工作目录返回） */
