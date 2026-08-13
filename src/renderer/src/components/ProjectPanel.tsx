@@ -30,11 +30,11 @@ export default function ProjectPanel() {
   const [projects, setProjects] = useState<ProjectInfo[]>([]);
   const [busy, setBusy] = useState(false);
 
-  // 打开时刷新最近项目
+  // 打开时刷新最近项目；无桥（纯浏览器调试）时安全跳过
   useEffect(() => {
     if (!open) return;
     let alive = true;
-    window.zion.listProjects().then((l) => alive && setProjects(l)).catch(() => {});
+    window.zion?.listProjects?.()?.then((l) => alive && setProjects(l))?.catch(() => {});
     return () => { alive = false; };
   }, [open]);
 
@@ -45,9 +45,9 @@ export default function ProjectPanel() {
     applySession(r.id, `会话 ${r.id.slice(0, 4)}`, r.items);
     setTree([]);
     setCurrentProject(r.path);
-    const sessions = await window.zion.listSessions().catch(() => []);
+    const sessions = (await window.zion?.listSessions?.()?.catch(() => [])) ?? [];
     setSessions(sessions);
-    const tree = await window.zion.scanTree().catch(() => []);
+    const tree = (await window.zion?.scanTree?.()?.catch(() => [])) ?? [];
     setTree(tree);
     log('ok', `[PRJ] 已切换项目 → ${r.path}`);
   };
@@ -56,6 +56,11 @@ export default function ProjectPanel() {
     if (busy) return;
     setBusy(true);
     log('dim', `[PRJ] 切换项目 → ${path}`);
+    if (!window.zion) {
+      log('err', '[PRJ] 无桥（纯浏览器环境）');
+      setBusy(false);
+      return;
+    }
     try {
       const r = await window.zion.switchProject(path);
       await applySwitch(r);
@@ -69,6 +74,10 @@ export default function ProjectPanel() {
   const browse = async () => {
     if (busy) return;
     setBusy(true);
+    if (!window.zion) {
+      setBusy(false);
+      return;
+    }
     try {
       const r = await window.zion.browseProject();
       if (r) {

@@ -23,7 +23,7 @@ export default function AskDialog() {
   if (!ask) return null;
 
   const answer = (result: string | boolean | undefined) => {
-    void window.zion.uiAnswer(ask.id, result);
+    void window.zion?.uiAnswer?.(ask.id, result);
     setUiAsk(null);
   };
 

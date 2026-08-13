@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>PROTOTYPE — 文件内容全文展示变体（trace-expand pre 简约化）</title>
+<!--
+  问题：read 工具结果的文件内容全文（Feed <pre>{detail}</pre>）目前以「带边框块」展示，
+  希望改为更简约的样式。本 demo 给出 3 个结构性不同的变体（同一数据、同一 feed 上下文），
+  用 ?variant=a|b|c 切换（浮动底栏 + ←/→ 键）。
+  A 裸文本   —— 无容器/无边框/无背景，与对话同密度（最极简）
+  B 行号尺   —— 左侧弱化行号列 + 无边框内容，编辑器骨架
+  C 头部锚点 —— 路径+元信息小字头 + 弱分隔线，内容无边框（文档式）
+  选择或混搭后，把胜出变体折入 src/renderer/src/styles.css 的 .trace-expand，本 demo 即废弃。
+-->
+<style>
+:root {
+  --bg: #010a04; --surface: rgba(2,18,9,0.92); --surface-2: rgba(3,26,13,0.94);
+  --text-primary: #3dff8f; --text-secondary: #23c468; --text-tertiary: #1da754;
+  --accent: #00ff41; --accent-muted: #14b850; --bright: #c2ffd9;
+  --warning: #ffb000; --danger: #ff5555; --border: rgba(61,255,143,0.18);
+  --font: "Consolas", ui-monospace, "Courier New", monospace;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text-secondary); font-family: var(--font); font-size: 13px; }
+
+/* ---- 简化 ZION 外壳（真实密度上下文） ---- */
+header { display: flex; align-items: center; gap: 16px; padding: 10px 18px; border-bottom: 1px solid var(--border); font-size: 12px; letter-spacing: 0.1em; }
+header .brand { color: var(--text-primary); }
+header .chip { color: var(--text-tertiary); }
+header .spacer { flex: 1; }
+main { max-width: 860px; margin: 0 auto; padding: 24px 18px 80px; }
+
+/* ---- turn 骨架 ---- */
+.turn { margin-bottom: 26px; }
+.think { color: var(--text-tertiary); font-size: 13px; margin-bottom: 14px; }
+.trace { border: 1px solid var(--border); padding: 8px 12px; display: flex; gap: 10px; align-items: center; font-size: 12px; position: relative; }
+.trace .tag { color: var(--text-tertiary); }
+.trace .t-desc { color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.trace .st { margin-left: auto; color: var(--accent-muted); flex: none; }
+.settle { color: var(--text-tertiary); font-size: 11px; margin-top: 10px; letter-spacing: 0.08em; }
+.settle b { color: var(--accent); font-weight: normal; }
+
+/* ============ 变体区（被评估的部分） ============ */
+
+/* --- 现状 baseline（参考，不参与切换） --- */
+.baseline .trace-expand { margin-top: 8px; padding: 10px 12px; background: var(--surface-2); border: 1px solid var(--border); }
+.baseline .trace-expand .te-title { font-size: 11px; letter-spacing: 0.12em; color: var(--text-tertiary); margin-bottom: 6px; }
+.baseline .trace-expand pre { font-size: 12px; line-height: 1.6; color: var(--text-secondary); white-space: pre-wrap; word-break: break-all; margin: 0; max-height: 240px; overflow-y: auto; }
+
+/* --- A 裸文本：零容器，纯文本流，与对话同密度 --- */
+.v-a .detail { margin: 8px 0 2px 0; }
+.v-a .detail pre { font-size: 13px; line-height: 1.7; color: var(--text-secondary); white-space: pre-wrap; word-break: break-all; margin: 0; }
+.v-a .detail pre::first-line { color: var(--text-primary); } /* 首行（常为路径头）微强调，无框无背景 */
+
+/* --- B 行号尺：弱化行号列 + 无边框内容，编辑器骨架 --- */
+.v-b .detail { margin: 8px 0 2px 0; display: flex; gap: 14px; max-height: 260px; overflow-y: auto; }
+.v-b .detail .lns { flex: none; text-align: right; color: var(--text-tertiary); opacity: 0.55; font-size: 12px; line-height: 1.7; user-select: none; padding-top: 0; }
+.v-b .detail pre { flex: 1; font-size: 13px; line-height: 1.7; color: var(--text-secondary); white-space: pre-wrap; word-break: break-all; margin: 0; }
+
+/* --- C 头部锚点：路径+元信息小字头 + 弱分隔线，内容无边框（文档式） --- */
+.v-c .detail { margin-top: 8px; }
+.v-c .detail .d-head { display: flex; align-items: baseline; gap: 12px; padding-bottom: 6px; border-bottom: 1px solid var(--border); font-size: 11px; letter-spacing: 0.08em; }
+.v-c .detail .d-head .d-path { color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.v-c .detail .d-head .d-meta { color: var(--text-tertiary); flex: none; }
+.v-c .detail pre { font-size: 13px; line-height: 1.7; color: var(--text-secondary); white-space: pre-wrap; word-break: break-all; margin: 0; padding-top: 8px; max-height: 240px; overflow-y: auto; }
+
+/* 变体区切换显示 */
+.variant { display: none; }
+.variant.on { display: block; }
+
+/* ---- 浮动切换条（明显不属于设计） ---- */
+.switcher { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%);
+  display: flex; align-items: center; gap: 14px; padding: 8px 16px; z-index: 99;
+  background: #0d2b18; border: 1px solid var(--border); border-radius: 999px;
+  box-shadow: 0 4px 18px rgba(0,0,0,0.6); color: var(--text-primary); font-size: 12px; letter-spacing: 0.1em; }
+.switcher button { background: none; border: none; color: var(--accent); font-family: var(--font); font-size: 15px; cursor: pointer; padding: 2px 8px; }
+.switcher button:hover { color: var(--bright); }
+.switcher .label { color: var(--text-tertiary); }
+.switcher .note { color: var(--text-tertiary); font-size: 10px; }
+</style>
+</head>
+<body>
+
+<header>
+  <span class="brand">ZION://agent-console</span>
+  <span class="chip">OPERATOR 15:01</span>
+  <span class="spacer"></span>
+  <span class="chip">读取 palette-verify.txt</span>
+</header>
+
+<main>
+  <div class="turn">
+    <div class="think">▶ 思路</div>
+    <div class="trace">
+      <span class="tag">[read]</span>
+      <span class="t-desc">D:/zion-workspace/palette-verify.txt</span>
+      <span class="st">完成 · 0.0s</span>
+    </div>
+
+    <!-- 现状参考（不参与切换） -->
+    <div class="baseline">
+      <div class="trace-expand">
+        <div class="te-title">read → D:/zion-workspace/palette-verify.txt</div>
+        <pre id="baseline-pre"></pre>
+      </div>
+    </div>
+
+    <!-- 变体 A：裸文本 -->
+    <div id="vA" class="variant v-a">
+      <div class="detail"><pre id="preA"></pre></div>
+    </div>
+
+    <!-- 变体 B：行号尺 -->
+    <div id="vB" class="variant v-b">
+      <div class="detail">
+        <div class="lns" id="lnsB"></div>
+        <pre id="preB"></pre>
+      </div>
+    </div>
+
+    <!-- 变体 C：头部锚点 -->
+    <div id="vC" class="variant v-c">
+      <div class="detail">
+        <div class="d-head">
+          <span class="d-path">D:/zion-workspace/palette-verify.txt</span>
+          <span class="d-meta">6 行 · 124 B · read</span>
+        </div>
+        <pre id="preC"></pre>
+      </div>
+    </div>
+
+    <div class="settle">◆ 已结算 · 1 tools · <b>99,380</b> tok · 7.6s</div>
+  </div>
+</main>
+
+<div class="switcher">
+  <button id="prev" title="上一变体">◀</button>
+  <span class="label" id="label">A — 裸文本</span>
+  <button id="next" title="下一变体">▶</button>
+  <span class="note">←/→ 切换 · 选择或混搭后折入 styles.css</span>
+</div>
+
+<script>
+// 真实数据（palette-verify.txt 内容）
+const CONTENT = `line-one
+PALETTE-VERIFY-2
+NEW-LINE-3
+绕口令：四是四，十是十，十四是十四，四十是四十。
+吃葡萄不吐葡萄皮，不吃葡萄倒吐葡萄皮。
+黑化肥发灰，灰化肥发黑；黑化肥发灰会挥发，灰化肥挥发会发黑。`;
+const LINES = CONTENT.split('\n');
+
+const VARIANTS = [
+  { key: 'a', name: '裸文本', desc: '零容器纯文本流' },
+  { key: 'b', name: '行号尺', desc: '弱化行号列' },
+  { key: 'c', name: '头部锚点', desc: '文档式头部分隔线' },
+];
+
+function render() {
+  document.getElementById('baseline-pre').textContent = CONTENT;
+  document.getElementById('preA').textContent = CONTENT;
+  document.getElementById('lnsB').textContent = LINES.map((_, i) => String(i + 1)).join('\n');
+  document.getElementById('preB').textContent = CONTENT;
+  document.getElementById('preC').textContent = CONTENT;
+}
+
+function apply(v) {
+  ['a', 'b', 'c'].forEach((k) => document.getElementById('v' + k.toUpperCase()).classList.toggle('on', k === v));
+  const meta = VARIANTS.find((x) => x.key === v);
+  document.getElementById('label').textContent = `${v.toUpperCase()} — ${meta.name}（${meta.desc}）`;
+  const url = new URL(location.href);
+  url.searchParams.set('variant', v);
+  history.replaceState(null, '', url);
+}
+
+let cur = (new URLSearchParams(location.search).get('variant') || 'a');
+function cycle(d) {
+  cur = VARIANTS[(VARIANTS.findIndex((x) => x.key === cur) + d + VARIANTS.length) % VARIANTS.length].key;
+  apply(cur);
+}
+document.getElementById('prev').onclick = () => cycle(-1);
+document.getElementById('next').onclick = () => cycle(1);
+window.addEventListener('keydown', (e) => {
+  const t = e.target;
+  if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+  if (e.key === 'ArrowLeft') cycle(-1);
+  else if (e.key === 'ArrowRight') cycle(1);
+});
+render();
+apply(cur);
+</script>
+</body>
+</html>

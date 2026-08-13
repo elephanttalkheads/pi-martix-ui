@@ -2,9 +2,9 @@
 
 ## 目标与非目标
 
-**目标**：把 pi SDK 会话事件流渲染为黑客帝国风 UI——v4 四区骨架 + v5 回合化会话区（回合聚合消息流 + 凝结雨轨 / 思考块折叠 / 结算行 / 注入解码 / 液态玻璃）+ 4 态会话状态机 + 三件装饰（单层数字雨 / 轻扫描线 / 蠕虫入侵+Neo 头像）+ WebAudio 程序化音效；会话列表、文件树、历史恢复、项目选择面板（最近项目 / 原生目录浏览 → 切换工作目录与会话上下文）、扩展对话框（`ctx.ui` 的 confirm/select/input → AskDialog 弹层）与扩展通知（notify → toast）走真实 IPC。
+**目标**：把 pi SDK 会话事件流渲染为黑客帝国风 UI——v4 四区骨架 + v5 回合化会话区（回合聚合消息流 + 凝结雨轨 / 思考块折叠 / 结算行 / 注入解码 / 液态玻璃）+ 4 态会话状态机 + 三件装饰（单层数字雨 / 轻扫描线 / 蠕虫入侵+Neo 头像）+ WebAudio 程序化音效；会话列表、文件树、历史恢复、项目选择面板（最近项目 / 原生目录浏览 → 切换工作目录与会话上下文）、扩展对话框（`ctx.ui` 的 confirm/select/input → AskDialog 弹层）与扩展通知（notify → toast）走真实 IPC；纯浏览器调试桥（`mockBridge.ts`：无 preload 时注入 mock ZionAPI，prompt 经真实事件派发路径，UI 全功能可演示）。
 
-**非目标**：不定义 IPC 契约（`src/shared/protocol.ts` 类型与主进程是事实源）；不提供 Node/凭据能力（隔离在 preload 白名单之后）；不做真实 context 统计（头部「上下文 12.4k / 128k」与「主控会话 #0047」为硬编码装饰）；不实现扩展对话框的 Promise 表/超时/AbortSignal 兜底（主进程 `src/main/uibridge.mjs` 是事实源）——本模块只消费 `UiAsk`/`UiNotify` 类型与 `uiAnswer`/`onUiAsk`/`onUiNotify` 桥面；不实现项目切换的主进程语义（`WORKSPACE_DIR` 变更、旧会话 dispose、`~/.pi/agent/zion-projects.json` 持久化在 `src/main/main.mjs`）——本模块只消费 `listProjects`/`browseProject`/`switchProject` 桥面。
+**非目标**：不定义 IPC 契约（`src/shared/protocol.ts` 类型与主进程是事实源）；不提供 Node/凭据能力（隔离在 preload 白名单之后）；不做真实 context 统计（头部「上下文 12.4k / 128k」与「主控会话 #0047」为硬编码装饰）；不实现扩展对话框的 Promise 表/超时/AbortSignal 兜底（主进程 `src/main/uibridge.mjs` 是事实源）——本模块只消费 `UiAsk`/`UiNotify` 类型与 `uiAnswer`/`onUiAsk`/`onUiNotify` 桥面；不实现项目切换的主进程语义（`WORKSPACE_DIR` 变更、旧会话 dispose、`~/.pi/agent/zion-projects.json` 持久化在 `src/main/main.mjs`）——本模块只消费 `listProjects`/`browseProject`/`switchProject` 桥面；不做完整 markdown 渲染（仅围栏 + 行内 code/高亮子集，语法边界见「正文解析」）。
 
 **边界**：渲染层只消费 `window.zion`（ZionAPI）；事件类型源 `@earendil-works/pi-coding-agent`（经 `shared/protocol.ts` re-export）。主进程/preload 为 JS（`main.mjs`/`preload.cjs`），经 `tsconfig.node.json` checkJs 校验，IPC 通道名字面量在 main/preload 两处，本模块不持有。会话区词条（agent 回合 / 凝结雨轨 / 结算行 / 注入解码）定义以根 `CONTEXT.md` 为准，本文件只记实现语义，不重述定义。
 
@@ -23,6 +23,8 @@
 - 双击复位默认宽；启动 useEffect 读 `zion.sidebar-w` 经 `clampSide` 后应用（无键/非数字忽略，回落默认宽）。
 - clamp 边界与步进常量在 App.tsx 模块级（`SIDE_*`，值见 AGENTS.md 硬约束 17）；`clampSide` 动态上限取窗口一半与 `SIDE_MAX` 取小——窄窗口侧栏不撑过半屏。
 
+**文件树实时监听**（Sidebar + store.ts）：mount 时除初始 `scanTree`/`listSessions` 外订阅 `onTreeChanged`（主进程 fs.watch 防抖重扫后推送整树快照，未订阅则消息丢弃——watcher 机制属 src/main 模块，此处只记消费侧）。收到推送 `setTree(mergeTreeOpen(旧树, 新树))`：`mergeTreeOpen` 是 store 纯函数，新树中同路径目录若旧树 `open` → 保持展开，其余以新树为准——实时推送不重置用户展开态；卸载时退订（`offTree?.()`）。
+
 **事件→状态管线**（`useAgentEvents`，App.tsx 单一订阅点；退订函数在 effect cleanup 调用；所有 store 写入经队列 API 入队，见「回合聚合模型与渲染队列」）：
 - `agent_start` → `armTurn`（回合起点，队列化保序）+ RUNNING（重置 replyScheduled/errored）
 - `message_update`（text_delta / thinking_delta）→ `queueDelta(delta, kind)` + STREAMING
@@ -35,17 +37,21 @@
 
 **回合聚合模型与渲染队列**（store.ts）：feed 数据不再是平铺 FeedItem 数组，而是 `turns`（id→Turn）+ `order`（渲染序）+ `activeTurnId`。Turn 分两类：`operator`（一次用户输入）与 `agent`（agent_start→闭环的执行周期）；agent 回合的 `content` 按到达顺序保序存放内容段（`text`/`thinking`）与工具条目（`tool`）。agent 事件经 IPC 逐条到达（每条一个宏任务），store 把它们攒进模块级 op 队列（`arm`/`delta`/`toolStart`/`toolEnd`/`usage`/`interrupt`/`close`），rAF 时 `_flush` 一次应用：每帧至多一次 `set()`，且只替换活动回合对象（`edit()` 首次访问克隆换引用，`ensureTurn()` 在 armed 或无活动回合时新建）——这是 TurnView 回合级 memo 的前提，历史回合零重渲染。`pushUser` 先同步 `flushNow`（OPERATOR 回合落在正确位置）；`applySession`/`reset` 清队防跨会话污染。
 
-**回合内容与结算行**（Feed.tsx TurnView）：`order.map` 渲染 TurnView（memo），`active`/`streaming` 只对活动回合为真。operator 回合右对齐（OPERATOR 头 + 注入解码）；agent 回合 `.turn-agent`：`TurnRail` + content 逐条渲染——`tool` → ToolCard（工具链块 + diff 卡，revealedEdits 门控）、`thinking` → `<details class="think">` 默认折叠（「思路」摘要，流式中显示「· 思考中…」）、`text` → `.msg.agent`（Body 解析 code/高亮；中断标记 `[已被操作员中断]` 落最后一个 text 段；caret 落末 entry）。闭环写结算行 `.settle`：`◆ 已结算/已中断/错误 · N tools · Σtokens · 耗时`——tokens 为回合内各 turn_end usage 求和（`seenUsage=false` 时显示 null），耗时为 `agent_start`→闭环的渲染层实测（performance.now，非 SDK 计时）；outcome 判定：`closeTurn('error')` → error，有 `interrupted` 标记 → interrupted，否则 ok；`!cur.settle` 守卫保证每回合至多一条。
+**回合内容与结算行**（Feed.tsx TurnView）：`order.map` 渲染 TurnView（memo），`active`/`streaming` 只对活动回合为真。operator 回合右对齐（OPERATOR 头 + 注入解码）；agent 回合 `.turn-agent`：`TurnRail` + content 逐条渲染——`tool` → ToolCard（工具链块 + diff 卡，revealedEdits 门控）、`thinking` → `<details class="think">` 默认折叠（「思路」摘要，流式中显示「· 思考中…」）、`text` → `.msg.agent`（Body 解析，语法见「正文解析」；中断标记 `[已被操作员中断]` 落最后一个 text 段；caret 落末 entry）。闭环写结算行 `.settle`：`◆ 已结算/已中断/错误 · N tools · Σtokens · 耗时`——tokens 为回合内各 turn_end usage 求和（`seenUsage=false` 时显示 null），耗时为 `agent_start`→闭环的渲染层实测（performance.now，非 SDK 计时）；outcome 判定：`closeTurn('error')` → error，有 `interrupted` 标记 → interrupted，否则 ok；`!cur.settle` 守卫保证每回合至多一条。
 
-**凝结雨轨**（TurnRail.tsx）：活动回合左侧 `.rail` 内 2 列迷你数字雨 canvas，帧节流 `90/fx.speed`（与背景雨同一折算，直接读 `fx`）；回合闭环后组件卸载 canvas、凝为 ◆（`.seal`，rAF 立即停——长会话零常驻开销）；reduced-motion 只画一帧静态雨；`aria-hidden`，纯装饰不承载业务（见 CONTEXT.md「凝结雨轨」）。
+**正文解析**（markdown.ts `parseBody` 纯函数，Feed Body / OperatorBody 解码完成后共用）：```（或 ~~~）围栏代码块 + 行内 `code` /【高亮词】；围栏开行可带语言标签（`lang` 只解析不展示）、未闭合宽容到文末、代码块内不做行内解析。代码块渲染为 `.msg-code` `<pre>`——简约样式（无边框无背景，唯一锚点是左侧 1px 弱线，与正文区分但保持密度）；markdown.test.mjs 覆盖 8 用例。
 
-**注入解码**（Feed.tsx OperatorBody）：OPERATOR 消息入场时假名乱码逐位还原（时长 `min(700, 240+字符数*6)`ms，空格/换行保留；解码期间纯文本渲染，完成后交 Body 做 code/高亮解析）；只入场播一次（text/decOn 变化不重播）；DEC 关闭或 reduced-motion 直接 Body；开关 `decOn` 持久化 `zion.dec`（见 CONTEXT.md「注入解码」）。
+**凝结雨轨**（TurnRail.tsx）：活动回合左侧 `.rail`（`pointer-events: none`——纯装饰轨道，不拦截拖选/点击）内 2 列迷你数字雨 canvas，帧节流 `90/fx.speed`（与背景雨同一折算，直接读 `fx`）；回合闭环后组件卸载 canvas、凝为 ◆（`.seal`，rAF 立即停——长会话零常驻开销）；reduced-motion 只画一帧静态雨；`aria-hidden`，纯装饰不承载业务（见 CONTEXT.md「凝结雨轨」）。
+
+**注入解码**（Feed.tsx OperatorBody）：OPERATOR 消息入场时假名乱码逐位还原（时长 `min(700, 240+字符数*6)`ms，空格/换行保留；解码期间纯文本渲染，完成后交 Body 做 code/高亮/围栏解析）；只入场播一次（text/decOn 变化不重播）；DEC 关闭或 reduced-motion 直接 Body；开关 `decOn` 持久化 `zion.dec`（见 CONTEXT.md「注入解码」）。
 
 **液态玻璃分级**（styles.css）：工具卡/diff 卡为「agent 凝结出的实体」——静态态半透明磷光底 + 顶边镜面高光/底边折射暗线（无 blur 开销）；`backdrop-filter: blur(9px) saturate(1.25) brightness(1.05)` 只开 `.turn-agent.is-active` 内的卡（性能分级：长会话任意时刻 blur 卡数 ≤ 活动回合卡数）；工具收尾（run→ok/err）挂载 `.ripple` 凝结涟漪（0.7s 一次性动画，reduced-motion 关闭）。
 
 **FX 派生**：`setSessionState` 同步 `Object.assign` 到模块级 `fx` 对象（READY `{speed:1, energy:0.3}` / 忙碌 `{speed:2.2, energy:0.85}`）；RainCanvas 与 TurnRail（均 `90/fx.speed` 帧节流）直接读取，不触发 React 渲染。侧栏顶部为 Vite import 的透明 Neo 双帧 PNG（120×120，容器无底板/描边）；张嘴仅由蠕虫释放驱动（store `wormActive` 计数 > 0，`releaseWorm` 开始 +1、done -1），CSS 以 300ms `steps(1,end)` 在闭嘴/张嘴间切换，释放瞬间附带 700ms 缩放脉冲，reduced-motion 下停在静态张嘴帧且不脉冲。
 
-**启动恢复**（App useEffect，`window.zion?.getCurrentSession` 守卫——桥未注入直接 return 优雅降级）：`getCurrentSession` → `listSessions` → 标题经 `deriveSessionTitle`（title.ts 纯函数，规则见「设计决策与权衡」）→ `applySession(id, title, items)` 以历史重建回合 feed（仅文本段：user→operator 回合、assistant→agent 回合单 text 段；无工具卡/结算行，`startedAt=0` 不计时）+ `setSessions` + `getProject` → `setCurrentProject`（侧栏 Project 标题）→ `listProjects` 判空：无最近项目 → `setProjectOpen(true)` 自动打开项目选择面板（启动引导，ADR-0003 决策 3）。
+**启动恢复**（App useEffect，`window.zion?.getCurrentSession` 守卫——桥未注入直接 return 优雅降级）：`getCurrentSession` → `listSessions` → 标题经 `deriveSessionTitle`（title.ts 纯函数，规则见「设计决策与权衡」）→ `applySession(id, title, items)` 以历史重建回合 feed（仅文本段：user→operator 回合、assistant→agent 回合单 text 段；回合 time 取 `h.ts` 经 `fmtTime` 格式化（HH:MM，无 ts 回落当前时刻）——与实时回合 `msgTime` 同一格式化；无工具卡/结算行，`startedAt=0` 不计时）+ `setSessions` + `getProject` → `setCurrentProject`（侧栏 Project 标题）→ `listProjects` 判空：无最近项目 → `setProjectOpen(true)` 自动打开项目选择面板（启动引导，ADR-0003 决策 3）。
+
+**浏览器调试桥**（mockBridge.ts + main.tsx）：`installMockBridge()` 在 `window.zion` 缺失时（浏览器直开 vite dev、无 Electron preload）注入 mock ZionAPI，有桥（Electron 打包）检测后直接跳过，不影响生产。mock 数据按项目维度写死（`MOCK_SESSIONS`/`MOCK_ITEMS`/`MOCK_TREE`/`MOCK_PROJECTS`/`MOCK_COMMANDS`）；`prompt` 按输入生成模板回复，经 setTimeout 按真实时序派发 `agent_start → tool_execution_start → message_update(text_delta) → tool_execution_end → message_end → agent_end → agent_settled`（`abort` 置位后未触发的派发全部取消）——事件经 `onAgentEvent` 真实派发路径，feed 流式渲染与事件管线零改动。`browseProject` 浏览器无原生对话框，轮换到下一个 mock 项目模拟选择；`onUiAsk`/`onUiNotify` 为空实现（无扩展弹层演示数据）。
 
 **会话切换/新建/重命名/删除**（Sidebar）：`selectSession` → `switchSession`（主进程懒创建实例，可能秒级；`switching` 锁防并发）→ `applySession`；`newSession` 同理；失败走 `log('err')`。重命名：`startRename` 以当前显示标题为草稿，`.s-title-edit` 内联输入 Enter/blur 提交 `commitRename`、Esc 取消；`renameSession` → `setSessions`，当前会话另 `setSessionTitle(name)`（只改标题，不重置 feed）。删除：`askDelete` 两段确认——首击进入「确认?」态（2.5s 自动复位），再击 `doDelete` → `deleteSession`（软删，移入 `.trash` 可恢复）→ `setSessions`；删除的是当前会话时主进程指针已落最近会话，`getCurrentSession` 重拉 + `applySession`（标题取新列表匹配，兜底短码）。点文件树行 → `pushUser` + `window.zion.prompt('读取 <path>')`（真实 prompt，无假动画）。
 
@@ -83,11 +89,11 @@
 
 **工具链块参数展开**（toolfmt.ts 纯函数，Feed ToolCard 消费）：
 - `.step` 行 `role="button"` + `tabIndex=0` + `aria-expanded`，点击或 Enter/Space 切换 `toggleToolExpand`（store `expandedTools`，toolCallId 键）。
-- 展开渲染 `.trace-expand`：`te-title` = `toolExpandTitle`（args.file/path → `工具名 → 路径`，否则仅工具名）+ `<pre>` 全文 = `formatToolArgs`（bash → `command` 全文不截断；batch_execute → `commands[]` 逐行拼接；两者缺 command/commands 时与其余工具一致走 JSON 美化兜底，一律 `slice(0, 2000)`（MAX_JSON））。`pre` 限高 240px 内滚动、`pre-wrap` 防超宽行撑破卡片。
+- 展开渲染 `.trace-expand`：`te-title` = `toolExpandTitle`（args.file/path → `工具名 → 路径`，否则仅工具名）+ `<pre>` 全文 = `formatToolArgs`（bash → `command` 全文不截断；batch_execute → `commands[]` 逐行拼接；两者缺 command/commands 时与其余工具一致走 JSON 美化兜底，一律 `slice(0, 2000)`（MAX_JSON））。`pre` 限高 240px 内滚动、`pre-wrap` 防超宽行撑破卡片。（本轮视觉收敛：`.trace-expand` 为 `ui-demo/proto-detail-variants.html` 变体 A——裸文本流，无容器/无边框/无背景，与对话同密度；demo 已折入 styles.css，废弃）
 
 ## 接口与依赖
 
-**对外消费**（`window.zion`，ZionAPI，env.d.ts 声明）：`ping` / `prompt`（从不抛错，resolve 为 stopReason）/ `abort` / `steer` / `followUp` / `scanTree` / `listCommands`（命令面板数据，`CommandItem[]`）/ `listSessions` / `getCurrentSession` / `switchSession` / `newSession` / `listProjects`（最近项目 `ProjectInfo[]`）/ `getProject`（当前项目工作目录，`{ path: string }`）/ `browseProject`（原生目录选择，取消返回 null）/ `switchProject`（切换工作目录+会话上下文，返回 `SwitchProjectResult`{path, id, items}）/ `uiAnswer`（扩展对话框应答，取消传 undefined）/ `onUiAsk` / `onUiNotify`（订阅扩展对话框与通知，返回退订函数）/ `renameSession` / `deleteSession`（rename/delete 均返回刷新后的完整会话列表）/ `onAgentEvent`（返回退订函数）。
+**对外消费**（`window.zion`，ZionAPI，env.d.ts 声明）：`ping` / `prompt`（从不抛错，resolve 为 stopReason）/ `abort` / `steer` / `followUp` / `scanTree` / `listCommands`（命令面板数据，`CommandItem[]`）/ `listSessions` / `getCurrentSession` / `switchSession` / `newSession` / `listProjects`（最近项目 `ProjectInfo[]`）/ `getProject`（当前项目工作目录，`{ path: string }`）/ `browseProject`（原生目录选择，取消返回 null）/ `switchProject`（切换工作目录+会话上下文，返回 `SwitchProjectResult`{path, id, items}）/ `uiAnswer`（扩展对话框应答，取消传 undefined）/ `onUiAsk` / `onUiNotify`（订阅扩展对话框与通知，返回退订函数）/ `renameSession` / `deleteSession`（rename/delete 均返回刷新后的完整会话列表）/ `onAgentEvent`（返回退订函数）/ `onTreeChanged`（工作区文件树变化订阅，Sidebar 经 `mergeTreeOpen` 实时合并展开态）。
 
 **对外不提供**：无公共导出——本模块是终端 UI。
 
@@ -110,7 +116,7 @@
 - **`setSessionTitle` 与 `applySession` 分工**：改名当前会话只走 `setSessionTitle`（仅更新 `sessionTitle`，feed/状态机/token 全不动）——`applySession` 会重建 feed，误用会把正在进行的对话内容冲掉。
 - **删除是软删除 + 两段确认**：`deleteSession` 为软删（主进程语义，UI 只展示 log），侧栏用「首击确认? + 2.5s 自动复位」防误触；删除当前会话后主进程指针自动落回最近会话，渲染层不自行猜 id，`getCurrentSession` 重拉。
 - **日志前端自收集**：`store.logs` 上限 120 行（LOG_MAX），`role="log"`，收起时 `aria-hidden`。
-- **交互细节**：mousedown 全局焦点归还 `#cmdline`（v4 §7.5），豁免 `.ask-mask`/`.project-panel`/`.palette`/`.s-title-edit`——弹层内部输入与内联重命名输入不被抢焦；`.side-resizer` 未豁免——点击热区后焦点仍归还 `#cmdline`，键盘调宽须 Tab 聚焦 separator。Enter 在 STREAMING/CANCELLING 时切换为中断而非发送；面板打开且有候选时 Enter/Tab 插入选中项（不回发）。
+- **交互细节**：焦点归还挂 `mouseup` 而非 `mousedown`（v4 §7.5），且存在非折叠选区（`!isCollapsed`）时跳过归还——mousedown 即抢焦会打断双击选词/单击定位光标，且 focus 可编辑元素会清掉刚建立的选区；mouseup + 选区检测保住拖选/双击选中的文本可复制。豁免 `.ask-mask`/`.project-panel`/`.palette`/`.s-title-edit` 不变；`.side-resizer` 未豁免——点击热区后焦点仍归还 `#cmdline`，键盘调宽须 Tab 聚焦 separator。Enter 在 STREAMING/CANCELLING 时切换为中断而非发送；面板打开且有候选时 Enter/Tab 插入选中项（不回发）。
 - **命令面板只插入、不执行**：选中项仅写入输入框、不触发任何行为，回车后与普通输入同路径 `prompt`；命令执行语义归宿主 TUI 层（InputBar 头注释明示），渲染层不维护命令实现，避免两处命令知识漂移。
 - **command 优先 + 字母序**：面板 max-height 320px 截断时命令恒在可见区（命令少、skills 多），字母序给稳定预期。
 - **启动预取一次**：`listCommands` 主进程聚合扫描较重，仅 mount 调用一次，打开/过滤面板不再查主进程（代价见「已知限制与技术债」）。
@@ -131,6 +137,7 @@
 - **侧栏宽度直写 CSS 变量而非 React state**：拖拽期间每帧只改 `.main` 的 style 属性与 aria 值，零组件渲染；持久化只在 pointerup（拖拽）或按键/复位（立即）——拖动过程不写 localStorage。
 - **热区独立条而非 sidebar 子元素**：结构原因（`overflow: hidden` 裁剪 + 不盖内部滚动条）见「侧栏调宽」；条自身 `z-index` 须高于 sidebar/console 内容，负 margin 伸出的 4px 命中区才不被邻居压住（数值见 AGENTS.md 硬约束 6 层级表）。
 - **键盘调宽补齐可访问性**：WAI-ARIA separator 契约（`role="separator"`/`aria-orientation="vertical"`/`aria-valuenow` 实时同步）+ ←/→（Shift 大步进）/Esc 复位——纯鼠标功能补齐键盘路径（焦点归还未豁免 resizer，见「交互细节」：键盘入口靠 Tab 聚焦）。
+- **桥调用点全 `?.` 化**（本批）：所有 `window.zion` 调用点改为可选链或先守卫再直调（App 启动/selectFile、InputBar 预取与 prompt/abort、ProjectPanel 全套、AskDialog `answer`、Sidebar 会话/树）——桥未注入（纯浏览器）时 UI 不崩；与 mockBridge 注入互为双保险（失败模式见下）。
 
 ## 不变量、安全边界与失败模式
 
@@ -149,7 +156,7 @@
 - 渲染进程零 Node 访问：所有数据经 ZionAPI 白名单。
 
 **失败模式**：
-- 桥未注入（`window.zion` undefined）：`useAgentEvents`、扩展 UI 订阅与启动恢复 effect 均直接 return（空界面、扩展对话框落空、无项目引导）；smoke 经 `window.zion.ping` 自检——开发中先查 preload 注入。
+- 桥未注入（`window.zion` undefined）：调用点 `?.`/守卫不抛错，`useAgentEvents`、扩展 UI 订阅与启动恢复 effect 直接 return（空界面、扩展对话框落空、无项目引导）；纯浏览器直开 vite dev 时 `installMockBridge` 注入 mock（UI 全功能可演示，扩展弹层/toast 为空实现）——Electron 下桥必在，smoke 经 `window.zion.ping` 自检，开发中先查 preload 注入。
 - 主进程超时兜底不通知渲染层：timeout 只 resolve 扩展 Promise，弹层保持打开（残留）直到用户点取消/遮罩——无害但可见；单弹层槽被新 ask 覆盖后，旧 Promise 同样只能等超时。
 - prompt 错误回合：不抛错（SDK 语义），由 `message_end` stopReason 处理；InputBar 另有 catch 兜底日志。
 - `scanTree`/`listSessions`/`switchSession`/`newSession`/`renameSession`/`deleteSession` 失败：各自 catch → `log('err')`，UI 不崩（空列表占位文案）。
@@ -165,7 +172,7 @@
 
 ## 已知限制与技术债
 
-- 单元测试仅覆盖纯函数层（`deriveSessionTitle`、`toolfmt`，node:test）；组件、事件管线、store 逻辑无测试（含命令面板键盘交互、AskDialog 三形态与 toast 自动消失，smoke 不查 `.palette`/`.ask-dialog`），UI 回归依赖 typecheck + smoke + e2e。
+- 单元测试仅覆盖纯函数层（`deriveSessionTitle`、`toolfmt`、`parseBody`（markdown.test.mjs 8 用例），node:test）；组件、事件管线、store 逻辑无测试（含命令面板键盘交互、AskDialog 三形态与 toast 自动消失，smoke 不查 `.palette`/`.ask-dialog`），UI 回归依赖 typecheck + smoke + e2e。
 - AskDialog.tsx 头部注释与实现不完全一致：注释声称的「Esc 取消 / select ↑↓/Enter / confirm danger 强调」实际只有 input 形态的 Esc/Enter 真实存在——select 选项纯鼠标（hover/click，`role="listbox"` 仅是标记），confirm 主按钮为 `.primary`（accent 绿）而非 danger 色；改注释或补实现前先认清现状。
 - 会话历史恢复只重建文本回合（无工具卡 / 结算行，`startedAt=0` 不计时）。
 - conv-head「上下文 12.4k / 128k」、「主控会话 #0047」、状态栏「TLS 1.3」为硬编码装饰，非真实数据。
@@ -174,5 +181,7 @@
 - 命令面板数据仅启动预取一次（`listCommands`），运行中新增/修改 skills 或命令不刷新，需重启应用。
 - Sidebar `.side-foot` 的 `workspace: zion-workspace` 为硬编码文案，切换项目后不随 `WORKSPACE_DIR` 更新（真实项目路径已显示在 `.side-head` 标题，此行待清理）。
 - 项目面板无测试覆盖（同组件层现状，smoke 不查 `.project-panel`）。
+- mockBridge 是纯演示：回复为模板句，会话/文件树/项目/命令是写死假数据，非真实 agent 行为；`onUiAsk`/`onUiNotify` 为空实现（无扩展弹层演示）；真实交互验证走 smoke + e2e（Electron 环境）。
+- 正文 markdown 是极简子集（``` 围栏 + 行内 code/高亮），无标题/列表/链接等扩展——新增语法须同时扩展 markdown.ts 与 markdown.test.mjs。
 
 ## 人工补充

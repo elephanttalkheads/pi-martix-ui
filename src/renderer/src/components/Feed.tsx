@@ -4,6 +4,7 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { useFeed, type TurnTool } from '../store';
 import { formatToolArgs, toolExpandTitle } from '../toolfmt';
+import { parseBody } from '../markdown';
 import DiffCard from './DiffCard';
 import TurnRail from './TurnRail';
 
@@ -57,30 +58,18 @@ function toolDesc(toolName: string, args: unknown): string {
   return toolName;
 }
 
-/** 行内样式：`code` / 【高亮词】 */
+/** 正文渲染：行内 `code` / 【高亮词】 + ``` 三反引号代码块（parseBody 纯函数，markdown.test 覆盖） */
 function Body({ text }: { text: string }) {
-  const parts = useMemo(() => {
-    const out: { k: 't' | 'c' | 'h'; v: string }[] = [];
-    const re = /(`[^`]+`|【[^】]+】)/g;
-    let last = 0;
-    let m: RegExpExecArray | null;
-    while ((m = re.exec(text))) {
-      if (m.index > last) out.push({ k: 't', v: text.slice(last, m.index) });
-      out.push({ k: m[0][0] === '`' ? 'c' : 'h', v: m[0] });
-      last = m.index + m[0].length;
-    }
-    if (last < text.length) out.push({ k: 't', v: text.slice(last) });
-    return out;
-  }, [text]);
+  const parts = useMemo(() => parseBody(text), [text]);
   return (
     <>
       {parts.map((p, i) =>
-        p.k === 'c' ? (
+        p.k === 'f' ? (
+          <pre key={i} className="msg-code">{p.v}</pre>
+        ) : p.k === 'c' ? (
           <code key={i}>{p.v.slice(1, -1)}</code>
         ) : p.k === 'h' ? (
-          <span key={i} className="hl">
-            {p.v.slice(1, -1)}
-          </span>
+          <span key={i} className="hl">{p.v.slice(1, -1)}</span>
         ) : (
           <span key={i}>{p.v}</span>
         ),

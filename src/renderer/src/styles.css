@@ -279,6 +279,14 @@ body {
   border: 1px solid var(--border);
   padding: 0 5px; font-size: 13px;
 }
+/* markdown 代码块（``` 围栏解析，markdown.ts）：简约——无边框无背景，
+   唯一锚点是左侧 1px 弱线；小字号弱色等宽，与正文区分但保持密度 */
+.msg-body .msg-code {
+  font-family: var(--font); font-size: 13px; line-height: 1.7;
+  color: var(--text-secondary); white-space: pre-wrap; word-break: break-all;
+  margin: 8px 0 12px 2px; padding-left: 14px;
+  border-left: 1px solid var(--border);
+}
 .msg-body .aborted { color: var(--danger); }
 
 .caret {
@@ -296,6 +304,7 @@ body {
   width: 26px;
   border-left: 1px solid var(--border);
   overflow: hidden;
+  pointer-events: none; /* 纯装饰轨道：不拦截任何鼠标（拖选/点击） */
 }
 .rail canvas { display: block; width: 100%; height: 100%; }
 .rail .seal {
@@ -357,9 +366,11 @@ body {
 .trace .step:hover .tag { color: var(--text-secondary); }
 .trace .step.open .tag { color: var(--accent); }
 .trace .step:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
-.trace-expand { margin-top: 8px; padding: 10px 12px; background: var(--surface-2); border: 1px solid var(--border); position: relative; }
-.trace-expand .te-title { font-size: 11px; letter-spacing: 0.12em; color: var(--text-secondary); margin-bottom: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.trace-expand pre { font-family: var(--font); font-size: 12px; line-height: 1.6; color: var(--text-secondary); white-space: pre-wrap; word-break: break-all; max-height: 240px; overflow-y: auto; margin: 0; }
+/* 工具链展开区（proto-detail-variants.html 变体 A 折入）：内容全文裸文本流——
+   无容器/无边框/无背景，与对话同密度；标题弱化小字；长内容限高滚动 */
+.trace-expand { margin-top: 8px; }
+.trace-expand .te-title { font-size: 11px; letter-spacing: 0.12em; color: var(--text-tertiary); margin-bottom: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.trace-expand pre { font-family: var(--font); font-size: 13px; line-height: 1.7; color: var(--text-secondary); white-space: pre-wrap; word-break: break-all; max-height: 240px; overflow-y: auto; margin: 0; }
 .trace .step .tag { color: var(--text-tertiary); flex: none; }
 .trace .step .st { margin-left: auto; flex: none; color: var(--text-tertiary); font-size: 12px; }
 .trace .step.done .st { color: var(--accent-muted); }

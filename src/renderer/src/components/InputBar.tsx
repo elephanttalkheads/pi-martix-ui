@@ -22,10 +22,10 @@ export default function InputBar() {
   const sendDisabled = busy || text.trim() === '';
   const streaming = sessionState === 'STREAMING';
 
-  // 启动预取命令面板数据（主进程聚合扫描一次）
+  // 启动预取命令面板数据（主进程聚合扫描一次）；无桥（纯浏览器调试）时安全跳过
   useEffect(() => {
     let alive = true;
-    window.zion.listCommands().then((list) => alive && setItems(list)).catch(() => {});
+    window.zion?.listCommands?.()?.then((list) => alive && setItems(list))?.catch(() => {});
     return () => { alive = false; };
   }, []);
 
@@ -62,7 +62,7 @@ export default function InputBar() {
     SND.send();
     log('dim', `[SND] 发送指令 · ${value.slice(0, 40)}`);
     try {
-      await window.zion.prompt(value);
+      await window.zion?.prompt?.(value);
       log('dim', '[TURN] 回合结束');
     } catch {
       log('err', '[TURN] 回合异常结束');
@@ -77,7 +77,7 @@ export default function InputBar() {
     SND.abort();
     log('warn', '[INT] 操作员中断当前生成');
     markInterrupted();
-    await window.zion.abort();
+    await window.zion?.abort?.();
   };
 
   /** 选中条目：skill → 插入运行模板；command → 插入 /name */
