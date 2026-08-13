@@ -112,6 +112,7 @@
 - **会话堆叠卡 `--h` 测量**（Sidebar effect，deps `[sessions, currentSessionId]`）：每张 `.scard` 置 `--h = scrollHeight + 2`；CSS `margin-bottom: calc(80px - var(--h, 140px))` 使每卡恒定露出 80px 头部（标题 + 2 行摘要），hover 拉直旋转（`rotate(0) translateY(-4px)`）+ 展开摘要/meta。
 - **侧栏分区滚动**（styles.css 注释明示）：`.sidebar` 整栏 `overflow: hidden`，`.core-wrap`/`.side-foot` `flex: none` 固定，会话/项目两区 flex 分割、`.deck`/`#file-tree` 各自 `overflow-y: auto`——列表过长只滚列表区，项目标题行与底部 workspace 行始终可见。
 - **统一滚动条**（styles.css）：`*::-webkit-scrollbar` 全局 6px 终端绿胶囊（thumb `#00ff66`/hover `#66ff99`、轨道与角落透明，vision 规格），替代旧 feed/侧栏/term-body 分段 8px 规则——侧栏整栏不滚动，旧 `.sidebar` 规则本就无效；新滚动容器（`.palette`/`.ask-options`/`.pp-list`/`.diff-body` 等）自动同款。
+- **选区高亮同终端绿语言**（styles.css 全局 `::selection`）：`rgba(0,255,102,0.22)` 半透明绿底 + 白字——不用纯 `#00ff66`（大面积纯色会淹没文字），0.22 透明度保留识别度且白字可读（styles.css 注释明示）；是 v5 原型（`index-v5.html` 的 `rgba(0,255,65,0.25)`）的收敛版：色相统一到滚动条 thumb 的 `#00ff66` 并补白字。全局生效，组件不另写选区样式。
 - **对角角标共享 `.corner` 类**（styles.css）：trace/diff/ask-dialog/project-panel 四组件的 8×8 对角角标伪元素收敛为单一 `.corner::before/::after` 规则，组件 JSX 只加 `corner` 类名——新组件要角标只加类名，不复制伪元素块；`.trace`/`.diff` 自身仍需 `position: relative`（类名不复位定位）。
 - **`setSessionTitle` 与 `applySession` 分工**：改名当前会话只走 `setSessionTitle`（仅更新 `sessionTitle`，feed/状态机/token 全不动）——`applySession` 会重建 feed，误用会把正在进行的对话内容冲掉。
 - **删除是软删除 + 两段确认**：`deleteSession` 为软删（主进程语义，UI 只展示 log），侧栏用「首击确认? + 2.5s 自动复位」防误触；删除当前会话后主进程指针自动落回最近会话，渲染层不自行猜 id，`getCurrentSession` 重拉。

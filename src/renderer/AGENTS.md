@@ -34,7 +34,7 @@ node --test scripts/derive-title.test.mjs scripts/toolfmt.test.mjs scripts/markd
 ## 本模块硬约束
 
 1. **FX 不进 React 渲染路径**：氛围组件与雨轨（RainCanvas / TurnRail）直接 `import { fx } from '../store'` 读取 speed/energy（`90/fx.speed` 帧节流）；不要复制进组件 state，也不要自行插值。`fx` 是模块级对象，仅 `setSessionState` 时改写（两档取值见 [DESIGN.md](DESIGN.md)「架构与主要流程」FX 派生）。
-2. **蠕虫触发留在事件回调同步路径**（App.tsx `triggerWorm`）：不得改为 useEffect 触发——快工具（bash 等）的 `tool_execution_end` 可能先于 React 渲染到达，异步化会漏触发。
+2. **蠕虫触发留在事件回调同步路径**（App.tsx `triggerWorm`）：不得改为 useEffect 触发（时序原因见 [DESIGN.md](DESIGN.md)「设计决策与权衡」蠕虫同步触发）。
 3. **diff 卡渲染以 `revealedEdits` 为准**：Feed 中 DiffCard 仅在 `item.edit && revealedEdits[toolCallId] && rows.length > 0` 时渲染；不要在 `toolStart` 时直接渲染。
 4. **动画/音效数值照 v4 规格原样提取**（FS=18、拖尾 0.035、`90/fx.speed` 节流、12% 亮头、L 路径 8px 采样、TAIL=18、扰码 620ms、闪烁 900ms、SND 7 音参数）；v5 会话区数值同样照 index-v5.html/代码注释（注入解码 `min(700, 240+len*6)`ms、凝结涟漪 0.7s、雨轨 11px 双列）：禁止"优化"数值（ADR 0002）。
 5. **reduced-motion 全套降级**：`REDUCED` 常量在模块加载时求值；数字雨画静态帧、Neo 头像张嘴停静态帧且不脉冲、蠕虫直接命中；新动画必须自带降级分支。
@@ -47,9 +47,9 @@ node --test scripts/derive-title.test.mjs scripts/toolfmt.test.mjs scripts/markd
 12. **类型纪律**：`shared/protocol.ts` 只做 `import type`；运行时能力一律经 `window.zion` 白名单，渲染进程零 Node 访问。
 13. **弹层应答必须成对**：AskDialog 的 `answer()` 同时执行 `window.zion.uiAnswer(ask.id, result)` 与 `setUiAsk(null)`——只清 state 不应答，主进程 Promise 表条目会挂到超时兜底才继续（机制见 [DESIGN.md](DESIGN.md)「设计决策与权衡」）。
 14. **项目切换只经 ProjectPanel 的 `applySwitch` 成套路径**：成功后按 [DESIGN.md](DESIGN.md)「架构与主要流程」项目切换管线五步（feed 重建 → 树先清后拉 → `setCurrentProject` 更新项目名 → 侧栏重拉 → 关面板）执行，失败只 `log('err')` 且面板保持打开；不要在别处单独调 `switchProject`。
-15. **agent 事件写入必须走 store 队列 API**：`queueDelta`/`armTurn`/`closeTurn`/`addUsage`/`toolStart`/`toolEnd`/`markInterrupted` 全部入队，rAF 时由 `_flush` 一次应用（每帧至多一次 store 更新，且只有活动回合对象换引用——回合级 memo 的前提）；不要直接 `set()` 改 `turns`/`order`，也不要绕过 `_flush` 改应用时序。`pushUser`/`applySession`/`reset` 会先同步 drain 或丢弃队列（防跨会话污染，机制见 [DESIGN.md](DESIGN.md)「回合聚合模型与渲染队列」）。
+15. **agent 事件写入必须走 store 队列 API**：`queueDelta`/`armTurn`/`closeTurn`/`addUsage`/`toolStart`/`toolEnd`/`markInterrupted` 全部入队，rAF 时由 `_flush` 一次应用（每帧至多一次 store 更新，且只有活动回合对象换引用）；不要直接 `set()` 改 `turns`/`order`，也不要绕过 `_flush` 改应用时序。`pushUser`/`applySession`/`reset` 会先同步 drain 或丢弃队列（防跨会话污染，机制见 [DESIGN.md](DESIGN.md)「回合聚合模型与渲染队列」）。
 16. **注入解码持久化键 `zion.dec`**（localStorage，`'0'`=关，默认开）：状态栏 DEC 按钮经 `setDecOn` 切换；`OperatorBody` 只入场播一次，DEC 关闭或 reduced-motion 时直接显示原文。
-17. **侧栏宽度只经 `.main` 上的 CSS 变量 `--side-w` 控制**（`.sidebar { width: var(--side-w, 232px) }`）：拖拽/键盘/双击复位一律走 `applySideWidth(w)`（写变量 + 同步 resizer `aria-valuenow`）与 `persistSideWidth(w)`（localStorage `zion.sidebar-w`）成对调用；**不要引入 React state**——拖拽是 pointermove 每帧直写 style，进 state 会渲染风暴。常量 `SIDE_MIN=160`/`SIDE_MAX=480`/`SIDE_DEFAULT=232`/`SIDE_STEP=8`/`SIDE_STEP_BIG=32`/`SIDE_KEY` 与 `clampSide`（上限 `min(SIDE_MAX, round(innerWidth/2))`，且不低于 `SIDE_MIN`）在 App.tsx 模块级，改数值/边界只动这一处。
+17. **侧栏宽度只经 `.main` 上的 CSS 变量 `--side-w` 控制**（`.sidebar { width: var(--side-w, 232px) }`）：拖拽/键盘/双击复位一律走 `applySideWidth(w)`（写变量 + 同步 resizer `aria-valuenow`）与 `persistSideWidth(w)`（localStorage `zion.sidebar-w`）成对调用；**不要引入 React state**（机制与原因见 [DESIGN.md](DESIGN.md)「设计决策与权衡」侧栏宽度直写 CSS 变量）。常量 `SIDE_MIN=160`/`SIDE_MAX=480`/`SIDE_DEFAULT=232`/`SIDE_STEP=8`/`SIDE_STEP_BIG=32`/`SIDE_KEY` 与 `clampSide`（上限 `min(SIDE_MAX, round(innerWidth/2))`，且不低于 `SIDE_MIN`）在 App.tsx 模块级，改数值/边界只动这一处。
 18. **`window.zion` 调用点必须可选链（`?.`）或先守卫再直调**：纯浏览器调试（mockBridge 注入，注入点 main.tsx 勿删）与桥未注入时 UI 都不允许抛错——新增桥调用点照此办理；mock 能力边界见 [DESIGN.md](DESIGN.md)「浏览器调试桥」。
 
 ## 人工补充
