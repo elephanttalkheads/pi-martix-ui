@@ -51,10 +51,11 @@
 ### 2.2 字体
 
 ```
-font-family: "Share Tech Mono", ui-monospace, "Courier New", monospace;
+font-family: "Share Tech Mono", ui-monospace, "Courier New", "Sarasa Term SC", "Microsoft YaHei", monospace;
 ```
 
-- 全界面**只用这一种等宽字体**（Google Fonts 引入 `Share Tech Mono`）。
+- 拉丁字形**只用 Share Tech Mono 这一种等宽字体**（本地 `@font-face` 打包，离线可用）。
+- **CJK 回退链**：前三者均无中文字形 → 依次回退「更纱黑体 Sarasa Term SC」（等宽，用户自装则生效）→「微软雅黑 Microsoft YaHei」（Windows 必带）→ generic `monospace`。不回退则中文落到 Chromium 的 monospace 默认映射（宋体），观感单薄——必须保留这条链。
 - 字重全部为 normal，靠颜色和字号分层，不用粗体。
 - 大写英文标签必须加字距：品牌 `0.22em`，区块标题 `0.18em`，消息头 `0.14em`，芯片/日志头 `0.16em`，发送按钮 `0.2em`。
 
