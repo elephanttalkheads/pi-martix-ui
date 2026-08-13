@@ -492,8 +492,11 @@ class Rail {
   _loop() {
     if (!this.alive) return;
     const { cx, cv } = this;
-    cx.fillStyle = `rgba(1,10,4,${this.fade < 1 ? 0.3 : 0.18})`;
+    // destination-out 衰减：拖尾向透明消退，canvas 保持透明可透出背景雨
+    cx.globalCompositeOperation = "destination-out";
+    cx.fillStyle = `rgba(0,0,0,${this.fade < 1 ? 0.3 : 0.14})`;
     cx.fillRect(0, 0, cv.width, cv.height);
+    cx.globalCompositeOperation = "source-over";
     cx.font = "11px 'Share Tech Mono', monospace";
     for (let i = 0; i < this.cols; i++) {
       const y = this.drops[i] * 12;
