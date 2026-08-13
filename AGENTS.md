@@ -23,7 +23,7 @@ npm run e2e           # 构建 + 真实 prompt E2E（deepseek → 事件流 → 
 npm run dist           # 打包 NSIS + portable → dist/
 ```
 
-会话工作目录（agent 实际操作的目录）：`D:\zion-workspace`（项目选择 UI 已实现：侧栏「⇄ 切换项目」/ 启动无最近项目自动打开面板，切换 = 会话上下文重建，见 docs/adr/0003）。
+会话工作目录（agent 实际操作的目录）：`D:\zion-test`（项目选择 UI 已实现：侧栏「⇄ 切换项目」/ 启动无最近项目自动打开面板，切换 = 会话上下文重建，见 docs/adr/0003）。
 
 ## 必读架构
 

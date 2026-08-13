@@ -305,7 +305,7 @@ export default function Sidebar({ onSelectFile }: { onSelectFile: (path: string)
         <div>
           <span className="ok">● 已连接 zion 主网</span>
         </div>
-        <div>workspace: zion-workspace</div>
+        <div>workspace: zion-test</div>
       </div>
     </aside>
   );

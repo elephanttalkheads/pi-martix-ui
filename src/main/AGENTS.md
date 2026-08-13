@@ -36,7 +36,7 @@
 - **IPC 通道名字符串散落两处字面量**（main.mjs 的 `handle`/`send` 与 preload.cjs 的 `invoke`/`on`，JS 无法共享运行时常量）：新增/改名通道必须两处同步，且同步更新 `ZionAPI`（契约归 `src/shared`；通道全集见 [DESIGN.md](DESIGN.md)「接口与依赖」节）
 - **扩展对话框形态三处同步**：`uibridge.mjs` 的 `ask()` kind、`src/shared/protocol.ts` 的 `UiAsk.kind`、`AskDialog.tsx` 渲染分支（confirm/input/select）必须一致；新增形态三处同改（形状契约归 `src/shared`）
 - **命令清单人工维护**：新增扩展命令必须追加 `skillscan.mjs` 的 `EXTENSION_COMMANDS`（运行时注册的命令无法静态枚举，漏加则面板不显示）；升级 pi SDK 后核对 `BUILTIN_COMMANDS` 是否漂移（快照来源见 DESIGN.md）
-- **`WORKSPACE_DIR` 可变，项目相关逻辑必须读当前值**（默认值、两处赋值点、跨目录切换重建与同目录快速路径见 [DESIGN.md](DESIGN.md) 不变量节）：不要在模块加载期缓存它的快照（启动恢复会改写），否则 scan-tree / 文件树监听 / list-commands（项目级 skills）/ 会话归属指向错误目录
+- **`WORKSPACE_DIR` 可变，项目相关逻辑必须读当前值**（默认 `D:\zion-test`、两处赋值点、跨目录切换重建与同目录快速路径见 [DESIGN.md](DESIGN.md) 不变量节）：不要在模块加载期缓存它的快照（启动恢复会改写），否则 scan-tree / 文件树监听 / list-commands（项目级 skills）/ 会话归属指向错误目录
 - **`window.zion` 之外的渲染层通道不可新增**：渲染进程只能经该白名单触达主进程（`contextIsolation`/`sandbox` 等安全配置事实见 `src/shared/DESIGN.md` 安全边界，改动 `webPreferences` 前先读）
 - **改 `src/main` / `src/preload` 后必须 `npm run build:main` 再验证**：运行时加载的是 `dist-main/` 产物（dev/smoke/e2e 自动先构建；`npm start` 不会，直接跑旧产物）
 

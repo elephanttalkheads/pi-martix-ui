@@ -16,7 +16,7 @@ const isDev = process.argv.includes('--dev');
 const RENDERER_DEV_URL = 'http://127.0.0.1:5173';
 
 // 当前工作目录（项目选择 UI 落地后可变：切换项目 = 更新此值 + 重建会话上下文）
-let WORKSPACE_DIR = path.join('D:', 'zion-workspace');
+let WORKSPACE_DIR = path.join('D:', 'zion-test');
 
 // 最近项目文件（上移供启动恢复；项目选择 IPC 见下）
 const PROJECTS_FILE = path.join(os.homedir(), '.pi', 'agent', 'zion-projects.json');
