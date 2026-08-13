@@ -2,7 +2,7 @@
 // 模式：多会话并存（Map<sessionId, AgentSession>，懒创建）+ 当前指针切换
 // 事件转发只发当前会话；createAgentSession（复用 ~/.pi/agent 配置）→ session.subscribe → IPC → renderer
 // 参考：tbrandenburg/pi-desktop；docs/sdk.md
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog } from 'electron';
 import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -15,8 +15,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isDev = process.argv.includes('--dev');
 const RENDERER_DEV_URL = 'http://127.0.0.1:5173';
 
-// 初始会话工作目录（项目选择 UI 落地前先用独立工作区，避免 agent 直接操作主目录）
-const WORKSPACE_DIR = path.join('D:', 'zion-workspace');
+// 当前工作目录（项目选择 UI 落地后可变：切换项目 = 更新此值 + 重建会话上下文）
+let WORKSPACE_DIR = path.join('D:', 'zion-workspace');
 
 // 扩展 UI 桥：dialog 请求 → renderer 弹层（AskDialog）；uiContext + projectTrustContextFactory 双注入
 // （headless 默认无 UI——扩展 ask 与项目信任询问此前全部静默落空）
@@ -244,7 +244,71 @@ ipcMain.handle('agent:followUp', async (_e, text) => {
   return true;
 });
 
+/** 项目选择：最近项目存储（~/.pi/agent/zion-projects.json，path + lastUsed，上限 8） */
+const PROJECTS_FILE = path.join(os.homedir(), '.pi', 'agent', 'zion-projects.json');
+const PROJECTS_MAX = 8;
+
+/** @returns {import('../shared/protocol.ts').ProjectInfo[]} */
+function listProjects() {
+  try {
+    const arr = JSON.parse(fs.readFileSync(PROJECTS_FILE, 'utf8'));
+    if (Array.isArray(arr)) return arr.filter((p) => p && typeof p.path === 'string').slice(0, PROJECTS_MAX);
+  } catch { /* 无文件/损坏 → 空 */ }
+  return [];
+}
+
+function saveProject(/** @type {string} */ pathUsed) {
+  const list = listProjects().filter((p) => p.path !== pathUsed);
+  list.unshift({ path: pathUsed, lastUsed: new Date().toISOString() });
+  try {
+    fs.mkdirSync(path.dirname(PROJECTS_FILE), { recursive: true });
+    fs.writeFileSync(PROJECTS_FILE, JSON.stringify(list.slice(0, PROJECTS_MAX), null, 2));
+  } catch (e) {
+    console.warn('[zion] 保存最近项目失败:', String(e));
+  }
+}
+
+/** 切换项目：更新工作目录 + 废弃旧会话实例（dispose）+ 重建当前会话；返回新会话历史
+ * @param {string} dir */
+async function switchProject(dir) {
+  const resolved = path.resolve(dir);
+  if (resolved === WORKSPACE_DIR) {
+    // 同目录：仅刷新会话指针即可
+    const s = await ensureCurrentSession();
+    return { path: WORKSPACE_DIR, id: s.sessionManager.getSessionId(), items: historyFromSession(s) };
+  }
+  // 旧会话全部 dispose（wireSession 订阅随实例销毁）
+  for (const s of sessions.values()) {
+    try {
+      s.dispose();
+    } catch { /* 忽略释放异常 */ }
+  }
+  sessions.clear();
+  currentSession = null;
+  WORKSPACE_DIR = resolved;
+  saveProject(resolved);
+  console.log('[zion] switch project →', resolved);
+  const s = await ensureCurrentSession();
+  return { path: WORKSPACE_DIR, id: s.sessionManager.getSessionId(), items: historyFromSession(s) };
+}
+
+/** 项目选择 IPC */
 ipcMain.handle('zion:list-sessions', () => listSessionInfos());
+ipcMain.handle('zion:list-projects', () => listProjects());
+ipcMain.handle('zion:browse-project', async () => {
+  /** @type {Electron.OpenDialogOptions} */
+  const opts = {
+    title: '选择项目工作目录',
+    properties: ['openDirectory'],
+  };
+  const r = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts);
+  if (r.canceled || r.filePaths.length === 0) return null;
+  return switchProject(r.filePaths[0]);
+});
+ipcMain.handle('zion:switch-project', async (_e, dir) => {
+  if (typeof dir !== 'string' || !dir.trim()) throw new Error('invalid project path');
+  return switchProject(dir);
+});
 
 ipcMain.handle('zion:get-current', async () => {
   const s = await ensureCurrentSession();

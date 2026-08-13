@@ -12,6 +12,7 @@ import LogDrawer from './components/LogDrawer';
 import Feed from './components/Feed';
 import InputBar from './components/InputBar';
 import AskDialog, { ToastHost } from './components/AskDialog';
+import ProjectPanel from './components/ProjectPanel';
 import { SND, useSoundFx } from './components/SoundFx';
 import { useFeed, parseEditFromTool, normPath, matchTreeRow, openAncestors, deriveSessionTitle, type EditInfo } from './store';
 import { releaseWorm } from './components/SignalCanvas';
@@ -234,6 +235,7 @@ export default function App() {
       <div className="scanlines" aria-hidden="true" />
       <AskDialog />
       <ToastHost />
+      <ProjectPanel />
 
       <div id="stage">
         <header className="titlebar">

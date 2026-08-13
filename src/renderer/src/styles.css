@@ -512,3 +512,31 @@ body {
 .toast-msg { flex: 1; word-break: break-all; }
 .toast-x { background: none; border: none; color: var(--text-tertiary); cursor: pointer; font-size: 11px; padding: 2px; }
 .toast-x:hover { color: var(--text-primary); }
+
+/* ---------- 项目选择面板（v4 令牌） ---------- */
+.project-panel {
+  min-width: 440px; max-width: 560px; max-height: 70vh;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  position: relative;
+  padding: 18px 20px 16px;
+  display: flex; flex-direction: column;
+}
+.project-panel::before, .project-panel::after {
+  content: ""; position: absolute; width: 8px; height: 8px; pointer-events: none;
+}
+.project-panel::before { left: -1px; top: -1px; border-left: 1px solid var(--accent-muted); border-top: 1px solid var(--accent-muted); }
+.project-panel::after { right: -1px; bottom: -1px; border-right: 1px solid var(--accent-muted); border-bottom: 1px solid var(--accent-muted); }
+.pp-title { font-size: 14px; letter-spacing: 0.2em; color: var(--text-primary); margin-bottom: 4px; }
+.pp-sub { font-size: 11px; color: var(--text-tertiary); margin-bottom: 14px; letter-spacing: 0.06em; }
+.pp-list { display: flex; flex-direction: column; gap: 8px; overflow-y: auto; margin-bottom: 14px; }
+.pp-card {
+  border: 1px solid var(--border); padding: 10px 12px; cursor: pointer;
+  background: rgba(2, 18, 9, 0.5); position: relative;
+}
+.pp-card:hover { border-color: var(--accent-muted); background: rgba(61, 255, 143, 0.06); }
+.pp-card-path { font-size: 12px; color: var(--text-primary); letter-spacing: 0.04em; word-break: break-all; }
+.pp-card-meta { font-size: 10px; color: var(--text-tertiary); margin-top: 4px; letter-spacing: 0.06em; }
+.pp-browse { align-self: stretch; text-align: center; }
+.pp-cancel { align-self: flex-end; margin-top: 8px; }
+.foot-row { display: flex; align-items: center; gap: 10px; }

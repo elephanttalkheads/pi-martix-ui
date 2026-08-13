@@ -295,7 +295,12 @@ export default function Sidebar({ onSelectFile }: { onSelectFile: (path: string)
         <div>
           <span className="ok">● 已连接 zion 主网</span>
         </div>
-        <div>workspace: zion-workspace</div>
+        <div className="foot-row">
+          <span>workspace: zion-workspace</span>
+          <button className="st-btn" onClick={() => useFeed.getState().setProjectOpen(true)}>
+            切换项目
+          </button>
+        </div>
       </div>
     </aside>
   );

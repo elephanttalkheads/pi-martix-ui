@@ -8,6 +8,7 @@
 - 不提供任何运行时代码、常量或 IPC 实现（实现分别在 `src/main/main.mjs`、`src/main/uibridge.mjs` 与 `src/preload/preload.cjs`）
 - 不实现扩展 UI 桥本身（Promise 表 `uibridge.mjs`、弹层 `AskDialog.tsx`、toast `ToastHost`）：本契约只定义其 IPC 类型（`UiAsk`/`UiNotify`）与桥面方法（`uiAnswer`/`onUiAsk`/`onUiNotify`）
 - 不提供通道名的运行时共享来源：通道名只能是 `main.mjs` / `preload.cjs` 两侧字面量（理由见「设计决策与权衡」）
+- 不实现项目切换的主进程语义（`WORKSPACE_DIR` 变更、旧会话 dispose、`zion-projects.json` 持久化在 `src/main/main.mjs`；渲染侧管线见 `src/renderer/DESIGN.md` 项目切换节）——本契约只定义 `ProjectInfo`/`SwitchProjectResult` 形状与 `listProjects`/`browseProject`/`switchProject` 桥面
 - 不本地重定义 SDK 类型：`AgentSessionEvent` 直接 re-export（理由见「设计决策与权衡」）
 
 ## 架构与主要流程
@@ -26,6 +27,8 @@ env.d.ts 声明 Window.zion: ZionAPI  ◄─────────┘         
 
 命令面板数据流：renderer 的 InputBar 挂载时预取 `window.zion.listCommands()` → `ipcRenderer.invoke('zion:list-commands')` → main `collectCommands()`（`src/main/skillscan.mjs` 聚合，已按 kind:name 去重）→ `CommandItem[]`。
 
+项目切换数据流：ProjectPanel 打开时 `window.zion.listProjects()` → `invoke('zion:list-projects')` → main 读 `~/.pi/agent/zion-projects.json`（上限 8、最近优先去重）；选卡/浏览后 `switchProject(path)` / `browseProject()` → main `switchProject()`：同目录快速路径仅刷新会话指针；异目录逐个 `dispose()` 旧会话、清 `sessions` Map、重置 `currentSession`、更新 `WORKSPACE_DIR` 并写回最近项目，再对新目录 `continueRecent`/新建 → 返回 `SwitchProjectResult`（渲染层据此重建 feed/树/会话列表，管线细节见 `src/renderer/DESIGN.md` 项目切换节）
+
 扩展 UI 桥数据流（dialog 双向 + notify 单向）：
 
 ```
@@ -40,7 +43,7 @@ notify 单向：uibridge.notify → send('zion:ui-notify') → preload onUiNotif
 
 ## 接口与依赖
 
-### ZionAPI（17 个方法）
+### ZionAPI（20 个方法）
 
 | 方法 | 通道 | 返回 |
 |---|---|---|
@@ -56,6 +59,9 @@ notify 单向：uibridge.notify → send('zion:ui-notify') → preload onUiNotif
 | switchSession(id) | `zion:switch-session`（invoke） | `{ id, items }`（懒创建实例，慢则秒级；id 不存在抛 `session not found`） |
 | newSession() | `zion:new-session`（invoke） | `{ id, items }` |
 | uiAnswer(id, result) | `zion:ui-answer`（invoke） | `{ ok: boolean }`：应答扩展对话框（结果回传 uiBridge，取消传 undefined）；id 未匹配（已超时/重复应答）返回 `{ ok: false }` |
+| listProjects() | `zion:list-projects`（invoke） | `ProjectInfo[]`：最近项目（`~/.pi/agent/zion-projects.json`，上限 8，最近优先去重；坏文件/缺失 → 空数组） |
+| browseProject() | `zion:browse-project`（invoke） | `SwitchProjectResult \| null`：原生目录选择（`dialog.showOpenDialog`）后直接切换；取消返回 null |
+| switchProject(dir) | `zion:switch-project`（invoke） | `SwitchProjectResult`：切换工作目录 + 会话上下文重建；非字符串/空串抛 `invalid project path` |
 | onUiAsk(cb) | `zion:ui-ask`（send） | 退订函数：AskDialog 渲染对话框请求 |
 | onUiNotify(cb) | `zion:ui-notify`（send） | 退订函数：ToastHost 渲染通知 |
 | renameSession(id, name) | `zion:rename-session`（invoke） | `SessionInfoLike[]`：刷新后的会话列表 |
@@ -71,6 +77,8 @@ notify 单向：uibridge.notify → send('zion:ui-notify') → preload onUiNotif
 
 - `SessionInfoLike`：`id` / `path` / `name?` / `firstMessage`（首条消息摘要，main 侧截断 80 字符）/ `messageCount` / `modified`（ISO 字符串）
 - `SessionHistoryItem`：`role: 'user' | 'assistant'` / `text` / `ts`（仅文本消息；main 侧 `historyFromSession` 跳过工具消息与空文本）
+- `ProjectInfo`：`path` / `lastUsed`（ISO 字符串；main 侧最近优先去重、上限 8）
+- `SwitchProjectResult`：`path`（切换后的工作目录）/ `id`（新当前会话）/ `items`（该会话历史，同 `SessionHistoryItem[]`）
 - `FileNode`：`name` / `path`（相对工作目录的斜杠路径）/ `dir` / `size?`（人类可读字符串，目录无）/ `open?`（目录默认展开）/ `children?`
 - `CommandItem`：`name`（展示名，不含斜杠）/ `description` / `kind: 'skill' | 'command'` / `source`（来源标注：用户/共享/项目/settings/扩展·包名/内置/扩展）
 - `UiAsk`：`id`（`ui<N>` 序号）/ `kind: 'confirm' | 'input' | 'select'` / `title` / `message?`（confirm 消息或 input placeholder）/ `options?`（select 选项）/ `timeoutMs?`（透传扩展 timeout，renderer 侧未消费）
@@ -97,6 +105,7 @@ notify 单向：uibridge.notify → send('zion:ui-notify') → preload onUiNotif
 - `window.zion` 的形状 === `ZionAPI`：preload 以 `/** @type {ZionAPI} */` 注解 api 对象，`tsc -p tsconfig.node.json`（checkJs）强制校验；renderer 侧 `env.d.ts` 声明同一类型
 - `protocol.ts` 不产生任何运行时导出
 - 会话列表条目都是真实落盘文件：SDK 只在出现首条 assistant 消息后才写会话文件（no-assistant 守卫），空会话（只有用户消息或纯新建）不落盘、不会出现在 `listSessions` 中 —— 因此 rename/delete 只作用于真实存在的会话
+- 最近项目清单：去重、最近优先、上限 8（main 侧 `PROJECTS_MAX`）；`listProjects` 永不抛错（坏文件 → 空数组）
 
 **安全边界**：renderer 零 Node 访问 —— `contextIsolation: true` + `sandbox: true` + `nodeIntegration: false`（`main.mjs` createWindow 的 webPreferences）；`window.zion` 是唯一 IPC 出口，凭据只留主进程。
 
@@ -109,10 +118,13 @@ notify 单向：uibridge.notify → send('zion:ui-notify') → preload onUiNotif
 - `onUiAsk` / `onUiNotify` 同样返回退订函数：App 卸载时必须调用，否则 listener 泄漏
 - **超时只解决扩展侧 Promise，不强制关闭弹层**：`timeoutMs` 到点后 uibridge 删除 pending 条目并 resolve undefined，但 AskDialog 不自动关闭、不展示倒计时；用户稍后应答命中未匹配 id → main 侧 `console.warn('[zion] ui-answer 未匹配 dialog')` + `{ ok: false }`，弹层随 `setUiAsk(null)` 关闭，不会误答新对话框
 - **窗口未就绪/已关闭时 ask 悬挂**：派发器未注入或 `win` 为空时 send 不投递，ask 悬挂到 timeout 兜底；notify 单向静默丢弃
+- `browseProject` 取消 → `null`（不抛错，渲染层判空保持面板不切换）；无窗口时 main 走 `dialog.showOpenDialog(opts)` 无父窗重载
+- `switchProject` 旧会话 `dispose()` 异常被捕获忽略（实例随进程回收），不阻断切换；同目录快速路径不 dispose、不写最近项目文件
+- `saveProject` 写盘失败（权限/磁盘）→ `console.warn` 后切换仍完成（最近项目列表少一条，下次保存覆盖）
 
 ## 已知限制与技术债
 
-- `protocol.ts` 头部注释的通道清单不完整：只列了 5 个 invoke + 1 个 send（`agent:event`），缺 `zion:scan-tree` / `zion:list-commands` / `zion:list-sessions` / `zion:get-current` / `zion:switch-session` / `zion:new-session` / `zion:ui-answer` / `zion:rename-session` / `zion:delete-session` 与 send 通道 `zion:ui-ask` / `zion:ui-notify`（会话管理、命令面板、扩展 UI 桥后加时未更新注释）；实际 14 个 invoke + 3 个 send，以 `main.mjs` / `preload.cjs` 字面量为准
+- `protocol.ts` 头部注释的通道清单不完整：只列了 5 个 invoke + 1 个 send（`agent:event`），缺 `zion:scan-tree` / `zion:list-commands` / `zion:list-sessions` / `zion:get-current` / `zion:switch-session` / `zion:new-session` / `zion:ui-answer` / `zion:rename-session` / `zion:delete-session` / `zion:list-projects` / `zion:browse-project` / `zion:switch-project` 与 send 通道 `zion:ui-ask` / `zion:ui-notify`（会话管理、命令面板、扩展 UI 桥、项目切换后加时未更新注释）；实际 17 个 invoke + 3 个 send，以 `main.mjs` / `preload.cjs` 字面量为准
 - 通道名无运行时单一来源；根治依赖 main 进程 TS 构建管线（仓库已列为后续步骤）
 - `FileNode.size` 是**人类可读字符串**（如 '1.2k'）而非字节数，需要比较/排序时应由 main 侧改进
 - AskDialog 不展示 timeout 倒计时、不自动关闭：SDK `ExtensionUIDialogOptions.timeout` 的文档语义是「自动关闭 + 倒计时」，当前只兑现了扩展侧 Promise 兜底

@@ -65,6 +65,12 @@ export interface ZionAPI {
   newSession(): Promise<{ id: string; items: SessionHistoryItem[] }>;
   /** 应答扩展对话框（结果回传 uiBridge；取消传 undefined） */
   uiAnswer(id: string, result: string | boolean | undefined): Promise<void>;
+  /** 最近项目列表（~/.pi/agent/zion-projects.json） */
+  listProjects(): Promise<ProjectInfo[]>;
+  /** 原生目录选择器：选择后直接切换项目；取消返回 null */
+  browseProject(): Promise<SwitchProjectResult | null>;
+  /** 切换项目（工作目录 + 会话上下文重建）；返回新会话历史 */
+  switchProject(dir: string): Promise<SwitchProjectResult>;
   /** 订阅扩展对话框请求（AskDialog 渲染）；返回取消订阅函数 */
   onUiAsk(cb: (ask: UiAsk) => void): () => void;
   /** 订阅扩展通知（toast 渲染）；返回取消订阅函数 */
@@ -116,4 +122,17 @@ export interface UiAsk {
 export interface UiNotify {
   message: string;
   type?: 'info' | 'warning' | 'error';
+}
+
+/** 最近项目条目 */
+export interface ProjectInfo {
+  path: string;
+  lastUsed: string;
+}
+
+/** 切换项目结果（新工作目录 + 新当前会话历史） */
+export interface SwitchProjectResult {
+  path: string;
+  id: string;
+  items: SessionHistoryItem[];
 }

@@ -90,6 +90,8 @@ interface FeedState {
   uiAsk: UiAsk | null;
   /** 扩展通知队列（toast） */
   toasts: { id: number; message: string; type?: UiNotify['type'] }[];
+  /** 项目选择面板开合（启动无最近项目时自动开） */
+  projectOpen: boolean;
   /** 在爬蠕虫计数（releaseWorm 开始 +1、done -1）——Neo 头像张嘴 = wormActive > 0 */
   wormActive: number;
 
@@ -110,6 +112,7 @@ interface FeedState {
   setUiAsk(ask: UiAsk | null): void;
   pushToast(n: UiNotify): void;
   dismissToast(id: number): void;
+  setProjectOpen(open: boolean): void;
   setTree(tree: FileNode[]): void;
   setSessions(sessions: SessionInfoLike[]): void;
   /** 仅更新当前会话显示标题（不重置 feed；重命名当前会话时用） */
@@ -139,6 +142,7 @@ export const useFeed = create<FeedState>()((set) => ({
   expandedTools: {},
   uiAsk: null,
   toasts: [],
+  projectOpen: false,
   wormActive: 0,
 
   pushUser(text) {
@@ -237,6 +241,7 @@ export const useFeed = create<FeedState>()((set) => ({
   dismissToast(id) {
     set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) }));
   },
+  setProjectOpen(open) { set({ projectOpen: open }); },
   setSessions(sessions) { set({ sessions }); },
   setSessionTitle(title) { set({ sessionTitle: title }); },
   setTree(tree) { set({ tree }); },
