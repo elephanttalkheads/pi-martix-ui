@@ -1,10 +1,12 @@
-// 侧栏 —— Neo 头像 + 会话列表（真实 SDK 会话）+ 文件树 + 底部信息
-// 会话卡：标题（firstMessage 摘要）+ 消息数 + 上次活动时间；点击切换（懒创建实例）；
+// 侧栏 —— Neo 头像 + 三槽会话培育仓（真实 SDK 会话）+ 文件树 + 底部信息
+// 培育仓：中央名称常驻、名称悬停显示操作、共享全息标题/首行摘要；仅删除待确认态开仓。
 // 「新建会话」按钮。文件树行带 data-path 供蠕虫定位；点击文件行发读取指令。
 import { useEffect, useRef, useState } from 'react';
 import type { FileNode, SessionInfoLike } from '../../../shared/protocol';
 import { useFeed, deriveSessionTitle, mergeTreeOpen } from '../store';
+import { firstLineSummary } from '../sessionPod';
 import NeoAvatar from './NeoAvatar';
+import SessionPod from './SessionPod';
 
 /** 会话显示标题：name → firstMessage 摘要 → 会话短码（统一 deriveSessionTitle，store.ts 单测覆盖） */
 function titleFor(s: SessionInfoLike): string {
@@ -12,8 +14,14 @@ function titleFor(s: SessionInfoLike): string {
   return deriveSessionTitle(undefined, s.firstMessage, s.id);
 }
 
-const fmtTime = (iso: string) =>
-  new Date(iso).toLocaleTimeString('zh-CN', { hour12: false, hour: '2-digit', minute: '2-digit' });
+type SessionPreview = {
+  id: string;
+  title: string;
+  summary: string;
+  top: number;
+  left: number;
+  width: number;
+};
 
 function TreeRows({
   nodes,
@@ -75,10 +83,21 @@ export default function Sidebar({ onSelectFile }: { onSelectFile: (path: string)
   const [draft, setDraft] = useState('');
   /** 删除确认态：待确认的会话 id（2.5s 自动复位） */
   const [confirmId, setConfirmId] = useState<string | null>(null);
+  const [preview, setPreview] = useState<SessionPreview | null>(null);
   const confirmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const sidebarRef = useRef<HTMLElement | null>(null);
   const deckRef = useRef<HTMLDivElement | null>(null);
   const wheelEndTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const wheelGestureActive = useRef(false);
+
+  useEffect(() => {
+    const hidePreview = () => setPreview(null);
+    window.addEventListener('resize', hidePreview);
+    return () => {
+      window.removeEventListener('resize', hidePreview);
+      if (confirmTimer.current) clearTimeout(confirmTimer.current);
+    };
+  }, []);
 
   // 初始：文件树 + 会话列表；实时监听工作区变化（新建/删除/改名 → 主进程防抖推送）
   useEffect(() => {
@@ -118,9 +137,13 @@ export default function Sidebar({ onSelectFile }: { onSelectFile: (path: string)
       }, 140);
     };
 
+    const onScroll = () => setPreview(null);
+
     deck.addEventListener('wheel', onWheel, { passive: false });
+    deck.addEventListener('scroll', onScroll, { passive: true });
     return () => {
       deck.removeEventListener('wheel', onWheel);
+      deck.removeEventListener('scroll', onScroll);
       if (wheelEndTimer.current) clearTimeout(wheelEndTimer.current);
       wheelGestureActive.current = false;
     };
@@ -165,15 +188,27 @@ export default function Sidebar({ onSelectFile }: { onSelectFile: (path: string)
     void window.zion?.listSessions?.()?.then(setSessions)?.catch(() => {});
   };
 
+  const clearDeleteConfirm = () => {
+    if (confirmTimer.current) clearTimeout(confirmTimer.current);
+    confirmTimer.current = null;
+    setConfirmId(null);
+  };
+
   // 删除两段确认：第一击进入确认态（2.5s 复位），确认态下再击执行
   const askDelete = (s: SessionInfoLike) => {
     if (confirmTimer.current) clearTimeout(confirmTimer.current);
+    confirmTimer.current = null;
     if (confirmId === s.id) {
+      setConfirmId(null); // 第二击先关仓门，再执行删除
+      setPreview(null);
       void doDelete(s);
       return;
     }
     setConfirmId(s.id);
-    confirmTimer.current = setTimeout(() => setConfirmId(null), 2500);
+    confirmTimer.current = setTimeout(() => {
+      confirmTimer.current = null;
+      setConfirmId(null);
+    }, 2500);
   };
 
   const doDelete = async (s: SessionInfoLike) => {
@@ -198,6 +233,7 @@ export default function Sidebar({ onSelectFile }: { onSelectFile: (path: string)
   };
 
   const startRename = (s: SessionInfoLike) => {
+    clearDeleteConfirm();
     setDraft(titleFor(s));
     setEditingId(s.id);
   };
@@ -217,8 +253,28 @@ export default function Sidebar({ onSelectFile }: { onSelectFile: (path: string)
     }
   };
 
+  const showPreview = (s: SessionInfoLike, anchor: HTMLElement) => {
+    const sidebar = sidebarRef.current;
+    if (!sidebar) return;
+
+    const sideRect = sidebar.getBoundingClientRect();
+    const podRect = anchor.getBoundingClientRect();
+    const panelHeight = 70;
+    const gap = 8;
+    const inset = Math.min(38, Math.max(22, sideRect.width * 0.08));
+
+    setPreview({
+      id: s.id,
+      title: titleFor(s),
+      summary: firstLineSummary(s.firstMessage),
+      top: Math.max(8, podRect.top - sideRect.top - panelHeight - gap),
+      left: inset,
+      width: Math.max(0, sideRect.width - inset * 2),
+    });
+  };
+
   return (
-    <aside className="sidebar" aria-label="侧栏">
+    <aside ref={sidebarRef} className="sidebar" aria-label="侧栏">
       <div className="core-wrap">
         <NeoAvatar />
         <div className="core-label">
@@ -245,26 +301,27 @@ export default function Sidebar({ onSelectFile }: { onSelectFile: (path: string)
           aria-label="会话列表，每次显示三个会话"
           data-od-id="session-list"
         >
-          {sessions.map((s) => {
+          {sessions.map((s, index) => {
             const active = s.id === currentSessionId;
+            const title = titleFor(s);
+            const summary = firstLineSummary(s.firstMessage);
+            const editing = editingId === s.id;
             return (
-              <div
+              <SessionPod
                 key={s.id}
-                className={`scard${active ? ' active' : ''}`}
-                data-od-id={`session-card-${s.id.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}`}
-                role="button"
-                tabIndex={0}
-                aria-current={active || undefined}
-                onClick={() => void selectSession(s)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    void selectSession(s);
-                  }
-                }}
-              >
-                <div className="s-title-row">
-                  {editingId === s.id ? (
+                session={s}
+                displayIndex={index + 1}
+                active={active}
+                deleteArmed={confirmId === s.id}
+                switching={switching}
+                editing={editing}
+                title={title}
+                summary={summary}
+                onSelect={() => void selectSession(s)}
+                onPreview={(anchor) => showPreview(s, anchor)}
+                onPreviewEnd={() => setPreview(null)}
+                titleEditor={
+                  editing ? (
                     <input
                       className="s-title-edit"
                       value={draft}
@@ -274,31 +331,27 @@ export default function Sidebar({ onSelectFile }: { onSelectFile: (path: string)
                       onKeyDown={(e) => {
                         e.stopPropagation();
                         if (e.key === 'Enter') { e.preventDefault(); void commitRename(s); }
-                        else if (e.key === 'Escape') setEditingId(null);
+                        else if (e.key === 'Escape') {
+                          setEditingId(null);
+                          setPreview(null);
+                        }
                       }}
                       onBlur={() => void commitRename(s)}
                     />
-                  ) : (
-                    <div className="s-title">{titleFor(s)}</div>
-                  )}
-                </div>
-                <div className="s-summary">{s.firstMessage || '（空会话）'}</div>
-                <div className="s-meta">
-                  <span className="s-meta-info">
-                    {s.messageCount} 条消息 · 上次活动 {fmtTime(s.modified)}
-                  </span>
-                  <span className="s-ops" onClick={(e) => e.stopPropagation()}>
+                  ) : undefined
+                }
+                actions={
+                  <>
                     <button
                       className={`s-op${confirmId === s.id ? ' danger' : ''}`}
-                      title="删除会话（.trash 可恢复）"
-                      aria-label={`删除会话 ${titleFor(s)}`}
+                      title={confirmId === s.id ? '确认删除会话' : '删除会话（.trash 可恢复）'}
+                      aria-label={`${confirmId === s.id ? '确认删除会话' : '删除会话'} ${titleFor(s)}`}
                       onClick={(e) => {
                         e.preventDefault();
-                        e.stopPropagation();
                         askDelete(s);
                       }}
                     >
-                      {confirmId === s.id ? '确认?' : '✕'}
+                      {confirmId === s.id ? '!' : '✕'}
                     </button>
                     <button
                       className="s-op"
@@ -306,15 +359,14 @@ export default function Sidebar({ onSelectFile }: { onSelectFile: (path: string)
                       aria-label={`重命名会话 ${titleFor(s)}`}
                       onClick={(e) => {
                         e.preventDefault();
-                        e.stopPropagation();
                         startRename(s);
                       }}
                     >
                       ✎
                     </button>
-                  </span>
-                </div>
-              </div>
+                  </>
+                }
+              />
             );
           })}
           {sessions.length === 0 && (
@@ -324,6 +376,19 @@ export default function Sidebar({ onSelectFile }: { onSelectFile: (path: string)
           )}
         </div>
       </div>
+
+      {preview && (
+        <div
+          className="session-hologram-layer"
+          data-session-id={preview.id}
+          style={{ top: preview.top, left: preview.left, width: preview.width }}
+          role="status"
+          aria-live="polite"
+        >
+          <strong>{preview.title}</strong>
+          <span className="session-hologram-summary">{preview.summary}</span>
+        </div>
+      )}
 
       <div className="side-section projects">
         <div className="side-head">

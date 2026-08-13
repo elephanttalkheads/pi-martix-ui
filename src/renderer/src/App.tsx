@@ -290,14 +290,14 @@ export default function App() {
   }, []);
 
   // 点击页面任意处后焦点归还输入框（v4 规格 §7.5）
-  // 豁免弹层（AskDialog/项目面板/命令面板）：其内部输入不得被抢焦。
+  // 豁免弹层与培育仓操作层：内部输入/按钮完成自身焦点流程，不得被抢焦。
   // 挂 mouseup + 选区检测：mouseup 时若有非折叠选区（拖选/双击选词）→ 跳过归还，
   // 否则 focus(input) 会清掉刚建立的选区（Chromium 聚焦可编辑元素行为）；
   // 不挂 mousedown：按下即抢焦会打断双击选词/单击定位光标。
   useEffect(() => {
     const refocus = (e: MouseEvent) => {
       const t = e.target as HTMLElement | null;
-      if (t?.closest?.('.ask-mask, .project-panel, .palette, .s-title-edit')) return;
+      if (t?.closest?.('.ask-mask, .project-panel, .palette, .s-title-edit, .session-pod-actions')) return;
       window.setTimeout(() => {
         const s = document.getSelection();
         if (s && !s.isCollapsed) return; // 存在选区（拖选/选词中）：不抢焦点，保住选中复制

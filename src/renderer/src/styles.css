@@ -95,6 +95,7 @@ body {
   background: var(--surface-2);
   border-right: 1px solid var(--border);
   display: flex; flex-direction: column;
+  position: relative;
   font-size: 13px; overflow: hidden; /* 整栏不滚动：Neo 头像/底部固定，列表区各自滚动 */
 }
 
@@ -181,41 +182,171 @@ body {
 .scard {
   position: relative;
   min-height: 0; overflow: hidden;
-  background: rgba(2, 18, 9, 0.97);
-  border: 1px solid var(--border);
-  padding: 7px 10px;
+  background: transparent;
+  border: 1px solid transparent;
+  padding: 0;
   scroll-snap-align: start; scroll-snap-stop: always;
-  transition: border-color 0.15s, background 0.15s;
   cursor: pointer;
 }
-.scard:hover { border-color: var(--accent-muted); background: rgba(4, 26, 13, 0.99); }
-.scard.active { border-color: rgba(61, 255, 143, 0.45); background: rgba(4, 26, 13, 0.99); }
-.scard.active::after { content: '● 当前'; position: absolute; top: 8px; right: 10px; font-size: 10px; color: var(--accent-muted); letter-spacing: 0.08em; }
-.scard .s-title { font-size: 13px; color: var(--text-primary); letter-spacing: 0.04em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 40px; }
-.scard .s-title-row { min-width: 0; }
-.scard .s-title-edit {
-  width: 100%; background: none; border: 1px solid var(--accent-muted); color: var(--text-primary);
-  font-family: var(--font); font-size: 12px; letter-spacing: 0.04em; padding: 2px 6px; outline: none;
+
+/* ---------- 会话培育仓：中央名称常驻，共享全息层按需显示 ---------- */
+.session-pod {
+  /* 以开仓帧的有效像素高度为上限：侧栏变宽后仓体停止放大，避免上下裁切。 */
+  container-type: size;
+  --pod-art-width: min(108cqw, 324cqh);
+  /* 两帧透明画布的可见底边几乎一致（约 y=703/941），据此贴合名称牌。 */
+  --pod-visible-bottom-offset: min(15.02cqw, 45.05cqh);
+  isolation: isolate;
+  outline: none;
+  transition: border-color 0.15s, background 0.15s;
 }
-.scard .s-meta { display: flex; align-items: center; gap: 8px; }
-.scard .s-meta-info { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.scard .s-ops { display: inline-flex; gap: 2px; flex: none; opacity: 0; transition: opacity 0.15s; }
-.scard:hover .s-ops, .scard:focus-visible .s-ops { opacity: 1; }
-.scard .s-op {
-  background: none; border: 1px solid transparent; color: var(--text-tertiary); cursor: pointer;
-  font-family: var(--font); font-size: 10px; line-height: 1; padding: 2px 4px; letter-spacing: 0.06em;
+.session-pod:hover { background: rgba(61, 255, 143, 0.025); }
+.session-pod:focus-visible {
+  border-color: rgba(61, 255, 143, 0.6);
+  box-shadow: inset 0 0 0 1px rgba(61, 255, 143, 0.12);
 }
-.scard .s-op:hover { color: var(--text-primary); border-color: var(--border); }
-.scard .s-op.danger { color: var(--danger); border-color: rgba(255, 85, 85, 0.4); }
-.scard .s-summary { font-size: 12px; color: var(--text-secondary); line-height: 1.45; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.scard .s-meta {
-  position: absolute; left: 10px; right: 10px; bottom: 5px;
-  min-height: 18px; padding-top: 2px;
-  font-size: 10px; color: var(--text-tertiary); letter-spacing: 0.04em;
-  overflow: hidden; opacity: 0; background: rgba(2, 18, 9, 0.96);
-  transition: opacity 0.15s;
+.session-pod[aria-disabled='true'] { cursor: progress; }
+.pod-visual {
+  position: absolute; inset: 0; z-index: 0;
+  overflow: hidden; pointer-events: none; user-select: none;
 }
-.scard:hover .s-meta, .scard:focus-visible .s-meta { opacity: 1; }
+.pod-frame {
+  position: absolute; left: 50%; top: 50%;
+  display: block; width: var(--pod-art-width); max-width: none; height: auto;
+  transform: translate(-50%, -50%);
+  image-rendering: pixelated;
+  filter: brightness(0.68) saturate(0.78);
+  transition: filter 0.16s ease-out;
+}
+.pod-frame-open { opacity: 0; }
+.session-pod.delete-armed .pod-frame-open { opacity: 1; }
+.session-pod.delete-armed .pod-frame-closed { opacity: 0; }
+.session-pod:hover .pod-frame,
+.session-pod:focus-within .pod-frame { filter: brightness(0.88) saturate(0.92); }
+.session-pod.active .pod-frame {
+  filter: brightness(1.04) saturate(1.02) drop-shadow(0 0 5px rgba(61, 255, 143, 0.22));
+}
+.session-pod.delete-armed .pod-frame {
+  filter: brightness(1.08) saturate(1.12) drop-shadow(0 0 5px rgba(255, 85, 85, 0.28));
+}
+.pod-nameplate {
+  --pod-label-h: 18px;
+  position: absolute; left: 50%;
+  top: calc(50% + var(--pod-visible-bottom-offset) - var(--pod-label-h));
+  z-index: 4;
+  width: clamp(72px, 56%, 168px); min-width: 0; height: var(--pod-label-h);
+  display: grid; grid-template-columns: 18px minmax(0, 1fr) 14px; align-items: center;
+  transform: translateX(-50%);
+  background: rgba(0, 8, 4, 0.9);
+  border: 1px solid rgba(61, 255, 143, 0.2);
+  box-shadow: inset 0 0 8px rgba(0, 0, 0, 0.68);
+  color: var(--text-secondary);
+  font-size: 12px; line-height: 1; letter-spacing: 0.05em;
+}
+.session-pod.active .pod-nameplate {
+  border-color: rgba(61, 255, 143, 0.45);
+  background: rgba(0, 13, 6, 0.88);
+}
+.session-pod.delete-armed .pod-nameplate {
+  border-color: rgba(255, 85, 85, 0.55);
+  background: rgba(20, 3, 3, 0.9);
+}
+.pod-index,
+.pod-state {
+  display: grid; place-items: center; align-self: stretch;
+  white-space: nowrap;
+}
+.pod-index {
+  color: var(--text-tertiary);
+  border-right: 1px solid rgba(61, 255, 143, 0.16);
+}
+.pod-title {
+  min-width: 0; padding: 0 4px;
+  color: var(--text-primary); font-size: 13.5px; line-height: 1;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  transition: opacity 0.12s ease-out;
+}
+.pod-state {
+  color: var(--text-tertiary); font-size: 10.5px;
+  border-left: 1px solid rgba(61, 255, 143, 0.16);
+}
+.session-pod.active .pod-state { color: var(--accent-muted); }
+.session-pod.delete-armed .pod-state { color: var(--danger); }
+.session-pod .s-title-edit {
+  width: 100%; min-width: 0; height: 15px;
+  background: rgba(0, 8, 4, 0.92); border: 1px solid var(--accent-muted);
+  color: var(--text-primary); outline: none;
+  font-family: var(--font); font-size: 8px; letter-spacing: 0.02em; padding: 0 3px;
+}
+.session-pod-actions {
+  position: absolute; right: 0; top: 0; z-index: 2;
+  display: flex; gap: 0; height: var(--pod-label-h);
+  opacity: 0; pointer-events: none;
+  background: rgba(0, 8, 4, 0.98);
+  transition: opacity 0.12s ease-out;
+}
+.pod-nameplate:hover .session-pod-actions,
+.pod-nameplate:focus-within .session-pod-actions {
+  opacity: 1; pointer-events: auto;
+}
+.pod-nameplate:hover .pod-title,
+.pod-nameplate:focus-within .pod-title { opacity: 0.25; }
+.session-pod.is-editing .session-pod-actions { opacity: 0; pointer-events: none; }
+.session-pod .s-op {
+  display: grid; place-items: center;
+  width: var(--pod-label-h); height: var(--pod-label-h); padding: 0;
+  background: rgba(2, 18, 9, 0.98); border: 1px solid var(--border);
+  color: var(--text-tertiary); cursor: pointer;
+  font-family: var(--font); font-size: 8px; line-height: 1; letter-spacing: 0;
+}
+.session-pod .s-op:hover,
+.session-pod .s-op:focus-visible {
+  color: var(--text-primary); border-color: var(--accent-muted); outline: none;
+}
+.session-pod .s-op.danger {
+  color: var(--danger); border-color: rgba(255, 85, 85, 0.55); background: rgba(26, 3, 3, 0.96);
+}
+.session-hologram-layer {
+  position: absolute; z-index: 30; min-height: 70px; box-sizing: border-box;
+  padding: 10px 14px 9px 18px; overflow: hidden;
+  pointer-events: none;
+  background: rgba(0, 24, 12, 0.84);
+  border: 1px solid rgba(61, 255, 143, 0.52);
+  clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
+  transform-origin: bottom center;
+  animation:
+    session-hologram-in 0.18s cubic-bezier(0.2, 0.8, 0.2, 1) both,
+    session-hologram-flicker 1.8s 0.18s steps(1, end) infinite;
+}
+.session-hologram-layer::before {
+  content: ''; position: absolute; inset: 0;
+  opacity: 0.52;
+  background: repeating-linear-gradient(0deg, transparent 0 3px, rgba(102, 255, 153, 0.11) 4px);
+}
+.session-hologram-layer::after {
+  content: ''; position: absolute; left: 0; top: 0; width: 3px; height: 100%;
+  background: var(--bright); box-shadow: 0 0 12px rgba(61, 255, 143, 0.68);
+}
+.session-hologram-layer strong,
+.session-hologram-summary {
+  position: relative; z-index: 1; display: block;
+  min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: left;
+}
+.session-hologram-layer strong {
+  color: var(--bright); font-size: 13px; font-weight: 500; line-height: 1.45; letter-spacing: 0.03em;
+}
+.session-hologram-summary {
+  margin-top: 3px; color: var(--text-primary); font-size: 11px; line-height: 1.55; letter-spacing: 0;
+}
+@keyframes session-hologram-in {
+  from { opacity: 0; transform: translateY(10px) scaleY(0.72); }
+  to { opacity: 1; transform: translateY(0) scaleY(1); }
+}
+@keyframes session-hologram-flicker {
+  0%, 91%, 100% { opacity: 1; }
+  92% { opacity: 0.78; }
+  94% { opacity: 0.92; }
+}
 .session-empty {
   display: grid; place-items: center; min-height: 0;
   color: var(--text-tertiary); font-size: 12px; letter-spacing: 0.06em;
@@ -607,6 +738,8 @@ body {
   .term { transition: none; }
   .neo-avatar.is-talking .neo-frame-talking { animation: none; opacity: 1; }
   .neo-avatar.is-burst { animation: none; }
+  .session-hologram-layer { animation: none; }
+  .session-pod, .pod-frame, .session-pod-actions { transition: none; }
 }
 
 /* ---------- 扩展 UI 桥：AskDialog + toast（v4 令牌） ---------- */

@@ -12,7 +12,7 @@
 
 **布局**（App.tsx）：氛围层（`#rain` / `#signal` / `.scanlines`，fixed）与 `#stage`（z-index 5，四区）同级。
 - 区1 标题栏 `.titlebar`（36px）：品牌 + 时钟
-- 区2 侧栏 `.sidebar`（`width: var(--side-w, 232px)`，默认 232，可拖拽调宽；整栏不滚动）：`.core-wrap`（Neo 头像，固定）→ `.side-section.sessions`（flex 2：会话堆叠卡 `.deck` 内部滚动）→ `.side-section.projects`（flex 3：`.side-head` 标题行 = 项目 basename（全路径在 title 属性）+「⇄ 切换项目」按钮 + 文件树 `#file-tree` 内部滚动）→ `.side-foot`（固定，workspace 文案）
+- 区2 侧栏 `.sidebar`（`width: var(--side-w, 232px)`，默认 232，可拖拽调宽；整栏不滚动且 `position: relative` 承载共享全息层）：`.core-wrap`（Neo 头像，固定）→ `.side-section.sessions`（高度 `clamp(244px, 36vh, 320px)`：三等高培育仓槽位 `.deck` 内部滚动）→ `.side-section.projects`（flex 3：`.side-head` 标题行 = 项目 basename（全路径在 title 属性）+「⇄ 切换项目」按钮 + 文件树 `#file-tree` 内部滚动）→ `.side-foot`（固定，workspace 文案）
 - 区2.5 `.side-resizer`（8px 拖拽热区，`margin: 0 -4px` 视觉零宽、伸出两侧各 4px 命中区，WAI-ARIA separator，机制见下「侧栏调宽」）——`.main`（flex 行）内位于 Sidebar 与 `.console` 之间
 - 区3 对话区 `.console`：`.conv-head`（状态芯片）+ `#feed` + `.inputbar`
 - 区4 `.term` 日志抽屉（默认 height:0，展开 150px）+ `.statusbar`（26px，SND 开关 / DEC 开关 / 日志按钮 / `tokens:` 真实 usage 计数）
@@ -53,7 +53,7 @@
 
 **浏览器调试桥**（mockBridge.ts + main.tsx）：`installMockBridge()` 在 `window.zion` 缺失时（浏览器直开 vite dev、无 Electron preload）注入 mock ZionAPI，有桥（Electron 打包）检测后直接跳过，不影响生产。mock 数据按项目维度写死（`MOCK_SESSIONS`/`MOCK_ITEMS`/`MOCK_TREE`/`MOCK_PROJECTS`/`MOCK_COMMANDS`）；`prompt` 按输入生成模板回复，经 setTimeout 按真实时序派发 `agent_start → tool_execution_start → message_update(text_delta) → tool_execution_end → message_end → agent_end → agent_settled`（`abort` 置位后未触发的派发全部取消）——事件经 `onAgentEvent` 真实派发路径，feed 流式渲染与事件管线零改动。`browseProject` 浏览器无原生对话框，轮换到下一个 mock 项目模拟选择；`onUiAsk`/`onUiNotify` 为空实现（无扩展弹层演示数据）。
 
-**会话切换/新建/重命名/删除**（Sidebar）：`selectSession` → `switchSession`（主进程懒创建实例，可能秒级；`switching` 锁防并发）→ `applySession`；`newSession` 同理；失败走 `log('err')`。重命名：`startRename` 以当前显示标题为草稿，`.s-title-edit` 内联输入 Enter/blur 提交 `commitRename`、Esc 取消；`renameSession` → `setSessions`，当前会话另 `setSessionTitle(name)`（只改标题，不重置 feed）。删除：`askDelete` 两段确认——首击进入「确认?」态（2.5s 自动复位），再击 `doDelete` → `deleteSession`（软删，移入 `.trash` 可恢复）→ `setSessions`；删除的是当前会话时主进程指针已落最近会话，`getCurrentSession` 重拉 + `applySession`（标题取新列表匹配，兜底短码）。点文件树行 → `pushUser` + `window.zion.prompt('读取 <path>')`（真实 prompt，无假动画）。
+**会话切换/新建/重命名/删除**（Sidebar + SessionPod）：`.deck` 固定三等高槽并按槽吸附滚动；每仓保留 `.scard` 查询类，外层 `role="button"`，点击/Enter/Space 调 `selectSession` → `switchSession`（主进程懒创建实例，可能秒级；`switching` 锁防并发）→ `applySession`；`newSession` 同理；失败走 `log('err')`。中央名称牌常驻，标题统一走 `deriveSessionTitle`，编号为列表索引 + 1；只有名称牌 hover/focus 时展示等高的重命名/删除按钮。Sidebar 持有唯一 `preview`，仓 hover/focus 时按 anchor/sidebar rect 测量共享 `.session-hologram-layer`，显示标题与 `firstMessage` 第一条非空行（无内容显示「尚无会话内容」）；离开/真正离焦/列表滚动立即隐藏。重命名：`startRename` 以当前显示标题为草稿，名称牌中央替换为 `.s-title-edit`，Enter/blur 提交 `commitRename`、Esc 取消；`renameSession` → `setSessions`，当前会话另 `setSessionTitle(name)`（只改标题，不重置 feed）。删除：`askDelete` 两段确认——首击进入待确认态（2.5s 自动复位），此时才由 closed 帧切到 open 帧；再击先清待确认态再 `doDelete` → `deleteSession`（软删，移入 `.trash` 可恢复）→ `setSessions`；删除的是当前会话时主进程指针已落最近会话，`getCurrentSession` 重拉 + `applySession`（标题取新列表匹配，兜底短码）。点文件树行 → `pushUser` + `window.zion.prompt('读取 <path>')`（真实 prompt，无假动画）。
 
 **项目切换管线**（ProjectPanel，App 顶层 fragment 挂载；store `projectOpen` 控制开合；打开入口：侧栏 `.side-head` 的「⇄ 切换项目」按钮 + 启动无最近项目自动打开）：
 - 打开时 `window.zion.listProjects()` 拉最近项目（effect 按 `[open]` 触发，`alive` 活期守卫；失败静默 → 空列表，仅「浏览其他目录…」可用）。
@@ -109,15 +109,15 @@
 - **stopReason 运行时判定**：strict 下 AgentMessage 联合无法静态收窄到助手分支，用 cast + 可选链按运行时语义读取。
 - **状态栏 token 计数 = 真实 usage**：`turn_end` 的 `usage.totalTokens` 经 `addUsage` 累积（v4 的「delta 字符数 ×2」伪计数已删除）；`applySession`/`reset` 归零。结算行 tokens 同样取该累积（`seenUsage=false` 显示 null），不再有字符近似。
 - **标题推导收敛为纯函数**（`title.ts` → store re-export 的 `deriveSessionTitle`，App 启动恢复与 Sidebar 会话卡共用）：两处原为各自内联 `slice(0,22)` 截断且行为不一致（App 不补省略号、不清引号），现统一为 name → firstMessage 智能摘要 → `会话 <id 前 4 位>` 兜底。摘要规则：取首行 → 剥含路径/命令特征的内嵌引号对（消除 `为"D:\\...\\..."` 残尾）与成对包裹引号 → 去前导符号（`- # > * · / \`）→ 22 字符截断 + '…'。改规则只动 `title.ts`（node:test 覆盖）。
-- **会话堆叠卡 `--h` 测量**（Sidebar effect，deps `[sessions, currentSessionId]`）：每张 `.scard` 置 `--h = scrollHeight + 2`；CSS `margin-bottom: calc(80px - var(--h, 140px))` 使每卡恒定露出 80px 头部（标题 + 2 行摘要），hover 拉直旋转（`rotate(0) translateY(-4px)`）+ 展开摘要/meta。
+- **三槽培育仓与共享全息层**：`.deck` 用 `grid-auto-rows: calc((100% - 2 * gap) / 3)` 固定三槽，并用 `scroll-snap` 保证完整槽位；`SessionPod` 是 size query container，双帧宽度取 `min(108cqw, 324cqh)`——窄侧栏随宽度缩放，达到开仓帧可被槽高完整容纳的上限后停止放大并居中留白。closed/open 两 PNG 叠在同一绝对定位容器，只切 opacity，避免状态切换位移；两帧透明画布的可见底边接近同一坐标，中央名称牌用同一响应式几何贴住仓体底边。opened 帧不是选中/hover 反馈，只表示「已点击删除但尚未确认」；普通 hover/focus 只调亮 closed 帧。每仓只保留中央编号/标题/状态点，详细标题和首行摘要由 Sidebar 的单个绝对定位、`pointer-events:none` 全息层复用，避免每仓常驻多份面板与动画。
 - **侧栏分区滚动**（styles.css 注释明示）：`.sidebar` 整栏 `overflow: hidden`，`.core-wrap`/`.side-foot` `flex: none` 固定，会话/项目两区 flex 分割、`.deck`/`#file-tree` 各自 `overflow-y: auto`——列表过长只滚列表区，项目标题行与底部 workspace 行始终可见。
 - **统一滚动条**（styles.css）：`*::-webkit-scrollbar` 全局 6px 终端绿胶囊（thumb `#00ff66`/hover `#66ff99`、轨道与角落透明，vision 规格），替代旧 feed/侧栏/term-body 分段 8px 规则——侧栏整栏不滚动，旧 `.sidebar` 规则本就无效；新滚动容器（`.palette`/`.ask-options`/`.pp-list`/`.diff-body` 等）自动同款。
 - **选区高亮同终端绿语言**（styles.css 全局 `::selection`）：`rgba(0,255,102,0.22)` 半透明绿底 + 白字——不用纯 `#00ff66`（大面积纯色会淹没文字），0.22 透明度保留识别度且白字可读（styles.css 注释明示）；是 v5 原型（`index-v5.html` 的 `rgba(0,255,65,0.25)`）的收敛版：色相统一到滚动条 thumb 的 `#00ff66` 并补白字。全局生效，组件不另写选区样式。
 - **对角角标共享 `.corner` 类**（styles.css）：trace/diff/ask-dialog/project-panel 四组件的 8×8 对角角标伪元素收敛为单一 `.corner::before/::after` 规则，组件 JSX 只加 `corner` 类名——新组件要角标只加类名，不复制伪元素块；`.trace`/`.diff` 自身仍需 `position: relative`（类名不复位定位）。
 - **`setSessionTitle` 与 `applySession` 分工**：改名当前会话只走 `setSessionTitle`（仅更新 `sessionTitle`，feed/状态机/token 全不动）——`applySession` 会重建 feed，误用会把正在进行的对话内容冲掉。
-- **删除是软删除 + 两段确认**：`deleteSession` 为软删（主进程语义，UI 只展示 log），侧栏用「首击确认? + 2.5s 自动复位」防误触；删除当前会话后主进程指针自动落回最近会话，渲染层不自行猜 id，`getCurrentSession` 重拉。
+- **删除是软删除 + 两段确认，开仓只表示待确认**：`deleteSession` 为软删（主进程语义，UI 只展示 log），侧栏用「首击待确认 + 2.5s 自动复位」防误触；open 培育仓帧只在这段待确认窗口显示，再击确认前先清状态，绝不把打开状态绑定到 active/hover/focus。删除当前会话后主进程指针自动落回最近会话，渲染层不自行猜 id，`getCurrentSession` 重拉。
 - **日志前端自收集**：`store.logs` 上限 120 行（LOG_MAX），`role="log"`，收起时 `aria-hidden`。
-- **交互细节**：焦点归还挂 `mouseup` 而非 `mousedown`（v4 §7.5），且存在非折叠选区（`!isCollapsed`）时跳过归还——mousedown 即抢焦会打断双击选词/单击定位光标，且 focus 可编辑元素会清掉刚建立的选区；mouseup + 选区检测保住拖选/双击选中的文本可复制。豁免 `.ask-mask`/`.project-panel`/`.palette`/`.s-title-edit` 不变；`.side-resizer` 未豁免——点击热区后焦点仍归还 `#cmdline`，键盘调宽须 Tab 聚焦 separator。Enter 在 STREAMING/CANCELLING 时切换为中断而非发送；面板打开且有候选时 Enter/Tab 插入选中项（不回发）。
+- **交互细节**：焦点归还挂 `mouseup` 而非 `mousedown`（v4 §7.5），且存在非折叠选区（`!isCollapsed`）时跳过归还——mousedown 即抢焦会打断双击选词/单击定位光标，且 focus 可编辑元素会清掉刚建立的选区；mouseup + 选区检测保住拖选/双击选中的文本可复制。豁免 `.ask-mask`/`.project-panel`/`.palette`/`.s-title-edit`/`.session-pod-actions`；培育仓操作层必须豁免，否则点击重命名后 0ms 焦点归还会让自动聚焦的编辑框立刻 blur。`.side-resizer` 未豁免——点击热区后焦点仍归还 `#cmdline`，键盘调宽须 Tab 聚焦 separator。Enter 在 STREAMING/CANCELLING 时切换为中断而非发送；面板打开且有候选时 Enter/Tab 插入选中项（不回发）。
 - **命令面板只插入、不执行**：选中项仅写入输入框、不触发任何行为，回车后与普通输入同路径 `prompt`；命令执行语义归宿主 TUI 层（InputBar 头注释明示），渲染层不维护命令实现，避免两处命令知识漂移。
 - **command 优先 + 字母序**：面板 max-height 320px 截断时命令恒在可见区（命令少、skills 多），字母序给稳定预期。
 - **启动预取一次**：`listCommands` 主进程聚合扫描较重，仅 mount 调用一次，打开/过滤面板不再查主进程（代价见「已知限制与技术债」）。
