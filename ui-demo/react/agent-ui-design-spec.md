@@ -1,20 +1,26 @@
-# ZION Agent 主控台 — 复刻设计规格（纯文本版）
+# ZION Agent 主控台 — 设计规格（纯文本版 · 对应当前真实 UI）
 
-> **本文档的用途**：让没有多模态能力的模型（如 DeepSeek）仅凭文字，就能把 `ui-demo/index-v4.html` 这个原型复刻成一个可接入真实后端的 Agent UI（React 实现）。
-> 所有数值、文案、算法参数均从 `index-v4.html` 原样提取，**不要自行"优化"任何数值**——亮度、时长、间距的每一个数字都是调过的。
+> **本文档的用途**：让没有多模态能力的模型（如 DeepSeek）仅凭文字，就能理解/复刻 ZION 当前的实际 UI。
+> 数值与算法参数以**真实实现**为唯一事实源：`src/renderer/src/`（store.ts / components/Feed.tsx / components/TurnRail.tsx / styles.css）。
+> 原型对照：`ui-demo/index-v4.html`（v4 极简基线）、`ui-demo/index-v5.html`（会话区 v5：回合/雨轨/玻璃，已落地）。
+> **不要自行"优化"任何数值**——亮度、时长、间距的每一个数字都是调过的。
 >
-> 源文件：`D:\pi-martix-ui\ui-demo\index-v4.html`（1207 行，单文件，可直接阅读源码对照）。
+> 本次更新主体是**会话区**（v5 落地：回合模型、凝结雨轨、思考块、结算行、液态玻璃、注入解码）；
+> 侧栏（Neo 头像/会话列表/文件树）、弹层（命令面板/项目面板/扩展对话框）按真实代码现状同步描述。
 
 ---
 
 ## 1. 产品定位与视觉风格
 
-- **产品**：多 Agent 主控台。左侧是 Agent 列表与项目文件树，右侧是与 Agent 的对话流，底部有可折叠运行日志和状态栏。
-- **风格关键词**：极简 × 黑客帝国 × 辐射 Pip-Boy。
+- **产品**：黑客帝国风编码 Agent 主控台（Electron + pi SDK）。左侧是 Neo 头像、会话列表与项目文件树，右侧是与 Agent 的回合化会话流，底部有可折叠运行日志和状态栏。
+- **风格关键词**：极简 × 黑客帝国 × 辐射 Pip-Boy ×（v5 起）液态玻璃。
   - **单色磷光绿体系**：所有文字、边框、图形都来自同一个绿色家族，层级只靠明度区分，不出现第二个强调色。
-  - **琥珀色 `#ffb000` 只用于"执行中/警示"**，红色 `#ff5555` 只用于"危险/删除/中断"。
-  - 无任何渐变背景、无圆角卡片、无阴影堆叠、无 emoji 图标。装饰被压缩到只剩三件：数字雨、神经核心同心环、蠕虫入侵动画。
-- **核心交互叙事**：点击左侧文件 → 神经核心"释放蠕虫"沿 L 形路径爬向该文件 → 命中后文件名 Matrix 式扰码解密 → diff 卡片段扫入回传。这是整个 UI 的招牌动效，必须完整复刻。
+  - **琥珀色 `#ffb000` 只用于"执行中/警示"**，红色 `#ff5555` 只用于"危险/删除/中断/错误结算"。
+  - 无圆角卡片、无 emoji 图标。**液态玻璃**只给"agent 凝结出的实体"（工具链块/diff 卡）：玻璃感用光表达（背透模糊、顶边镜面高光、底边折射暗线），不引入圆角与彩色——"矩阵的骨 + 玻璃的光"。
+  - 装饰清单：数字雨（背景）、Neo 头像（侧栏）、蠕虫入侵（编辑类工具）、凝结雨轨（回合）、扫描线。
+- **核心交互叙事**（两条）：
+  1. 编辑类工具调用 → Neo 头像张嘴"吐出"字符蠕虫 → 沿 L 形路径爬向文件树目标行 → 命中后文件名 Matrix 式扰码解密 → diff 卡分段扫入回传。
+  2. agent 回合左侧一条迷你数字雨（凝结雨轨）随流式输出下落 → 回合闭环时雨停、凝结为 ◆ 并落出结算行——"操作员看着代码雨凝结成可读的思想"。
 
 ---
 
@@ -40,6 +46,7 @@
 **硬约束**：
 - 三级文字对 `--bg` 的对比度均 ≥ 4.5:1，不要降低亮度。
 - 界面中所有"绿色半透明"统一写作 `rgba(61, 255, 143, α)`（这是 `#3dff8f` 的 rgb 展开），常用 α 值：`0.05`（hover 底）、`0.07`（选中/diff 增加行底）、`0.08`（行内 code 底）、`0.10`（树缩进线）、`0.14`（命中闪烁底）、`0.18`（边框）、`0.35`/`0.4`（hover 边框）。
+- 液态玻璃的高光统一写作 `rgba(194, 255, 217, α)`（`--bright` 的 rgb 展开），仅用于：顶边镜面高光 `0.12`、左缘 `0.05`、雨轨亮头 `0.7`、凝结涟漪描边 `0.5`。玻璃色板不得扩散到其他组件。
 
 ### 2.2 字体
 
@@ -82,12 +89,11 @@ font-family: "Share Tech Mono", ui-monospace, "Courier New", monospace;
 │          │ 会话头（标题 + 芯片组）                       │
 │  侧栏    ├───────────────────────────────────────────┤
 │  232px   │                                           │
-│          │ 消息流 #feed（flex:1, overflow-y:auto）      │
-│ ┌──────┐ │                                           │
-│ │核心  │ │                                           │
-│ │108px │ ├───────────────────────────────────────────┤
-│ └──────┘ │ 输入栏（快捷指令 + 输入行 + 提示）            │
-│ Agent列表│                                           │
+│ ┌──────┐ │  消息流 #feed（flex:1, overflow-y:auto）     │
+│ │Neo   │ │  —— 回合化：OPERATOR 回合 / agent 回合容器   │
+│ │头像  │ │     （雨轨 + 正文段/思考块/工具卡/结算行）     │
+│ └──────┘ ├───────────────────────────────────────────┤
+│ 会话列表 │ 输入栏（快捷指令 + 输入行 + 提示）             │
 │ 文件树   │                                           │
 │ 底部信息 │                                           │
 ├──────────┴───────────────────────────────────────────┤
@@ -145,72 +151,83 @@ background: repeating-linear-gradient(0deg,
 - 中：品牌 `ZION://agent-console`，大写、字距 0.22em、13px；后缀 `v4.0-minimal` 用三级绿、字距 0.1em、不大写。
 - 右：时钟 `HH:MM:SS`，每秒刷新，二级绿。
 
-### 5.2 神经核心 `.core-wrap`（侧栏顶部，招牌之二）
+### 5.2 Neo 头像 `.neo-avatar`（侧栏顶部，招牌之二）
 
-- canvas `#core`：宽 100%，高 108px（内部按 clientWidth×2 设置分辨率保证清晰）。
-- 下方标签：`NEURAL CORE · <b>NEO-7</b> · <span>IDLE</span>`，11px、大写、字距 0.28em、三级绿；`<b>` 是主绿色但不加粗。
-- **绘制算法**（每帧）：
-  - 全局旋转角 `rot += 0.006 * FX.speed`。
-  - 能量 `e = min(1, FX.energy + burst * 0.6)`，其中 `burst = max(0, 1 - (now - burstAt)/700)`——即释放蠕虫后 700ms 内的增能衰减。
-  - **外环刻度**：半径 `R = H * 0.34`，随 `rot` 正向旋转。24 根刻度线，每第 6 根是主刻度（长 9、线宽 2），其余长 5、线宽 1。颜色 `rgba(61,255,143, …)`，主刻度透明度 `0.14 + e*0.35`，副刻度 `0.07 + e*0.15`。
-  - **内环虚线弧**：半径 `R * 0.62`，反向旋转 `-rot * 1.6`，`setLineDash([10, 7])`，线宽 1.5，透明度 `0.18 + e*0.45`。
-  - **中心点**：半径 `3 + e * 3`，颜色 `rgba(200,255,212, 0.25 + e*0.6)`。
-- reduced-motion：`FX.speed = 0`（静止绘制，不清除）。
+- 像素风 Agent 头像，两帧 DOM 贴图：`neo-idle.png`（闭嘴）/ `neo-talking.png`（张嘴），绝对定位叠放，切换靠 opacity。
+- **仅在蠕虫释放期间张嘴**——蠕虫从口中吐出（`wormActive > 0` → `is-talking`）；释放瞬间带 700ms 脉冲（`is-burst`，`neo-burst` keyframes）；其余任何时候闭嘴。
+- reduced-motion：talking 帧常显、burst 关闭（见 §10）。
+- （历史说明：v4 demo 的同心环「神经核心」已删除，蠕虫起点从核心中心改为头像口部。）
 
-### 5.3 Agent 卡片 `.agent-card`
+### 5.3 会话列表 `.scard`（侧栏，真实会话）
 
-- 结构：名字（13px 主绿，字距 0.1em）→ 描述（12px 三级绿）→ 状态行（12px）。
-- 状态行格式：`● 在线 — 待命`（圆点 `--accent-muted`）或 `◐ 空闲 — 上次运行 12 分钟前`（符号三级绿）。**状态是符号+文字双编码，不只靠颜色。**
-- 边框 1px `--border`，无圆角，背景透明。
-- hover：`background: rgba(61,255,143,0.05)`；选中 `.active`：边框 `--accent-muted` + 底 `rgba(61,255,143,0.07)`。
-- 可键盘操作：`tabindex="0"` + `role="button"`，Enter/Space 触发，`:focus-visible` 显示 1px `--accent` 外描边（offset 2px）。
-- 点击后联动：会话头 `MODEL:` 芯片、神经核心标签、输入框 placeholder 全部换成该 Agent 名，日志记录一行。
-
-Demo 数据三张卡：NEO-7（通用推理 · 工具链调用，在线待命）、TRINITY-2（代码检索 · 漏洞分析，空闲）、MORPHEUS-0（长程规划 · 多步任务编排，在线队列中）。
+- 每张卡 = 一个真实持久化会话（`~/.pi/agent/sessions/` JSONL）：标题（`deriveSessionTitle`：name → 首条消息智能摘要 → 会话短码）、首条消息摘要 `s-summary`（空会话显示「（空会话）」）、meta 行（消息数 / 上次活动时间）。
+- meta 行默认收起（`max-height: 0`），hover 展开，内含操作钮：重命名（`.s-title-edit` 内联输入，Enter/blur 提交、Esc 取消）、删除（两段确认：首击进「确认?」态 2.5s 自动复位，再击执行软删）。
+- 点击卡片 = 切换会话：主进程懒创建 AgentSession 实例（Map 缓存），事件只发当前会话；feed 以历史重建（只还原 user/assistant 文本，工具链/diff/思考不重建）。
+- 当前会话高亮（选中边框+底，同 v4 选中态规则）；新建会话按钮在区块标题行。
 
 ### 5.4 文件树 `#file-tree`
 
+- 真实项目文件树：主进程扫描当前工作目录（`zion:scan-tree` IPC）生成，编辑类工具调用后自动刷新。
 - 数据结构：`{ name, dir?, open?, size?, children? }`。
 - 行 `.ft-row`：flex，目录有 caret `▸`（展开时 rotate 90°，过渡 0.2s），文件行尾部右侧是尺寸（11px 三级绿，`margin-left: auto`）。行内 `white-space: nowrap; overflow: hidden; text-overflow: ellipsis`。
 - 子级容器 `.ft-children`：默认 `display: none`，父节点 `.open` 时显示；左缩进 13px + 1px 竖线 `rgba(61,255,143,0.10)`。
 - hover：底 0.05 + 文字升主绿；选中 `.active`：底 0.08 + 主绿。
-- **点击文件 = 触发入侵流程**（§7.3）；点击目录只展开/收起并记日志。
-- 命中闪烁态 `.breached`：文字 `--bright` + 底 0.14，`transition: none` 立即呈现，900ms 后移除 class。
-
-Demo 树（原样复刻）：`src/core/{neural-core.js 8.2k, synapse-bus.js 3.1k, memory-bank.js 5.7k}`、`src/agents/{neo-7.js, trinity-2.js, morpheus-0.js}`、`src/ui/{rain.js, core.js}`、`src/main.js`、`assets/glyphs.kf`、`brand-spec.md`、`index-v3.html`、`od.config.json`。src 和 src/core 默认展开。
+- 点击文件行 = 发送 `读取 <path>` 指令给 agent（真实 prompt，非动画演示）；点击目录只展开/收起并记日志。
+- 命中闪烁态 `.breached`：文字 `--bright` + 底 0.14，`transition: none` 立即呈现，900ms 后移除 class。**文件树行是蠕虫入侵的命中目标**（§6），新文件命中前会先刷新树并展开祖先目录。
 
 ### 5.5 会话头 `.conv-head`
 
-- 左：会话标题 `主控会话 #0047`（13px 主绿，字距 0.12em）。
+- 左：会话标题（13px 主绿，字距 0.12em）。
 - 芯片 `.chip`：11px，边框 1px，padding 2px 10px。
-  - `MODEL: NEO-7` —— `.on` 态：`--accent-muted` 文字 + 边框 0.35。
+  - `SESS: <会话标题>` —— `.on` 态：`--accent-muted` 文字 + 边框 0.35，跟随当前会话。
   - 状态芯片 —— READY 时同 `.on`；其他状态 `.warn`：琥珀文字 + 边框 `rgba(255,204,0,0.35)`。
-  - 右侧（spacer 后）：`上下文 12.4k / 128k`，静态演示数据。
+  - 右侧（spacer 后）：`上下文 N / 128k`（当前为静态占位，真实上下文用量未接入）。
 
-### 5.6 消息 `.msg`
+### 5.6 会话流：回合（turn）结构（v5 落地，本节为全新内容）
 
-- 每条：`max-width: 820px; margin-bottom: 20px`，入场动画 `blockIn`（0.2s，opacity 0→1 + translateY 6px→0）。
-- 消息头：11px 大写字距 0.14em——发送者名 + 时间 `HH:MM`。用户消息整体靠右（`margin-left: auto`，头部 `justify-content: flex-end`，正文右对齐），发送者显示 `OPERATOR`；Agent 消息头部用 `--accent-muted`。
-- 正文 15px / 1.8 / 主绿，`white-space: pre-wrap; word-break: break-word`。
-- 行内样式：`` `code` `` → 底 0.08 + 边框 + 13px；`【高亮词】` → `--bright`；中断标记 `[已被操作员中断]` → `--danger`。
-- **打字机光标 `.caret`**：8px 宽、1.05em 高的 `--accent` 色块，0.9s 步进闪烁（50% 时透明），仅在流式输出期间存在。
+feed 不再是无结构消息列表，而是**回合序列**（词汇见 CONTEXT.md「agent 回合」）。数据模型：`turns: Record<id, Turn>` + `order: id[]` + `activeTurnId`；回合边界即 `React.memo` 边界——流式期间 store 只替换活动回合对象，历史回合零重渲染（性能设计的核心，见 §8.2）。
 
-### 5.7 工具链块 `.trace`
+**OPERATOR 回合**（`.msg.user`，右对齐）：
+- 结构同 v4 用户消息：`margin-left: auto`，头部 `OPERATOR + HH:MM` 右对齐，正文右对齐。
+- **注入解码**（见 CONTEXT.md）：入场时假名乱码逐位还原为文字——字符集 `ｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿ0123456789ABCDEF#$%&@`（与蠕虫扰码同族），总时长 `min(700, 240 + 字符数×6)` ms，逐帧 `locked = floor(p×len)` 前锁后乱；空格/换行不参与扰码。**只播一次**（memo 保证不重播）；解码期间显示纯文本，完成后才交给行内解析（code/高亮）。
+- 开关：状态栏 `DEC: ON/OFF`，`localStorage.zion.dec` 持久化，默认开；reduced-motion 直接跳过。
 
-- 1px 边框 + 底 `rgba(0,12,4,0.3)` + **对角角标**：`::before` 左上、`::after` 右下各一个 8×8 的 L 形边框（1px `--accent-muted`）。这是全局唯一的"装饰性角标"语言，trace 和 diff 共用。
-- 头部：`工具链 · N 步`（11px 大写三级绿）。
-- 步骤行：`[tag] 描述文字 …… 状态`。tag 三级绿；执行中 `.run` 时 tag 和状态变琥珀，文字 `执行中…`；完成 `.done` 时状态变 `--accent-muted`，文字 `完成 · X.Xs`（真实计时）。
-- 步骤节奏：每步间隔 `380 + random*420` ms。
+**agent 回合容器**（`.turn-agent`，`position: relative; padding-left: 40px`）：
+1. **凝结雨轨** `.rail`（见 CONTEXT.md）：`absolute; left: 0; top: 20px; bottom: 2px; width: 26px; border-left: 1px solid --border`。
+   - 活动回合：一枚迷你数字雨 canvas（2 列，字号 11px，假名+`0123456789<>+*`），帧节流 `90 / FX.speed`（与背景雨同一折算规则）；亮头 8% 概率 `rgba(194,255,217,0.7)`，普通 `rgba(0,255,65,0.5)`；拖尾盖层 `rgba(1,10,4,0.18)`；尺寸用 ResizeObserver 跟随回合高度。
+   - 回合闭环：canvas 立即卸载（rAF 停，零常驻开销），原位凝为 ◆（`.rail.settled .seal`，`sealIn 0.5s` 入场）。
+   - reduced-motion：只画一帧静态雨。
+2. **正文段**（`.msg.agent`，同 v4：头部 = 会话标题 + `HH:MM`，正文 15px/1.8，行内 `code` / 【高亮词】 / 中断标记 `[已被操作员中断]` → `--danger`）。一个回合可有多个正文段（工具调用前后各一段），各占一个 `.msg.agent`。
+3. **思考块** `.think`（thinking 段，SDK `thinking_delta` 干净拆分，不再混入正文）：`<details>` 默认折叠；summary `▸ 思路`（11px 三级绿，流式中显示 `▸ 思路 · 思考中…`）；展开体 13px 三级绿，左 `1px dashed --border` 竖线。不打字机光标。
+4. **工具卡 / diff 卡**：见 §5.7 / §5.8（液态玻璃材质）。
+5. **结算行** `.settle`（见 CONTEXT.md，回合闭环时落出）：`◆ 已结算 · N tools · Σtokens tok · X.Xs` + 右侧延伸发线。
+   - `Σtokens` = 回合内各 LLM turn 的 `usage.totalTokens` 求和（`turn_end` 事件携带；未收到 usage 则不显示 tok 段）；耗时 = `agent_start`→闭环实测；`N tools` = 回合内工具调用数。
+   - **中断/错误回合照常结算**：首词变 `已中断` / `错误`，整行（含 ◆）转 `--danger`。
+   - 历史恢复的回合无结算行（只重建文本）。
+- **流式光标 `.caret`**：8px 宽、1.05em 高的 `--accent` 色块，0.9s 步进闪烁，仅流式期间存在于最后一个正文段末尾。
 
-### 5.8 diff 块 `.diff`
+### 5.7 工具链块 `.trace`（液态玻璃卡）
 
-- 同款边框 + 对角角标，底 `rgba(0,6,2,0.55)`。
+- 1px 边框 + **对角角标**：`::before` 左上、`::after` 右下各一个 8×8 的 L 形边框（1px `--accent-muted`）。这是全局唯一的"装饰性角标"语言，trace 和 diff 共用。
+- **液态玻璃材质**（v5 起，trace/diff 共享）：
+  - 静态态：`background: linear-gradient(155deg, rgba(61,255,143,0.05), rgba(61,255,143,0.012) 42%, rgba(0,0,0,0.14)), rgba(2,14,7,0.5)` + `box-shadow: inset 0 1px 0 rgba(194,255,217,0.12)`（顶边镜面高光）`inset 0 -1px 0 rgba(0,0,0,0.4)`（底边折射暗线）`inset 1px 0 0 rgba(194,255,217,0.05)`、`0 0 22px rgba(0,255,65,0.04)`。
+  - **性能分级**：仅活动回合（`.turn-agent.is-active`）内的卡开 `backdrop-filter: blur(9px) saturate(1.25) brightness(1.05)`（透出背后的数字雨）；回合闭环即降级为静态态——长会话任意时刻 blur 卡数 ≤ 活动回合卡数。
+  - **凝结涟漪**：工具收尾（run→ok/err）时挂载一枚 `.ripple`（`inset:-1px` 描边 `rgba(194,255,217,0.5)`，`rippleOut 0.7s`：scale 0.985→1.035 + 渐隐 + blur 2px），播一次即移除。
+- 头部：`工具链 · 1 步`（11px 大写三级绿；真实实现一卡一调用）。
+- 步骤行：`[toolName] 描述文字 …… 状态`，点击展开/收起完整参数（`.trace-expand`：标题 + `pre`，最大高 240px 内部滚动；展开态存 store `expandedTools`）。描述从 args 提取（file/path/command(60 字）/text/question）。
+- 状态：执行中 `.run` 琥珀 `执行中…`；完成 `.done` `--accent-muted` `完成 · X.Xs`（真实计时 `performance.now()` 差值）；失败 `.err` 红 `失败`。**状态是符号+文字双编码。**
+- 数据由真实 `tool_execution_start/end` 事件驱动（无假步骤节奏）。
+
+### 5.8 diff 块 `.diff`（液态玻璃卡）
+
+- 同款边框 + 对角角标 + 液态玻璃材质（§5.7）。
 - 头部：`✎ 文件路径`（主绿）+ `+N`（`--accent-muted`）`−N`（`--danger`）统计 + 右侧 `modified`（琥珀大写 11px）。
 - 行结构：`[行号 44px 右对齐][符号 14px 居中][代码]`，`white-space: pre`，13px / 1.55。
   - 上下文行 `.ctx`：二级绿，符号是透明占位。
   - 删除行 `.del`：底 `rgba(255,85,85,0.08)`，文字 `#e89a9a`，符号 `−` 红色。
   - 增加行 `.add`：底 0.07，文字主绿，符号 `+` 用 `--accent`。
   - **增删是符号+颜色双编码**。
+- **渲染时机**：仅当 `revealedEdits[toolCallId]` 登记后渲染（蠕虫命中完成才回传，见 §6）；`tool_execution_end` 的 `result.patch/diff` 可升级行数据；行数上限 200。
 - **回传入场 `.reveal`**：`animation: glitchIn 0.5s steps(7) both`，从 `clip-path: inset(0 100% 0 0)` 到全显——7 段阶梯式从左扫入，像解密出的数据。
 
 ### 5.9 输入栏 `.inputbar`
@@ -237,7 +254,7 @@ Demo 树（原样复刻）：`src/core/{neural-core.js 8.2k, synapse-bus.js 3.1k
 ### 5.11 状态栏 `.statusbar`（26px）
 
 - 左组：`● 已连接 zion 主网`（点 `--accent-muted`）+ `TLS 1.3`（三级绿）。
-- 右组：`tokens: N`（累计，每输出字符 +2）、`uptime: MM:SS`、`日志 ▾`、`SND: ON/OFF`、状态字（READY 绿 / 其他琥珀）。
+- 右组：`tokens: N`（**真实累计**：各 `turn_end` 的 `usage.totalTokens` 求和，切换会话清零）、`uptime: MM:SS`、`日志 ▾`、`SND: ON/OFF`、`DEC: ON/OFF`（注入解码开关，§5.6）、状态字（READY 绿 / 其他琥珀）。
 - 12px，组内间距 18px。
 
 ---
@@ -255,10 +272,10 @@ Demo 树（原样复刻）：`src/core/{neural-core.js 8.2k, synapse-bus.js 3.1k
 
 ### 6.2 释放与路径
 
-1. 起点 = `#core` 画布 `getBoundingClientRect()` 的中心。
-2. 终点 = 目标文件行：左边缘 +12px、垂直中心。若目标行在侧栏可视区外，先把侧栏滚动到目标居中。
+1. 起点 = Neo 头像嘴部：`.neo-avatar` 的 `getBoundingClientRect()` × 嘴部相对位置（`MOUTH` 比例，按 256×256 源图估算，可目测微调）。
+2. 终点 = 目标文件行：左边缘 +12px、垂直中心。若目标行在侧栏可视区外，先把侧栏滚动到目标居中；树中无匹配时先刷新工作区树 + 展开祖先目录，再等两帧重匹配。
 3. **L 形路径**：`(sx,sy) → (sx,TY) → (TX,TY)`——先垂直后水平。按每 8px 一个采样点插值成点列 `pts`。
-4. 释放瞬间：`CORE.burst()`（核心 700ms 增能）+ `SND.worm()`。
+4. 释放瞬间：Neo 头像张嘴（`wormActive+1` → `is-talking is-burst`，700ms 脉冲）+ `SND.worm()`。
 
 ### 6.3 蠕虫渲染（每帧）
 
@@ -287,61 +304,69 @@ Demo 树（原样复刻）：`src/core/{neural-core.js 8.2k, synapse-bus.js 3.1k
 ### 7.1 发送消息
 
 ```
-输入 → addMsg('user') → SND.send() → 日志记录
-  → 命中 /clear：清空 feed，结束
-  → 命中 /edit（或含文件名）：进入入侵流程（7.3）
-  → 其他：setState(RUNNING) → 渲染 trace 并逐步执行（每步完成播 SND.step）
-       → setState(STREAMING) → addMsg('agent') → 打字机流式输出
-       → 完成后 SND.reply() → setState(READY)
+输入 → pushUser（OPERATOR 回合 + 注入解码）→ SND.send() → 日志记录
+  → window.zion.prompt（真实 pi agent 会话）
+  → 事件流驱动：
+    agent_start          → armTurn()（下一内容开新回合）+ RUNNING
+    message_update       → text_delta → queueDelta(text)；thinking_delta → queueDelta(thinking)；+ STREAMING
+    tool_execution_start → toolStart + RUNNING；编辑类调用 → 蠕虫入侵（§6，同步路径触发）
+    tool_execution_end   → toolEnd（写 dur/状态，result.patch 升级 diff）
+    turn_end             → addUsage(usage.totalTokens)（结算行与状态栏 token 的真实来源）
+    agent_end / agent_settled → closeTurn()（写结算行）+ READY + SND.reply()
 ```
 
-**打字机参数**：每 tick 输出 1~3 个随机字符；普通字符间隔 `16 + random*22` ms，遇 `\n` 停顿 120ms；每字符 token 计数 +2。
+**无打字机**：真实流式"收到多少吐多少"，事件进 op 队列、rAF 合帧一次 flush（§8.2），保持 caret/中断/token 语义。
 
 ### 7.2 中断
 
-- 生成中点击按钮 / 按 Enter：`abortStream = true` → `setState('CANCELLING')` → `SND.abort()` → 日志 `[INT] 操作员中断当前生成`。
-- trace 循环和打字机循环在下一拍检查 `abortStream` 并退出；打字机会追加红色 `[已被操作员中断]`。
+- 生成中点击「中断」/ 按 Enter：`setSessionState('CANCELLING')` + `markInterrupted()`（活动回合打中断标记）+ `SND.abort()` + `window.zion.abort()` → 日志 `[INT] 操作员中断当前生成`。
+- 中断回合照常闭环：雨轨凝为 ◆，结算行首词 `已中断`、整行转红。
 
-### 7.3 文件入侵（点击文件 或 输入 /edit）
+### 7.3 编辑类工具调用入侵
 
 ```
-setState(RUNNING) → trace 三步：
-  [locate] 定位目标 <path>
-  [inject] 释放蠕虫 · 注入载荷
-  [diff]   回读扇区 · 渲染差异
-→ trace 完成后 releaseWorm()（6.2–6.4）
-→ 命中回调：SND.breach() + 日志 [PWN]
-→ addDiffCard() + .reveal 入场 → SND.reply() → setState(READY)
+tool_execution_start（同步路径，不依赖 React 渲染时序——bash 等快工具的
+  tool_end 可能先于 useEffect 到达）：
+  parseEditFromTool(toolName, args) → EditInfo（bash 写操作启发式 / edit 的 edits[] / write 的 content / patch）
+→ 日志 [WORM] 释放蠕虫 → 定位文件树目标行（无匹配则刷新树 + 展开祖先目录）
+→ releaseWorm()（6.2–6.4）
+→ 命中回调：SND.breach() + 日志 [PWN] + revealEdit(toolCallId)
+→ DiffCard(.reveal) 扫入回传
 ```
 
-日志全程可追溯：`[WORM] 神经核心释放蠕虫 → <path>`（琥珀）→ `[PWN] 蠕虫命中 · 取得写入权限` → `覆写扇区完成 → <path>`。
+日志全程可追溯：`[WORM] 释放蠕虫 → <path>`（琥珀）→ `[PWN] 蠕虫命中 · 取得写入权限` → `覆写扇区完成 → <path>`。
 
-`/edit` 指令支持从输入中正则提取文件名：`/([\w\-.]+\.(?:js|ts|css|html|json|md))/i`，在树中按文件名定位完整路径，找不到则落到 `src/core/<name>`。
+### 7.4 命令面板（palette）
 
-### 7.4 快捷指令（demo 话术，真实接入后由模型生成）
-
-四个按钮：`/status 系统状态`、`/trace 回放链路`、`检索记忆库`、`扫描项目风险`。对应的演示回复脚本见源文件 `REPLIES` 数组（含每条回复的 trace 步骤与全文文案，复刻 demo 时原样搬运即可）。
+输入栏以 `/` 开头触发弹出清单：聚合本机全部 skills（用户级/共享/项目/扩展包）与命令（主进程 `skillscan.mjs` 扫描、`zion:list-commands` 传输）；↑↓/Enter/Tab/Esc 操作，选中 skill 插入「运行技能 X：」、命令插入 `/name`（执行语义属宿主层，面板只做插入）。
 
 ### 7.5 其他
 
-- 点击页面任意处后自动把焦点还给输入框（`mousedown` 后 `setTimeout(focus)`）。
+- 点击页面任意处后自动把焦点还给输入框（豁免弹层：AskDialog/项目面板/命令面板/重命名输入）。
 - AudioContext 在首次 `pointerdown`/`keydown` 时解锁。
-- `SND: ON/OFF` 切换音效。
+- `SND: ON/OFF` 切换音效；`DEC: ON/OFF` 切换注入解码（§5.6）。
 
 ---
 
-## 8. 全局状态机与派生信号
+## 8. 全局状态机与渲染管线
 
-**会话状态**（4 态）：`READY` / `RUNNING` / `STREAMING` / `CANCELLING`。
+### 8.1 会话状态（4 态）：`READY` / `RUNNING` / `STREAMING` / `CANCELLING`
 
-`setState(state)` 是**唯一状态源**，一次更新全部关联 UI：
+`setSessionState(state)` 是**唯一状态源**，一次更新全部关联 UI：
 
-| 状态 | 状态栏文字色 | 会话头芯片 | 神经核心标签 | FX.speed | FX.energy |
-|---|---|---|---|---|---|
-| READY | 绿 | `.on` 绿 | IDLE | 1 | 0.3 |
-| RUNNING / STREAMING / CANCELLING | 琥珀 | `.warn` 琥珀 | ACTIVE | 2.2 | 0.85 |
+| 状态 | 状态栏文字色 | 会话头芯片 | FX.speed | FX.energy |
+|---|---|---|---|---|
+| READY | 绿 | `.on` 绿 | 1 | 0.3 |
+| RUNNING / STREAMING / CANCELLING | 琥珀 | `.warn` 琥珀 | 2.2 | 0.85 |
 
-**派生信号 `FX = { speed, energy }`** 驱动所有环境动画：数字雨下落速度、神经核心旋转速度与亮度都随 `FX` 变化——**忙碌时整个界面"活"起来，这是氛围与状态绑定的关键设计，不要做成随机波动。**
+**派生信号 `FX = { speed, energy }`** 驱动所有环境动画：背景数字雨、凝结雨轨的下落速度都随 `FX` 变化（帧节流 `90 / FX.speed`）——**忙碌时整个界面"活"起来，这是氛围与状态绑定的关键设计，不要做成随机波动。**FX 是模块级可变对象，动画循环每帧直读，**不进 React 渲染路径**。
+
+### 8.2 回合生命周期与渲染管线（v5 性能设计的核心）
+
+- **op 队列**：agent 事件（arm/delta/toolStart/toolEnd/usage/interrupt/close）不直接 set state，进 `opQueue`，rAF 时一次 `_flush`——每帧至多一次 store 更新，长会话流式不丢帧。
+- **不可变粒度 = 回合**：flush 只克隆被触及的回合对象（`turns[id]` 换引用），`order` 仅在新增回合时变。`TurnView = memo()`，props 只有 `id/active/streaming`——**历史回合零重渲染**。
+- **回合开闭**：`agent_start` → `arm`（下一内容开新回合）；`agent_end`/`agent_settled`/`message_end(error)` → `close`（写结算行）。`turn_end` → `usage`（Σtokens 累积）。非流式动作（pushUser/applySession/reset）先同步 drain 队列保证全局顺序。
+- **自动滚动**：只订阅末回合对象变化（`scrollTop = scrollHeight`，不用 `scrollIntoView`）。
 
 ---
 
@@ -365,71 +390,80 @@ setState(RUNNING) → trace 三步：
 
 ## 10. 可访问性（不可省略）
 
-- `prefers-reduced-motion: reduce` 时：数字雨画静态帧、神经核心静止、蠕虫/扰码跳过、消息/trace/diff 入场动画关闭、光标不闪烁、日志抽屉无过渡。
+- `prefers-reduced-motion: reduce` 时：数字雨画静态帧、凝结雨轨只画一帧静态雨、蠕虫/扰码跳过、注入解码跳过、消息/trace/diff/结算行入场动画关闭、凝结涟漪关闭、光标不闪烁、日志抽屉无过渡、Neo 头像 burst 关闭。
 - `:focus-visible`：1px `--accent` 描边 + 2px offset，全局生效。
-- Agent 卡片 `tabindex="0" role="button"` + 键盘触发。
+- 会话卡 / 工具卡步骤行可键盘操作（`tabindex="0" role="button"` + Enter/Space 触发）。
 - `#feed` 加 `aria-live="polite"`；`#term-body` 加 `role="log"`。
-- 所有 canvas（`#rain` / `#signal` / `#core`）和装饰元素 `aria-hidden="true"`。
+- 所有 canvas（`#rain` / `#signal` / 雨轨）和装饰元素 `aria-hidden="true"`。
 - 状态全部"符号+文字"双编码，不单独依赖颜色。
 
 ---
 
-## 11. 从原型到真实 Agent UI 的替换点
+## 11. demo → 真实实现映射（已落地情况）
 
-复刻成"真正的 Agent UI"时，以下 mock 层是唯一需要替换的部分，UI 层原样保留：
+| 原型（demo） | 真实实现 | 状态 |
+|---|---|---|
+| `REPLIES` 正则脚本回复 | pi SDK 真实事件流（主进程 `createAgentSession` 原样透传） | ✅ 已落地 |
+| `runTrace` 假步骤节奏 | `tool_execution_start/end` 驱动（真实计时 dur） | ✅ 已落地 |
+| `EDIT_DEMOS` 写死 diff | `parseEditFromTool` 解析真实 args / `result.patch` 升级 | ✅ 已落地 |
+| `FILE_TREE` 静态数组 | 主进程 `zion:scan-tree` 真实扫描工作目录 | ✅ 已落地 |
+| `tokenCount += chunk*2` 假计数 | `turn_end` 的 `usage.totalTokens` 真实求和 | ✅ 已落地 |
+| 点击文件 → 固定入侵演示 | 点击文件 = 真实 `读取 <path>` prompt；蠕虫改由编辑类工具调用触发 | ✅ 已落地 |
+| Agent 卡片静态状态 | 会话列表（真实持久化会话，切换/新建/重命名/软删） | ✅ 已落地 |
+| 神经核心同心环 | Neo 头像（蠕虫从嘴部释放） | ✅ 已替换 |
+| v5 会话区（回合/雨轨/思考块/结算行/玻璃/注入解码） | 见 §5.6–5.8、§8.2 | ✅ 已落地 |
+| `上下文 N / 128k` 静态芯片 | 真实上下文用量 | ⬜ 未接（占位） |
+| 打字机 | 无——真实流式 + rAF 合帧 | — 已废弃 |
 
-| Mock（原型） | 替换为（真实实现） |
-|---|---|
-| `REPLIES` 数组的正则匹配脚本回复 | 真实 LLM API 的 SSE/WebSocket 流式响应，喂给 `streamReply` |
-| `runTrace` 的 `setTimeout(380+random*420)` 假步骤 | 真实工具调用事件流（tool_call / tool_result）驱动步骤状态 |
-| `EDIT_DEMOS` 写死的 diff 数据 | 模型产出的 unified diff，解析成 `{n, t, c}` 行结构 |
-| `FILE_TREE` 静态数组 | 真实项目文件树 API |
-| `tokenCount += chunk * 2` 假计数 | 真实 token usage 上报 |
-| `上下文 12.4k / 128k` 静态芯片 | 真实上下文用量 |
-| 点击文件 → 固定入侵演示 | 保留蠕虫动画，作为"agent 正在修改该文件"的可视化反馈 |
-| Agent 卡片静态状态 | 真实 agent 注册表 + 心跳 |
-
-**接入约束**：流式响应到达时按"收到多少吐多少"驱动打字机（或直接把 chunk 追加进 `streamReply` 的缓冲），保持 caret、中断、token 计数语义不变。
+**接入约束**：流式响应到达时按"收到多少吐多少"进 op 队列（§8.2），保持 caret、中断、token 计数语义不变。
 
 ---
 
-## 12. React 实现建议
+## 12. React 实现结构（对应当前真实代码）
 
 ### 12.1 组件拆分
 
 ```
 <App>
-  <RainCanvas />            // §4.1 数字雨（useEffect + rAF，读 FX context）
-  <SignalCanvas />          // §6 蠕虫画布（暴露 releaseWorm 给外部）
+  <RainCanvas />            // §4.1 数字雨（useEffect + rAF，直读模块级 fx 对象）
+  <SignalCanvas />          // §6 蠕虫画布（导出 releaseWorm 供事件层同步调用）
   <Scanlines />             // §4.2 纯 div
+  <AskDialog /> <ToastHost /> <ProjectPanel />
   <TitleBar clock />        // §5.1
   <Sidebar>
-    <NeuralCore agent state />   // §5.2 canvas + CORE.burst()
-    <AgentList onSelect />       // §5.3
-    <FileTree onBreach />        // §5.4
+    <NeoAvatar />           // §5.2 两帧贴图，wormActive>0 张嘴
+    <SessionList />         // §5.3 .scard 真实会话卡
+    <FileTree />            // §5.4（蠕虫目标定位经 store.normPath/matchTreeRow）
   </Sidebar>
   <Console>
-    <SessionHeader model state context />  // §5.5
-    <Feed messages />                      // §5.6–5.8，aria-live
-      <Message /> <TraceBlock /> <DiffCard reveal />
-    <InputBar onSend streaming onAbort />  // §5.9
+    <SessionHeader />       // §5.5
+    <Feed aria-live>        // §5.6–5.8
+      <TurnView memo>       // 回合边界：历史回合零重渲染
+        <TurnRail />        // 凝结雨轨（活动回合 canvas，闭环卸载凝 ◆）
+        <OperatorBody />    // OPERATOR 正文 + 注入解码
+        <details.think />   // 思考块（thinking 段，默认折叠）
+        <ToolCard memo>     // .trace + 玻璃 + 收尾涟漪
+          <DiffCard reveal />
+        <SettleLine />      // 结算行（◆ 已结算/已中断/错误）
+    <InputBar />            // §5.9（busy 时发送钮变「中断」）
   </Console>
-  <LogDrawer open lines />    // §5.10
-  <StatusBar ... />           // §5.11
+  <LogDrawer open lines />  // §5.10
+  <StatusBar />             // §5.11（tokens 真实 usage / SND / DEC / 状态字）
 </App>
 ```
 
 ### 12.2 关键实现注意
 
-- **三个 canvas 各用一个 `useEffect` + `requestAnimationFrame` 循环**，`FX` 和 `CORE.burstAt` 用 `useRef` 保存——动画循环里绝不走 React state，避免每帧重渲染。
-- `FX` / `SND` / `REDUCED` 做成模块级单例或 Context（只读广播，不触发渲染）。
-- 消息列表、`tokenCount`、会话状态走 state；`feed` 滚动用 ref 直接操作 `scrollTop`（**不要用 `scrollIntoView`**）。
-- 蠕虫的 DOM 测量（`getBoundingClientRect`）在事件回调里做，不在渲染期做。
-- 打字机用 ref 持有定时器，中断时 clear；reduced-motion 用 `window.matchMedia('(prefers-reduced-motion: reduce)').matches` 在模块加载时读一次即可。
-- CSS 直接搬 `index-v4.html` 的 `<style>` 内容（转成 CSS Module / global css 均可），**令牌值一个都不要改**。
+- **canvas 动画循环绝不走 React state**：背景雨/蠕虫/雨轨各用 `useEffect` + rAF，`fx` 等共享信号是模块级可变对象，每帧直读。
+- **store 不可变粒度 = 回合**（§8.2）：`turns: Record<id, Turn>` 只克隆被触及的回合；`order` 仅新增回合时换引用；`TurnView`/`ToolCard` 均 memo。
+- `expandedTools` / `revealedEdits` 等按 id 选择（`useFeed(s => !!s.xxx[id])`），避免整表订阅。
+- 蠕虫的 DOM 测量（`getBoundingClientRect`）在事件回调里做，不在渲染期做；蠕虫触发走 `tool_execution_start` 的同步路径，不等 useEffect。
+- reduced-motion 用 `matchMedia('(prefers-reduced-motion: reduce)').matches` 在模块加载时读一次。
+- 判别联合收窄用**正向判定**（`kind === 'tool'` 分支在前）——tsgo（TypeScript 7）下对"排除双分支后剩余"的反向收窄不生效。
+- CSS 为单文件 `src/renderer/src/styles.css`，令牌值与本文档 §2 一致，**一个都不要改**。
 
 ---
 
 ## 附：一句话风格摘要
 
-> 深绿黑底上的单色磷光绿终端：背景一层低速数字雨，侧栏一枚同心环神经核心，对话流里工具链与 diff 用细线对角角标框住，修改文件时神经核心释放字符蠕虫沿 L 形路径入侵文件名并扰码解密、diff 分段扫入——全部氛围动画由会话状态（READY/RUNNING）统一驱动，琥珀色只在执行中出现。
+> 深绿黑底上的单色磷光绿终端：背景一层低速数字雨，侧栏一枚像素 Neo 头像，对话流是回合序列——OPERATOR 消息带注入解码，agent 回合左侧凝结雨轨随流式下落、闭环凝为 ◆ 并落出结算行（真实 tokens/耗时），思考折叠成块，工具链与 diff 用细线对角角标 + 液态玻璃框住（仅活动回合开背透模糊），修改文件时 Neo 张嘴吐出字符蠕虫沿 L 形路径入侵文件名并扰码解密、diff 分段扫入——全部氛围动画由会话状态（READY/RUNNING）统一驱动，琥珀色只在执行中出现。
