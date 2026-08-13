@@ -135,11 +135,12 @@ function NeuralCable({
         return;
       }
 
-      const headDistance = cycleTime * PULSE_SPEED_PX_PER_SECOND / 1000;
+      // SVG path 仍按 Neo → 仓体定义；active 信号包从 path 尾端反向回传到 Neo。
+      const headDistance = length - cycleTime * PULSE_SPEED_PX_PER_SECOND / 1000;
       const mutationStep = Math.floor(now / 120);
       chars.forEach((char, index) => {
         if (!char) return;
-        const distance = headDistance - index * PULSE_STEP;
+        const distance = headDistance + index * PULSE_STEP;
         if (distance < 0 || distance > length) {
           char.setAttribute('visibility', 'hidden');
           return;
