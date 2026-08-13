@@ -77,6 +77,8 @@ export default function Sidebar({ onSelectFile }: { onSelectFile: (path: string)
   const [confirmId, setConfirmId] = useState<string | null>(null);
   const confirmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const deckRef = useRef<HTMLDivElement | null>(null);
+  const wheelEndTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const wheelGestureActive = useRef(false);
 
   // 初始：文件树 + 会话列表；实时监听工作区变化（新建/删除/改名 → 主进程防抖推送）
   useEffect(() => {
@@ -88,14 +90,41 @@ export default function Sidebar({ onSelectFile }: { onSelectFile: (path: string)
     return () => offTree?.();
   }, [setTree, setSessions]);
 
-  // 堆叠卡：测量每卡完整高度 → --h（负 margin 覆盖量 = 完整高 - 露出区 80px）
+  // 会话视窗固定展示 3 个槽位；一次滚轮手势只移动一个槽位，随后由 CSS scroll-snap 对齐。
   useEffect(() => {
     const deck = deckRef.current;
     if (!deck) return;
-    deck.querySelectorAll<HTMLElement>('.scard').forEach((el) => {
-      el.style.setProperty('--h', el.scrollHeight + 2 + 'px');
-    });
-  }, [sessions, currentSessionId]);
+
+    const onWheel = (event: WheelEvent) => {
+      const cards = Array.from(deck.querySelectorAll<HTMLElement>('.scard'));
+      if (cards.length <= 3 || event.deltaY === 0) return;
+
+      event.preventDefault();
+      if (!wheelGestureActive.current) {
+        const current = cards.reduce((nearest, card, index) =>
+          Math.abs(card.offsetTop - deck.scrollTop) < Math.abs(cards[nearest].offsetTop - deck.scrollTop)
+            ? index
+            : nearest, 0);
+        const maxStart = Math.max(0, cards.length - 3);
+        const next = Math.max(0, Math.min(maxStart, current + Math.sign(event.deltaY)));
+        const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        deck.scrollTo({ top: cards[next].offsetTop, behavior: reduceMotion ? 'auto' : 'smooth' });
+        wheelGestureActive.current = true;
+      }
+
+      if (wheelEndTimer.current) clearTimeout(wheelEndTimer.current);
+      wheelEndTimer.current = setTimeout(() => {
+        wheelGestureActive.current = false;
+      }, 140);
+    };
+
+    deck.addEventListener('wheel', onWheel, { passive: false });
+    return () => {
+      deck.removeEventListener('wheel', onWheel);
+      if (wheelEndTimer.current) clearTimeout(wheelEndTimer.current);
+      wheelGestureActive.current = false;
+    };
+  }, [sessions.length]);
 
   const toggleDir = (n: FileNode) => {
     const flip = (nodes: FileNode[]): FileNode[] =>
@@ -198,15 +227,31 @@ export default function Sidebar({ onSelectFile }: { onSelectFile: (path: string)
         </div>
       </div>
 
-      <div className="side-section sessions">
-        <h3>会话</h3>
-        <div className="deck" ref={deckRef}>
+      <div className="side-section sessions" data-od-id="session-section">
+        <div className="session-head">
+          <h3 data-od-id="session-heading">会话</h3>
+          <button
+            className="session-new-btn"
+            data-od-id="session-new"
+            disabled={switching}
+            onClick={() => void newSession()}
+          >
+            ＋ 新建会话
+          </button>
+        </div>
+        <div
+          className="deck"
+          ref={deckRef}
+          aria-label="会话列表，每次显示三个会话"
+          data-od-id="session-list"
+        >
           {sessions.map((s) => {
             const active = s.id === currentSessionId;
             return (
               <div
                 key={s.id}
                 className={`scard${active ? ' active' : ''}`}
+                data-od-id={`session-card-${s.id.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}`}
                 role="button"
                 tabIndex={0}
                 aria-current={active || undefined}
@@ -273,13 +318,10 @@ export default function Sidebar({ onSelectFile }: { onSelectFile: (path: string)
             );
           })}
           {sessions.length === 0 && (
-            <div className="ft-row" style={{ color: 'var(--text-tertiary)' }}>
+            <div className="session-empty">
               （尚无会话）
             </div>
           )}
-          <button className="new-btn" disabled={switching} onClick={() => void newSession()}>
-            ＋ 新建会话
-          </button>
         </div>
       </div>
 
