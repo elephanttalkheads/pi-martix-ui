@@ -16,6 +16,10 @@ _Avoid_: 任务、请求、session
 pi SDK 持久化的对话上下文（`~/.pi/agent/sessions/` JSONL）。界面左侧会话列表展示真实会话（首条消息摘要为标题/消息数/上次活动时间），点击切换——主进程按会话懒创建 AgentSession 实例（Map 缓存），事件转发只发当前会话；切换时 feed 恢复该会话的 user/assistant 文本历史（工具链/diff 不重建）。
 _Avoid_: 聊天记录、对话
 
+**会话培育仓**：
+侧栏中一个真实会话的视觉容器：中央名称常驻，悬停或键盘聚焦时投射按需详情。仓门仅在该会话等待删除确认时开启；当前会话由亮点与亮度表示，不创造新的会话类型。
+_Avoid_: 会话卡、session pod
+
 **会话状态机**：
 界面全局 4 态：`READY`（空闲）/ `RUNNING`（工具执行中）/ `STREAMING`（文本流式输出中）/ `CANCELLING`（中断处理中）。由 agent 事件唯一驱动：agent_start→RUNNING、tool_execution_start→RUNNING、message_update→STREAMING、abort→CANCELLING、agent_end→READY。
 _Avoid_: busy、loading

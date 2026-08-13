@@ -1,0 +1,394 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ZION · 培育仓全息会话 UI Demo</title>
+  <style>
+    @font-face {
+      font-family: "Sarasa Term SC";
+      src: url("./font/SarasaTermSC-Regular.ttf") format("truetype");
+      font-display: swap;
+    }
+
+    :root {
+      --bg: oklch(8% 0.025 150);
+      --surface: oklch(11% 0.035 150 / 0.95);
+      --fg: oklch(86% 0.30 145);
+      --muted: oklch(63% 0.20 145);
+      --border: oklch(86% 0.30 145 / 0.22);
+      --accent: oklch(91% 0.22 145);
+      --danger: oklch(63% 0.24 28);
+      --font: "Sarasa Term SC", "Microsoft YaHei", monospace;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { min-height: 100%; }
+    body {
+      margin: 0;
+      display: grid;
+      place-items: center;
+      background: var(--bg);
+      color: var(--fg);
+      font-family: var(--font);
+      font-size: 14px;
+      line-height: 1.7;
+    }
+
+    button { font: inherit; }
+    button:focus-visible {
+      outline: 1px solid var(--accent);
+      outline-offset: 3px;
+    }
+
+    .demo-shell {
+      position: relative;
+      width: min(100%, 480px);
+      min-height: 100vh;
+      padding: 0 16px 24px;
+      overflow: hidden;
+      background:
+        linear-gradient(oklch(86% 0.30 145 / 0.03) 1px, transparent 1px) 0 0 / 100% 4px,
+        var(--surface);
+      border-inline: 1px solid var(--border);
+    }
+
+    .demo-shell::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background: repeating-linear-gradient(90deg, transparent 0 43px, oklch(86% 0.30 145 / 0.035) 44px);
+    }
+
+    .topline {
+      position: relative;
+      z-index: 1;
+      height: 34px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      color: var(--muted);
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .topline strong {
+      color: var(--fg);
+      font-weight: 500;
+      letter-spacing: 0.16em;
+    }
+
+    .neo-zone {
+      position: relative;
+      z-index: 1;
+      display: grid;
+      justify-items: center;
+      padding: 14px 0 8px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .neo-zone img {
+      width: 96px;
+      height: 96px;
+      object-fit: contain;
+      image-rendering: pixelated;
+    }
+
+    .neo-label {
+      margin-top: -5px;
+      color: var(--muted);
+      font-size: 11px;
+      letter-spacing: 0.22em;
+    }
+
+    .session-section {
+      position: relative;
+      z-index: 1;
+      padding-top: 10px;
+    }
+
+    .section-head {
+      min-height: 44px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .section-head h1 {
+      flex: 1;
+      margin: 0;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 500;
+      line-height: 1.4;
+      letter-spacing: 0.18em;
+    }
+
+    .section-head span {
+      color: var(--muted);
+      font-size: 10px;
+      letter-spacing: 0.04em;
+    }
+
+    .pod-list {
+      display: grid;
+      grid-template-rows: repeat(3, 154px);
+      gap: 4px;
+    }
+
+    .session-pod {
+      position: relative;
+      width: 100%;
+      min-height: 44px;
+      padding: 0;
+      appearance: none;
+      overflow: visible;
+      isolation: isolate;
+      background: transparent;
+      border: 1px solid transparent;
+      color: var(--fg);
+      cursor: pointer;
+    }
+
+    .session-pod::before {
+      content: "";
+      position: absolute;
+      z-index: 1;
+      left: 50%;
+      bottom: 18px;
+      width: 82%;
+      height: 34px;
+      transform: translateX(-50%);
+      opacity: 0;
+      background: linear-gradient(to bottom, oklch(86% 0.30 145 / 0.18), transparent);
+      clip-path: polygon(42% 0, 58% 0, 72% 100%, 28% 100%);
+      transition: opacity 140ms ease;
+      pointer-events: none;
+    }
+
+    .pod-art {
+      position: absolute;
+      z-index: 2;
+      left: 50%;
+      bottom: -58px;
+      width: 100%;
+      height: auto;
+      transform: translateX(-50%);
+      image-rendering: pixelated;
+      pointer-events: none;
+      user-select: none;
+      filter: brightness(0.78) saturate(0.88);
+      transition: filter 150ms ease;
+    }
+
+    .pod-code {
+      position: absolute;
+      z-index: 4;
+      left: 50%;
+      bottom: 30px;
+      min-width: 64px;
+      min-height: 28px;
+      padding: 3px 10px;
+      transform: translateX(-50%);
+      display: grid;
+      place-items: center;
+      background: oklch(7% 0.025 150 / 0.9);
+      border: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 10px;
+      letter-spacing: 0.12em;
+    }
+
+    .hologram {
+      position: absolute;
+      z-index: 6;
+      left: 38px;
+      right: 38px;
+      top: 0;
+      min-height: 70px;
+      padding: 10px 14px 9px 18px;
+      overflow: hidden;
+      opacity: 0;
+      transform: translateY(10px) scaleY(0.72);
+      transform-origin: bottom center;
+      background: oklch(12% 0.07 150 / 0.84);
+      border: 1px solid oklch(86% 0.30 145 / 0.52);
+      clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
+      transition: opacity 140ms ease, transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+      pointer-events: none;
+    }
+
+    .hologram::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      opacity: 0.52;
+      background: repeating-linear-gradient(0deg, transparent 0 3px, oklch(91% 0.22 145 / 0.11) 4px);
+    }
+
+    .hologram::after {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 3px;
+      height: 100%;
+      background: var(--accent);
+      box-shadow: 0 0 12px oklch(86% 0.30 145 / 0.68);
+    }
+
+    .holo-title,
+    .holo-summary {
+      position: relative;
+      z-index: 1;
+      display: block;
+      min-width: 0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      text-align: left;
+    }
+
+    .holo-title {
+      color: var(--accent);
+      font-size: 13px;
+      font-weight: 500;
+      line-height: 1.45;
+      letter-spacing: 0.03em;
+    }
+
+    .holo-summary {
+      margin-top: 3px;
+      color: var(--fg);
+      font-size: 11px;
+      line-height: 1.55;
+      letter-spacing: 0;
+    }
+
+    .holo-anchor {
+      position: absolute;
+      z-index: 5;
+      left: 50%;
+      top: 69px;
+      width: 1px;
+      height: 30px;
+      opacity: 0;
+      background: var(--accent);
+      box-shadow: 0 0 8px oklch(86% 0.30 145 / 0.64);
+      transition: opacity 140ms ease;
+      pointer-events: none;
+    }
+
+    .session-pod:hover .hologram,
+    .session-pod:focus-visible .hologram {
+      opacity: 1;
+      transform: translateY(0) scaleY(1);
+      animation: holo-flicker 1.8s steps(1, end) infinite;
+    }
+
+    .session-pod:hover .holo-anchor,
+    .session-pod:focus-visible .holo-anchor,
+    .session-pod:hover::before,
+    .session-pod:focus-visible::before {
+      opacity: 1;
+    }
+
+    .session-pod:hover .pod-art,
+    .session-pod:focus-visible .pod-art {
+      filter: brightness(1.08) saturate(1.06);
+    }
+
+    .session-pod:hover .pod-code,
+    .session-pod:focus-visible .pod-code {
+      color: var(--accent);
+      border-color: oklch(86% 0.30 145 / 0.5);
+    }
+
+    @keyframes holo-flicker {
+      0%, 91%, 100% { opacity: 1; }
+      92% { opacity: 0.78; }
+      94% { opacity: 0.92; }
+    }
+
+    .footnote {
+      position: relative;
+      z-index: 1;
+      margin: 8px 0 0;
+      color: var(--muted);
+      font-size: 11px;
+      letter-spacing: 0.02em;
+      text-align: center;
+    }
+
+    @media (max-width: 430px) {
+      .demo-shell { padding-inline: 10px; }
+      .hologram { left: 22px; right: 22px; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .hologram,
+      .pod-art,
+      .holo-anchor,
+      .session-pod::before { transition: none; }
+      .session-pod:hover .hologram,
+      .session-pod:focus-visible .hologram { animation: none; }
+    }
+  </style>
+</head>
+<body>
+  <main class="demo-shell" data-od-id="session-hologram-demo">
+    <header class="topline" data-od-id="demo-header">
+      <strong>ZION / HOLOGRAPHIC LINK</strong>
+      <span>悬停投影态 · 演示数据</span>
+    </header>
+
+    <section class="neo-zone" data-od-id="neo-region" aria-label="当前 Agent">
+      <img src="../src/renderer/src/assets/neo-avatar/neo-idle.png" alt="Neo 像素头像" />
+      <div class="neo-label">NEO · ACTIVE LINK</div>
+    </section>
+
+    <section class="session-section" data-od-id="session-section" aria-labelledby="session-heading">
+      <div class="section-head">
+        <h1 id="session-heading" data-od-id="session-heading">会话培育仓</h1>
+        <span>悬停或 Tab 聚焦查看投影</span>
+      </div>
+
+      <div class="pod-list" data-od-id="session-pod-list">
+        <button class="session-pod" data-od-id="session-pod-01" aria-describedby="summary-01">
+          <span class="hologram" aria-hidden="false">
+            <span class="holo-title">培育仓会话接入</span>
+            <span class="holo-summary" id="summary-01">将横向培育仓替换现有会话卡，并保留三槽吸附逻辑。</span>
+          </span>
+          <span class="holo-anchor" aria-hidden="true"></span>
+          <img class="pod-art" src="../src/renderer/src/assets/session-pod-horizontal-closed.png" alt="第一会话培育仓" />
+          <span class="pod-code">SESSION 01</span>
+        </button>
+
+        <button class="session-pod" data-od-id="session-pod-02" aria-describedby="summary-02">
+          <span class="hologram" aria-hidden="false">
+            <span class="holo-title">重构 Electron 启动流程</span>
+            <span class="holo-summary" id="summary-02">检查单实例锁、Vite 端口与 preload 桥的启动顺序。</span>
+          </span>
+          <span class="holo-anchor" aria-hidden="true"></span>
+          <img class="pod-art" src="../src/renderer/src/assets/session-pod-horizontal-closed.png" alt="第二会话培育仓" />
+          <span class="pod-code">SESSION 02</span>
+        </button>
+
+        <button class="session-pod" data-od-id="session-pod-03" aria-describedby="summary-03">
+          <span class="hologram" aria-hidden="false">
+            <span class="holo-title">修复流式消息队列</span>
+            <span class="holo-summary" id="summary-03">确保事件在每帧合并后仍保持回合顺序和内容完整。</span>
+          </span>
+          <span class="holo-anchor" aria-hidden="true"></span>
+          <img class="pod-art" src="../src/renderer/src/assets/session-pod-horizontal-closed.png" alt="第三会话培育仓" />
+          <span class="pod-code">SESSION 03</span>
+        </button>
+      </div>
+
+      <p class="footnote">全息层不参与点击命中；点击与键盘切换仍由培育仓本体承担。</p>
+    </section>
+  </main>
+</body>
+</html>

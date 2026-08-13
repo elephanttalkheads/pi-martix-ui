@@ -1,0 +1,324 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ZION · 培育仓会话名称 UI Demo</title>
+  <style>
+    @font-face {
+      font-family: "Sarasa Term SC";
+      src: url("./font/SarasaTermSC-Regular.ttf") format("truetype");
+      font-display: swap;
+    }
+
+    :root {
+      --bg: oklch(8% 0.025 150);
+      --surface: oklch(11% 0.035 150 / 0.94);
+      --surface-strong: oklch(7% 0.025 150 / 0.92);
+      --fg: oklch(86% 0.30 145);
+      --muted: oklch(63% 0.20 145);
+      --border: oklch(86% 0.30 145 / 0.22);
+      --accent: oklch(91% 0.22 145);
+      --danger: oklch(63% 0.24 28);
+      --font: "Sarasa Term SC", "Microsoft YaHei", monospace;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { min-height: 100%; }
+    body {
+      margin: 0;
+      display: grid;
+      place-items: center;
+      background: var(--bg);
+      color: var(--fg);
+      font-family: var(--font);
+      font-size: 14px;
+      line-height: 1.7;
+    }
+
+    button { font: inherit; }
+    button:focus-visible {
+      outline: 1px solid var(--accent);
+      outline-offset: 3px;
+    }
+
+    .demo-shell {
+      position: relative;
+      width: min(100%, 480px);
+      min-height: 100vh;
+      padding: 0 16px 24px;
+      overflow: hidden;
+      background:
+        linear-gradient(oklch(86% 0.30 145 / 0.035) 1px, transparent 1px) 0 0 / 100% 4px,
+        var(--surface);
+      border-inline: 1px solid var(--border);
+    }
+
+    .demo-shell::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      opacity: 0.3;
+      background: repeating-linear-gradient(90deg, transparent 0 43px, oklch(86% 0.30 145 / 0.04) 44px);
+    }
+
+    .topline {
+      position: relative;
+      z-index: 1;
+      height: 34px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      color: var(--muted);
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .topline strong {
+      color: var(--fg);
+      font-weight: 500;
+      letter-spacing: 0.16em;
+    }
+
+    .neo-zone {
+      position: relative;
+      z-index: 1;
+      display: grid;
+      justify-items: center;
+      padding: 18px 0 10px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .neo-zone img {
+      width: 112px;
+      height: 112px;
+      object-fit: contain;
+      image-rendering: pixelated;
+    }
+
+    .neo-label {
+      margin-top: -5px;
+      color: var(--muted);
+      font-size: 11px;
+      letter-spacing: 0.22em;
+    }
+
+    .session-section {
+      position: relative;
+      z-index: 1;
+      padding-top: 14px;
+    }
+
+    .section-head {
+      min-height: 44px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .section-head h1 {
+      flex: 1;
+      margin: 0;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 500;
+      line-height: 1.4;
+      letter-spacing: 0.18em;
+    }
+
+    .section-head span {
+      color: var(--muted);
+      font-size: 10px;
+      letter-spacing: 0.08em;
+    }
+
+    .pod-list {
+      display: grid;
+      grid-template-rows: repeat(3, 116px);
+      gap: 10px;
+    }
+
+    .session-pod {
+      position: relative;
+      width: 100%;
+      min-height: 44px;
+      padding: 0;
+      overflow: hidden;
+      appearance: none;
+      background: transparent;
+      border: 1px solid transparent;
+      color: var(--fg);
+      cursor: pointer;
+      isolation: isolate;
+    }
+
+    .session-pod::before,
+    .session-pod::after {
+      content: "";
+      position: absolute;
+      z-index: 3;
+      width: 14px;
+      height: 8px;
+      border-top: 1px solid var(--border);
+      top: 7px;
+    }
+
+    .session-pod::before { left: 7px; border-left: 1px solid var(--border); }
+    .session-pod::after { right: 7px; border-right: 1px solid var(--border); }
+
+    .session-pod:hover,
+    .session-pod[aria-current="true"] {
+      border-color: var(--border);
+      background: oklch(86% 0.30 145 / 0.025);
+    }
+
+    .pod-art {
+      position: absolute;
+      z-index: 1;
+      left: 50%;
+      top: 44%;
+      width: 100%;
+      height: auto;
+      transform: translate(-50%, -50%);
+      image-rendering: pixelated;
+      pointer-events: none;
+      user-select: none;
+      filter: brightness(0.82) saturate(0.9);
+      transition: filter 160ms ease;
+    }
+
+    .session-pod:hover .pod-art,
+    .session-pod[aria-current="true"] .pod-art {
+      filter: brightness(1.06) saturate(1.05);
+    }
+
+    .pod-nameplate {
+      position: absolute;
+      z-index: 4;
+      left: 50%;
+      top: 50%;
+      width: min(72%, 292px);
+      min-height: 36px;
+      transform: translate(-50%, -50%);
+      display: grid;
+      grid-template-columns: 36px minmax(0, 1fr) 22px;
+      align-items: center;
+      background: var(--surface-strong);
+      border: 1px solid oklch(86% 0.30 145 / 0.32);
+      box-shadow: inset 0 1px 0 oklch(94% 0.09 145 / 0.1);
+    }
+
+    .pod-index,
+    .pod-state {
+      color: var(--muted);
+      font-size: 10px;
+      letter-spacing: 0.06em;
+      text-align: center;
+    }
+
+    .pod-index { border-right: 1px solid var(--border); }
+
+    .pod-title {
+      min-width: 0;
+      padding: 0 10px;
+      color: var(--fg);
+      font-size: 13px;
+      font-weight: 500;
+      letter-spacing: 0.02em;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .session-pod[aria-current="true"] .pod-title,
+    .session-pod[aria-current="true"] .pod-state {
+      color: var(--accent);
+    }
+
+    .session-pod[aria-current="true"] .pod-state::before { content: "●"; }
+    .session-pod:not([aria-current="true"]) .pod-state::before { content: "○"; }
+
+    .footnote {
+      position: relative;
+      z-index: 1;
+      margin: 14px 0 0;
+      color: var(--muted);
+      font-size: 11px;
+      letter-spacing: 0.02em;
+      text-align: center;
+    }
+
+    @media (max-width: 430px) {
+      .demo-shell { padding-inline: 10px; }
+      .pod-nameplate { width: 78%; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .pod-art { transition: none; }
+    }
+  </style>
+</head>
+<body>
+  <main class="demo-shell" data-od-id="session-name-demo">
+    <header class="topline" data-od-id="demo-header">
+      <strong>ZION / SESSION POD</strong>
+      <span>名称常驻态 · 演示数据</span>
+    </header>
+
+    <section class="neo-zone" data-od-id="neo-region" aria-label="当前 Agent">
+      <img src="../src/renderer/src/assets/neo-avatar/neo-idle.png" alt="Neo 像素头像" />
+      <div class="neo-label">NEO · ACTIVE LINK</div>
+    </section>
+
+    <section class="session-section" data-od-id="session-section" aria-labelledby="session-heading">
+      <div class="section-head">
+        <h1 id="session-heading" data-od-id="session-heading">会话培育仓</h1>
+        <span>固定显示 3 个会话</span>
+      </div>
+
+      <div class="pod-list" data-od-id="session-pod-list">
+        <button class="session-pod" data-od-id="session-pod-01" aria-current="true">
+          <img class="pod-art" src="../src/renderer/src/assets/session-pod-horizontal-closed.png" alt="仓门关闭的第一会话培育仓" />
+          <span class="pod-nameplate">
+            <span class="pod-index">01</span>
+            <span class="pod-title">培育仓会话接入</span>
+            <span class="pod-state" aria-label="当前会话"></span>
+          </span>
+        </button>
+
+        <button class="session-pod" data-od-id="session-pod-02">
+          <img class="pod-art" src="../src/renderer/src/assets/session-pod-horizontal-closed.png" alt="仓门关闭的第二会话培育仓" />
+          <span class="pod-nameplate">
+            <span class="pod-index">02</span>
+            <span class="pod-title">重构 Electron 启动流程</span>
+            <span class="pod-state" aria-label="非当前会话"></span>
+          </span>
+        </button>
+
+        <button class="session-pod" data-od-id="session-pod-03">
+          <img class="pod-art" src="../src/renderer/src/assets/session-pod-horizontal-closed.png" alt="仓门关闭的第三会话培育仓" />
+          <span class="pod-nameplate">
+            <span class="pod-index">03</span>
+            <span class="pod-title">修复流式消息队列</span>
+            <span class="pod-state" aria-label="非当前会话"></span>
+          </span>
+        </button>
+      </div>
+
+      <p class="footnote">点击任一培育仓，查看当前会话名称状态。</p>
+    </section>
+  </main>
+
+  <script>
+    const pods = [...document.querySelectorAll('.session-pod')];
+    pods.forEach((pod) => {
+      pod.addEventListener('click', () => {
+        pods.forEach((item) => item.removeAttribute('aria-current'));
+        pod.setAttribute('aria-current', 'true');
+      });
+    });
+  </script>
+</body>
+</html>
