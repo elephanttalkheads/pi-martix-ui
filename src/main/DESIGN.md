@@ -16,7 +16,7 @@
 - 不并行多项目会话：切换项目 = 全部旧会话 dispose（单工作目录单会话上下文，无项目级会话并存）
 - 不实现 TUI 专属 UI 能力：`ExtensionUIContext` 的终端方法（setStatus/setWidget/custom 等）为 no-op 桩，ZION 无终端 UI（见「已知限制与技术债」）
 - 不解释/执行命令与技能：面板只提供数据清单，插入与执行语义在渲染层/宿主 TUI
-- main 进程保持 `.mjs` + JSDoc + checkJs：`build:main` 只做 typecheck 门禁 + 复制（源码即产物），无 TS 转译管线（迁移方案见「已知限制与技术债」）
+- main 进程保持 `.mjs` + JSDoc + checkJs：无 TS 转译管线，构建 = typecheck 门禁 + 复制（产物布局见「架构与主要流程」启动节；迁移方案见「已知限制与技术债」）
 - IPC 契约的类型形状与失败语义（`ZionAPI`、数据形状、stopReason）不在此重复，见 `src/shared/DESIGN.md`；通道名字面量全集在本模块（见「接口与依赖」节）
 
 ## 架构与主要流程
@@ -35,7 +35,7 @@ main.mjs：ipcMain.handle ×18 + agent:event / zion:ui-ask / zion:ui-notify 转�
 @earendil-works/pi-coding-agent：createAgentSession / SessionManager / session.subscribe / bindExtensions
 ```
 
-**模块加载期（whenReady 前）**：声明 `PROJECTS_FILE`/`PROJECTS_MAX` 后立即执行启动恢复——`listProjects()[0]` 存在则 `WORKSPACE_DIR = recent[0].path`（日志 `startup restore project →`），否则保持默认 `D:\zion-workspace`（日志 `startup no recent project`）；只改工作目录、不建会话。恢复块必须在常量声明之后（`const` TDZ：声明前读取抛 ReferenceError，故两常量上移到文件顶部）。
+**模块加载期（whenReady 前）**：声明 `PROJECTS_FILE`/`PROJECTS_MAX` 后立即执行启动恢复——`listProjects()[0]` 存在则 `WORKSPACE_DIR = recent[0].path`（日志 `startup restore project →`；输出已做路径清洗与存在性过滤，首位必为有效目录，见「接口与依赖」list-projects 行），否则保持默认 `D:\zion-workspace`（日志 `startup no recent project`）；只改工作目录、不建会话。恢复块必须在常量声明之后（`const` TDZ：声明前读取抛 ReferenceError，故两常量上移到文件顶部）。
 
 **启动**：`app.whenReady` → `createWindow()`（1440×900、黑底、`autoHideMenuBar`、preload=`../preload/preload.cjs`）；存在 `--dev` argv 时加载 `http://127.0.0.1:5173`，否则 `dist-renderer/index.html`；`did-finish-load` 后 `executeJavaScript('Boolean(window.zion)')` 自检注入并打日志（smoke 脚本同款检查）。`createWindow()` 开头调用 `dispatchUi()` 向 uiBridge 注入真实派发（`webContents.send('zion:ui-ask' / 'zion:ui-notify')`，闭包经 `win?.` 可选链）：派发时窗口不存在则落到 no-op，ask 由 timeout 兜底。产物侧：`scripts/build-main.mjs` 以 tsconfig.node.json typecheck 为门禁，把 `src/main`/`src/preload` 的 JS 复制到 `dist-main/main` + `dist-main/preload`（package.json `main` 指向 `dist-main/main/main.mjs`，dev/smoke/e2e/start 全走产物；复制保持 `../preload/preload.cjs`、`../../dist-renderer` 相对路径在 dist-main 布局下依旧成立）。
 
@@ -75,7 +75,7 @@ send ×3（`webContents.send`；preload 经 `subscribe(channel, cb)` 统一订�
 - `agent:abort` / `agent:steer` / `agent:followUp` **不 await** SDK 调用即返回 `true`（fire-and-forget）：返回不代表 agent 已 idle；无当前会话时静默 no-op
 - `zion:switch-session` / `zion:new-session` / `zion:get-current` 的 `SessionPayload`（`{ id, items }`）中 `id` 来自 `sessionManager.getSessionId()`
 - `zion:list-sessions` 映射 `SessionManager.list` 结果：`firstMessage` 截 80 字符、`modified` 转 ISO、按 modified 倒序
-- `zion:list-projects` → `listProjects()`：读 `~/.pi/agent/zion-projects.json`，缺失/损坏 → `[]`；条目过滤非 `string` 的 `path` 后截 `PROJECTS_MAX`（8）条
+- `zion:list-projects` → `listProjects()`：读 `~/.pi/agent/zion-projects.json`，缺失/损坏 → `[]`；条目依次过滤非 `string` 的 `path`、清洗控制字符（`[\u0000-\u001f\u007f]` 删除 + trim）、`fs.existsSync` 存在性过滤（清洗后为空或目录已失效的丢弃）后截 `PROJECTS_MAX`（8）条
 - `zion:get-project` → `{ path: WORKSPACE_DIR }`：只读查询当前工作目录，不创建/切换会话、不写最近清单（侧栏 Project 标题的数据源）
 - `zion:switch-project`：仅校验 `typeof dir === 'string' && dir.trim()`（否则抛 `'invalid project path'`）；目录存在性不校验、无路径白名单——不存在的目录会被 `ensureCurrentSession` 的 `mkdirSync recursive` 自建
 - `zion:browse-project`：`dialog.showOpenDialog`（`openDirectory`）取消/空选 → `null`；选中 → `switchProject`；`win` 为 null（未建/已销毁）时走无父窗重载
@@ -107,7 +107,7 @@ send ×3（`webContents.send`；preload 经 `subscribe(channel, cb)` 统一订�
 - **prompt 不抛错 → IPC 返回 stopReason**：主进程不维护回合状态机，错误检测责任交给渲染层（shared 契约明示）
 - **preload CJS + JSDoc 类型**：`sandbox: true` 强制 CJS 决定文件形态；类型经 `@typedef import('../shared/protocol.ts')` + checkJs 校验，契约单一事实源不落地为运行时模块
 - **WORKSPACE_DIR 可变 + 切换即整体重建**（ADR-0003）：项目选择 UI 已落地（侧栏 Project 标题 + 切换按钮 + ProjectPanel），工作区不再固定——跨目录切换 dispose 全部旧会话（`wireSession` 订阅随实例销毁，事件不会串台）+ 清空 Map/指针，保证新项目上下文干净；同目录快速路径避免无谓重建。`SessionManager.open(info.path, undefined, WORKSPACE_DIR)` 的第三参 cwdOverride 把会话 cwd 固定到当前工作区；模块加载期再从最近项目清单首位恢复 `WORKSPACE_DIR`——重启回到上次项目而非默认工作区（只影响工作目录，会话仍懒创建）
-- **最近项目清单 = 本地 JSON**：`~/.pi/agent/zion-projects.json`（`{ path, lastUsed }[]`，上限 8，最近优先、去重置顶、损坏/缺失视为空列表）——无独立配置库的轻量持久化；写失败仅 warn，不阻断切换
+- **最近项目清单 = 本地 JSON**：`~/.pi/agent/zion-projects.json`（`{ path, lastUsed }[]`，上限 8，最近优先、去重置顶、损坏/缺失视为空列表）——无独立配置库的轻量持久化；读取时防御损坏条目（曾出现 `\r` 被 JSON 解析进路径、启动恢复采纳后 mkdir ENOENT 崩溃；清洗/过滤机制见「接口与依赖」list-projects 行），写失败仅 warn，不阻断切换
 - **browse 走主进程原生 dialog**：目录选择器在 main 侧（`dialog.showOpenDialog`），渲染层不实现目录浏览器、只消费结果；`win` 为 null（未建/已销毁）时无父窗重载兜底
 - **历史只取 user/assistant 文本**：恢复 feed 的最小契约（`SessionHistoryItem` 无工具细节字段），工具消息与空文本排除
 - **scan-tree 同步 fs + 深度/跳过限制**：主进程阻塞式扫描换实现简单，深度上限 + 跳过集合（清单见 shared）把代价限制在可控范围
@@ -149,7 +149,7 @@ send ×3（`webContents.send`；preload 经 `subscribe(channel, cb)` 统一订�
 - `switchProject` 中旧会话 dispose 异常 → 捕获忽略（实例随进程回收），不阻断切换
 - 切换后新目录 `ensureCurrentSession` 失败（init 超时）→ IPC reject；此时 `WORKSPACE_DIR` 已更新、旧会话已全部清空（半完成状态，重试即走新目录创建路径）
 - `saveProject` 写失败 → `console.warn`，切换继续（最近清单未更新）
-- `zion-projects.json` 缺失/损坏 → `listProjects` 返回 `[]`（面板只剩「浏览」入口，启动恢复随之保持默认工作区）
+- `zion-projects.json` 缺失/损坏 → `listProjects` 返回 `[]`（面板只剩「浏览」入口，启动恢复随之保持默认工作区）；单条含控制字符/目录已失效的条目被清洗或过滤丢弃，不参与启动恢复与项目列表
 - 启动恢复异常（`listProjects` 意外抛错）→ warn `startup project restore failed`，保持默认工作区继续启动（`listProjects` 内部已 catch，外层 try/catch 为防御）
 - `zion:browse-project` 取消/空选 → 返回 `null`（面板保持打开，不切换）
 - `zion:switch-project` 非字符串/空白 → 抛 `'invalid project path'`
@@ -162,9 +162,9 @@ send ×3（`webContents.send`；preload 经 `subscribe(channel, cb)` 统一订�
 - 扩展 UI 桥仅覆盖 dialog（select/confirm/input）与 notify：`ExtensionUIContext` 其余方法为 TUI no-op 桩（ZION 无终端 UI），依赖终端能力的扩展功能（setWidget 组件工厂、custom 覆盖层、编辑器集成、主题系统）不可用，`custom()` 抛错
 - 项目信任未接入：`bindExtensions` 仅注入 `uiContext`，main.mjs 未传 `projectTrustContextFactory` / `resourceLoaderReloadOptions`，SDK 的 `resolveProjectTrusted` 不会触发，项目级资源（`.pi` 设置/扩展等）按未信任处理；ZION 未提供信任管理界面（root AGENTS.md「未做」清单）
 - 最近项目清单无管理 UI：无删除/固定条目能力，仅靠上限 8 截断自动淘汰；面板卡片列表不标注当前项目（当前项目名常驻侧栏 Project 标题，面板「取消」留在当前项目）
-- main 仍是 JS：`build:main` 只做 typecheck 门禁 + 复制（源码即产物），无 tsc emit；通道名无运行时单一来源的问题仍在——未来迁 TS 时把 build:main 复制步骤替换为 tsc emit（dist-main 布局不变，见 `scripts/build-main.mjs` 注释）
+- main 仍是 JS：通道名无运行时单一来源的问题仍在——未来迁 TS 时把 build:main 复制步骤替换为 tsc emit（dist-main 布局不变，见 `scripts/build-main.mjs` 注释）
 - abort/steer/followUp 为 fire-and-forget：`true` 不代表 agent 已 idle；若 UI 需要精确状态，后续应 await 或改用 SDK `waitForIdle`
-- 命令清单是静态快照：`BUILTIN_COMMANDS` 随 pi SDK 升级可能漂移（需人工核对）；新增扩展命令需手工追加 `EXTENSION_COMMANDS`，运行时注册的命令无法被发现
+- 命令清单是静态快照：内置命令随 pi SDK 升级可能漂移、运行时注册的扩展命令无法被静态发现（维护规则见 AGENTS.md「本模块硬约束」）
 - `sessions` Map 无自动淘汰：会话数随 `zion:new-session` 增长，仅 `zion:delete-session` 显式释放；`.trash` 回收目录只进不出，需人工清理（恢复 = 把文件移回原会话目录）
 
 ## 人工补充

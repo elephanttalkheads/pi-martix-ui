@@ -284,7 +284,16 @@ ipcMain.handle('agent:followUp', async (_e, text) => {
 function listProjects() {
   try {
     const arr = JSON.parse(fs.readFileSync(PROJECTS_FILE, 'utf8'));
-    if (Array.isArray(arr)) return arr.filter((p) => p && typeof p.path === 'string').slice(0, PROJECTS_MAX);
+    if (Array.isArray(arr)) {
+      return (
+        arr
+          .filter((p) => p && typeof p.path === 'string')
+          // 清洗：丢弃控制字符路径（曾出现 \r 被解析进路径导致 mkdir ENOENT）与失效目录
+          .map((p) => ({ ...p, path: p.path.replace(/[\u0000-\u001f\u007f]/g, '').trim() }))
+          .filter((p) => p.path && fs.existsSync(p.path))
+          .slice(0, PROJECTS_MAX)
+      );
+    }
   } catch { /* 无文件/损坏 → 空 */ }
   return [];
 }

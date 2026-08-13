@@ -11,7 +11,7 @@
 - `src/main/main.mjs` —— 主进程全部逻辑：`sessions` Map + `currentSession` 指针、`ensureCurrentSession`/`ensureSessionFor`（会话创建后 `bindExtensions({ uiContext })` 注入 UI 桥；init 45s 超时，败北后迟到的初始化 `dispose()` 丢弃、不 set 不接管）、18 组 `ipcMain.handle` + 3 条 send 转发（`wireSession` / `dispatchUi`；通道全集见 [DESIGN.md](DESIGN.md)「接口与依赖」节）、`listProjects`/`saveProject`/`switchProject`（项目切换：dispose 旧会话 + 重建）、启动恢复（模块加载期读 `zion-projects.json` 首位重置 `WORKSPACE_DIR`）、`historyFromSession`、`scanDir`
 - `src/main/uibridge.mjs` —— 扩展 UI 桥（纯 Node、无 electron 依赖）：`createUiBridge` 把 `select`/`confirm`/`input` 挂 Promise 表 → 经注入的 `dispatch` 派发 renderer；timeout/AbortSignal 兜底 resolve `undefined`；`notify` 单向派发；`handleAnswer` 回传应答；其余 `ExtensionUIContext` 方法为 TUI no-op 桩
 - `src/main/skillscan.mjs` —— 命令面板数据源（纯 Node、无 electron 依赖）：`parseSkillFrontmatter`/`scanSkillsDir`/`collectCommands` + `BUILTIN_COMMANDS`/`EXTENSION_COMMANDS`（命令清单维护规则见「本模块硬约束」）
-- `scripts/build-main.mjs` —— main/preload 产物构建：tsconfig.node.json typecheck 门禁 + 复制 JS 到 `dist-main/main` + `dist-main/preload`（源码即产物、无转译；package.json `main` 指向 `dist-main/main/main.mjs`）
+- `scripts/build-main.mjs` —— main/preload 产物构建脚本（构建管线/产物布局见 [DESIGN.md](DESIGN.md) 启动节）
 - `src/preload/preload.cjs` —— 安全桥实现：`contextBridge.exposeInMainWorld('zion', api)`；方法集合必须与 `ZionAPI`（`src/shared/protocol.ts`）一一对应；三个订阅方法（`onAgentEvent`/`onUiAsk`/`onUiNotify`）统一经 `subscribe(channel, cb)` 样板（注册 `ipcRenderer.on` → 剥 `IpcRendererEvent` → 返回退订函数）
 - `src/shared/protocol.ts` —— 契约单一事实源（属 `src/shared` 模块，本模块只做 JSDoc 类型引用；`CommandItem` 形状归它）
 - `tsconfig.node.json` —— main/preload 的 checkJs 配置（include `src/main` + `src/preload` + `src/shared`）
@@ -20,7 +20,7 @@
 
 改动本模块后必须跑 `npm run typecheck`（双配置 `tsc --noEmit`；main/preload 的 JSDoc 类型错误由 tsconfig.node.json 暴露）。
 
-- `npm run build:main` —— main/preload 产物构建：tsconfig.node.json typecheck 门禁 + 复制 JS 到 `dist-main/main` + `dist-main/preload`（dev/smoke/e2e 会自动先跑，`npm start` 不会）
+- `npm run build:main` —— 构建 main/preload 产物（dev/smoke/e2e 会自动先跑，`npm start` 不会；管线见 [DESIGN.md](DESIGN.md) 启动节）
 - `npm run smoke` —— 构建 renderer + main 产物 + CDP 冒烟：验证 `window.zion` 注入、`zion:ping`、渲染基线（`scripts/smoke-cdp.mjs`）
 - `npm run e2e` —— 构建 + 真实 prompt 回归：`window.zion.prompt(...)` → deepseek → 事件流 → feed（`scripts/e2e-prompt.mjs`，约 12s）
 - `node --test scripts/skillscan.test.mjs` —— skillscan 单测（frontmatter 解析/目录扫描/聚合去重/内置清单完整性，6 用例；不依赖 Electron，改 skillscan.mjs 后跑）
