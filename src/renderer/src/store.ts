@@ -450,7 +450,15 @@ export const useFeed = create<FeedState>()((set) => ({
   },
   setUiAsk(ask) { set({ uiAsk: ask }); },
   pushToast(n) {
-    set((s) => ({ toasts: [...s.toasts, { id: s.toasts.length ? s.toasts[s.toasts.length - 1].id + 1 : 1, message: n.message, type: n.type }] }));
+    let id = 0;
+    set((s) => {
+      id = s.toasts.length ? s.toasts[s.toasts.length - 1].id + 1 : 1;
+      return { toasts: [...s.toasts, { id, message: n.message, type: n.type }] };
+    });
+    // 3.3s 自动消失（3s 展示 + 0.3s 退出动画；统一所有调用路径，勿在外部重复计时）
+    window.setTimeout(() => {
+      useFeed.getState().dismissToast(id);
+    }, 3300);
   },
   dismissToast(id) {
     set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) }));

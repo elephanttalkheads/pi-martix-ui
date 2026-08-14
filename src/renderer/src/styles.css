@@ -839,13 +839,23 @@ body {
 .ask-btn.primary:hover { background: rgba(61, 255, 143, 0.12); }
 
 .toast-host {
-  position: fixed; right: 14px; top: 44px; z-index: 85;
+  position: fixed; right: 14px; bottom: 14px; z-index: 85;
   display: flex; flex-direction: column; gap: 8px; max-width: 340px;
 }
 .toast {
   display: flex; align-items: center; gap: 10px;
   background: var(--surface-2); border: 1px solid var(--border); border-left: 3px solid var(--accent-muted);
   padding: 8px 10px; font-size: 12px; color: var(--text-primary);
+  /* 弹出动画：0.25s 自下向上滑入 + 淡入；3s 后 0.3s 淡出（store 3.3s 移除 DOM） */
+  animation: toast-in 0.25s ease-out, toast-out 0.3s ease-in 3s forwards;
+}
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes toast-out {
+  from { opacity: 1; transform: translateY(0); }
+  to   { opacity: 0; transform: translateY(8px); }
 }
 .toast.warning { border-left-color: var(--warning); }
 .toast.error { border-left-color: var(--danger); }

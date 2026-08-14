@@ -143,26 +143,20 @@ function useAgentEvents() {
     return window.zion.onAgentEvent(handle);
   }, [queueDelta, armTurn, closeTurn, addUsage, toolStart, toolEnd, setSessionState, log]);
 
-  // 扩展 UI 桥：对话框 + 通知订阅
+  // 扩展 UI 桥：对话框 + 通知订阅（toast 自动消失由 store.pushToast 统一计时，勿在此重复）
   const setUiAsk = useFeed((s) => s.setUiAsk);
   const pushToast = useFeed((s) => s.pushToast);
-  const dismissToast = useFeed((s) => s.dismissToast);
   useEffect(() => {
     if (!window.zion?.onUiAsk) return;
     const offAsk = window.zion.onUiAsk((ask) => setUiAsk(ask));
     const offNotify = window.zion.onUiNotify((n) => {
       pushToast(n);
-      // 3s 自动消失
-      window.setTimeout(() => {
-        const t = useFeed.getState().toasts.find((x) => x.message === n.message && x.type === n.type);
-        if (t) dismissToast(t.id);
-      }, 3000);
     });
     return () => {
       offAsk();
       offNotify();
     };
-  }, [setUiAsk, pushToast, dismissToast]);
+  }, [setUiAsk, pushToast]);
 }
 
 function Clock() {
