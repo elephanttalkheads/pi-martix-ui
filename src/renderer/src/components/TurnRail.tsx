@@ -3,8 +3,9 @@
 // 帧节流与背景雨同一 FX 折算规则（90 / fx.speed）。
 import { useEffect, useRef } from 'react';
 import { fx } from '../store';
+import { MATRIX_CHARS } from '../matrixGlyphs';
 
-const CHARS = 'アウエオカキケコサシスセソタツテナニヌネハヒホマミムメモヤヨラリワー012345789*+<>:|';
+const CHARS = MATRIX_CHARS;
 const RAIL_FONT = '"Matrix Code", "Share Tech Mono", monospace';
 const REDUCED =
   typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches;

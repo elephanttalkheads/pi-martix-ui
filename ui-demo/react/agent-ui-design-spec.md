@@ -191,7 +191,7 @@ feed 不再是无结构消息列表，而是**回合序列**（词汇见 CONTEXT
 
 **OPERATOR 回合**（`.msg.user`，右对齐）：
 - 结构同 v4 用户消息：`margin-left: auto`，头部 `OPERATOR + HH:MM` 右对齐，正文右对齐。
-- **注入解码**（见 CONTEXT.md）：入场时假名乱码逐位还原为文字——字符集 `ｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿ0123456789ABCDEF#$%&@`（与蠕虫扰码同族），总时长 `min(700, 240 + 字符数×6)` ms，逐帧 `locked = floor(p×len)` 前锁后乱；空格/换行不参与扰码。**只播一次**（memo 保证不重播）；解码期间显示纯文本，完成后才交给行内解析（code/高亮）。
+- **注入解码**（见 CONTEXT.md）：入场时假名乱码逐位还原为文字——字符集为 `MATRIX_CHARS`（Matrix Code 电影字形，乱码帧经 `.decoding` 类套用 `"Matrix Code"` 字体，完成后交回 `--font` 栈），总时长 `min(700, 240 + 字符数×6)` ms，逐帧 `locked = floor(p×len)` 前锁后乱；空格/换行不参与扰码。**只播一次**（memo 保证不重播）；解码期间显示纯文本，完成后才交给行内解析（code/高亮）。
 - 开关：状态栏 `DEC: ON/OFF`，`localStorage.zion.dec` 持久化，默认开；reduced-motion 直接跳过。
 
 **agent 回合容器**（`.turn-agent`，`position: relative; padding-left: 40px`）：
@@ -267,9 +267,9 @@ feed 不再是无结构消息列表，而是**回合序列**（词汇见 CONTEXT
 
 ### 6.1 字符集
 
+蠕虫与扰码统一使用 Matrix Code 映射字符集（`matrixGlyphs.ts` 的 `MATRIX_CHARS`，见 §2.2）：
 ```
-蠕虫 WORM_CHARS:     ｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿ0123456789ABCDEF<>+*
-扰码 SCRAMBLE_CHARS: ｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿ0123456789ABCDEF#$%&@
+アウエオカキケコサシスセソタツテナニヌネハヒホマミムメモヤヨラリワー012345789*+<>:|
 ```
 
 ### 6.2 释放与路径

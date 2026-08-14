@@ -5,11 +5,12 @@ import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { useFeed, type TurnTool } from '../store';
 import { formatToolArgs, toolExpandTitle } from '../toolfmt';
 import { parseBody } from '../markdown';
+import { MATRIX_CHARS } from '../matrixGlyphs';
 import DiffCard from './DiffCard';
 import TurnRail from './TurnRail';
 
-/** 注入解码字符集（与蠕虫扰码同族，见 CONTEXT.md「注入解码」） */
-const DEC_CHARS = 'ｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿ0123456789ABCDEF#$%&@';
+/** 注入解码字符集（Matrix Code 电影字形，见 CONTEXT.md「注入解码」） */
+const DEC_CHARS = MATRIX_CHARS;
 const rdec = () => DEC_CHARS[(Math.random() * DEC_CHARS.length) | 0];
 const REDUCED_MOTION =
   typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -44,7 +45,11 @@ function OperatorBody({ text }: { text: string }) {
     // 仅入场一次：text/decOn 变化不重播
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  return decoding === null ? <Body text={text} /> : <>{decoding}</>;
+  return decoding === null ? (
+    <Body text={text} />
+  ) : (
+    <span className="decoding">{decoding}</span>
+  );
 }
 
 /** 工具链块描述：从 args 提取可读摘要 */

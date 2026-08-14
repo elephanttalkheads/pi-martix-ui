@@ -5,13 +5,14 @@
 import { useEffect, useRef } from 'react';
 import { SND } from './SoundFx';
 import { useFeed } from '../store';
+import { MATRIX_CHARS } from '../matrixGlyphs';
 
 /** 嘴部在头像图片中的相对位置（neo-*.png 256×256 估算，可目测微调） */
 const MOUTH_X = 0.5;
 const MOUTH_Y = 0.63;
 
-const WORM_CHARS = 'ｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿ0123456789ABCDEF<>+*';
-const SCRAMBLE_CHARS = 'ｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿ0123456789ABCDEF#$%&@';
+const WORM_CHARS = MATRIX_CHARS;
+const SCRAMBLE_CHARS = MATRIX_CHARS;
 const REDUCED = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 let sigCv: HTMLCanvasElement | null = null;
@@ -114,7 +115,7 @@ export function releaseWorm(targetEl: HTMLElement | null, done?: () => void) {
     const glyphs = pts.map(() => WORM_CHARS[(Math.random() * WORM_CHARS.length) | 0]);
     let head = 0;
     const TAIL = 18;
-    ctx.font = '11px monospace';
+    ctx.font = '11px "Matrix Code", "Share Tech Mono", monospace';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     const frame = () => {

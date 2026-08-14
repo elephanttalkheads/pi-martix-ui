@@ -26,7 +26,9 @@ export const NEO_SOURCE_ANCHOR = [82 / 256, 114 / 256] as const;
 /** 培育仓左侧机械柱：1672×941 横向帧的 (159, 556)。 */
 export const POD_RECEIVER_ANCHOR = [159 / 1672, 556 / 941] as const;
 
-const GLYPHS = 'ｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿ0123456789ABCDEF<>+*';
+import { MATRIX_CHARS } from './matrixGlyphs';
+
+const GLYPHS = MATRIX_CHARS;
 
 const SIGNATURES: readonly NeuralSignature[] = [
   { id: 1, glyphs: `${GLYPHS}01`, ringFractions: [0.28], staticOffset: 1 },

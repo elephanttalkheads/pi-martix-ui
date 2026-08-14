@@ -6,8 +6,9 @@
 // 数字 012345789（无 6）+ *+<>:|，字符集必须落在其 cmap 内，否则回退系统字体穿帮。
 import { useEffect, useRef } from 'react';
 import { fx } from '../store';
+import { MATRIX_CHARS } from '../matrixGlyphs';
 
-const CHARS = 'アウエオカキケコサシスセソタツテナニヌネハヒホマミムメモヤヨラリワー012345789*+<>:|';
+const CHARS = MATRIX_CHARS;
 const RAIN_FONT = '"Matrix Code", "Share Tech Mono", monospace';
 const FS = 18;
 /** 字形横向压缩：Matrix Code 全角字形 18px 下 advance 16.8px，

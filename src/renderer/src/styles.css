@@ -2,7 +2,7 @@
 /* 本地字体（离线/墙内可用）：
    - Share Tech Mono latin 子集（@fontsource/share-tech-mono）——拉丁正文
    - Sarasa Term SC GB2312 子集（Sarasa-Gothic, OFL）——CJK 回退
-   - Matrix Code（Rezmason/matrix, MIT）——真·电影镜像片假名，仅数字雨/雨轨 canvas 用 */
+   - Matrix Code（Rezmason/matrix, MIT）——真·电影镜像片假名，数字雨/雨轨 canvas、脑机链路字符流、蠕虫/扰码/注入解码的统一字形（字符集一律取 matrixGlyphs.ts 的 MATRIX_CHARS） */
 @font-face {
   font-family: "Share Tech Mono";
   src: url("./assets/fonts/ShareTechMono-Regular.woff2") format("woff2");
@@ -120,7 +120,7 @@ body {
 .neural-cable-nerve { stroke: #1da754; stroke-width: 1.2px; }
 .neural-cable-static,
 .neural-cable-pulse text {
-  font-family: var(--font); font-size: 11px; line-height: 1;
+  font-family: "Matrix Code", var(--font); font-size: 11px; line-height: 1;
   text-rendering: geometricPrecision;
 }
 .neural-cable-static {
@@ -423,7 +423,9 @@ body {
 .ft-children .ft-row { padding-left: 12px; }
 /* 蠕虫命中：行闪烁（文件名扰码由 JS 驱动） */
 .ft-row { transition: background 0.25s, color 0.25s; }
-.ft-row.breached { color: var(--bright); background: rgba(61, 255, 143, 0.14); transition: none; }
+.ft-row.breached { color: var(--bright); background: rgba(61, 255, 143, 0.14); transition: none;
+  /* 扰码解密期间用 Matrix Code 电影字形（`.` 锚点不在 cmap，自动回退 --font 栈） */
+  font-family: "Matrix Code", var(--font); }
 
 .side-foot {
   flex: none; margin-top: auto; padding: 10px 12px 12px;
@@ -513,6 +515,8 @@ body {
   border-left: 1px solid var(--border);
 }
 .msg-body .aborted { color: var(--danger); }
+/* 注入解码进行中的乱码帧：Matrix Code 电影字形（完成后交回 --font 栈） */
+.msg-body .decoding { font-family: "Matrix Code", var(--font); }
 
 .caret {
   display: inline-block; width: 8px; height: 1.05em;
