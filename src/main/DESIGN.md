@@ -6,7 +6,7 @@
 - 进程内接入 pi SDK：`createAgentSession` 复用 `~/.pi/agent` 配置（auth/models/settings）；会话创建/恢复/列举/打开/重命名/删除全部经 `SessionManager`，工作目录为可变 `WORKSPACE_DIR`（默认 `D:\zion-test`；模块加载期从最近项目清单首位恢复，运行时仅经 `zion:switch-project` / `zion:browse-project` 更新；切换 = 废弃全部旧会话 + 按新目录重建，见 ADR-0003）
 - 多会话并存：`Map<sessionId, AgentSession>` 懒创建 + `currentSession` 指针切换；事件流只转发当前会话
 - 命令面板数据源：`zion:list-commands` 聚合本机全部 skills（用户/共享/项目/扩展包/settings.skills）与命令（内置 + 扩展白名单），`skillscan.mjs` 实现
-- 命令执行 dispatch：`zion:run-command` 在 main 进程路由到 `commandHandlers` 注册表（#24）——new/session/copy/name/compact/export/import/resume/reload/quit 已实现，trust/hotkeys/model/settings 返回占位错误（#25/#26），`goal` 转交 LLM；结果统一 `cmd()` 工厂形状（ok/info/error → toast/日志）
+- 命令执行 dispatch：`zion:run-command` 在 main 进程路由到 `commandHandlers` 注册表（#24）——全部 14 个内置命令已实现（弹层类 trust/hotkeys/model/settings 行为见「接口与依赖」命令执行 dispatch 节），`goal` 转交 LLM；结果统一 `cmd()` 工厂形状（ok/info/error → toast/日志）
 - 工作区文件树：`zion:scan-tree` 同步快照 + `zion:tree-changed` 实时推送（`fs.watch` recursive + 400ms 防抖重扫 + JSON 对比，只推真实变化）——agent 非编辑工具与外部编辑器改文件也能反映到侧栏
 - 渲染层零 Node 访问：preload 在 sandbox 下暴露 `window.zion` 白名单桥（安全配置事实归 `src/shared/DESIGN.md` 安全边界）
 - 扩展 UI 桥：`uibridge.mjs` 实现 SDK `ExtensionUIContext` 的 dialog（select/confirm/input）与 notify——请求挂 Promise 表 → 派发 renderer（AskDialog/ToastHost 呈现）→ `zion:ui-answer` 回传；经 `session.bindExtensions({ uiContext })` 注入（官方路径，`CreateAgentSessionOptions` 无 uiContext 字段）。绑定后 SDK `hasUI()` 为 true，扩展对话框真实弹窗、不再 headless 静默落空（项目信任询问未接入，见「已知限制与技术债」）
@@ -17,7 +17,7 @@
 - 不管理模型/凭据：SDK 直接读 `~/.pi/agent`
 - 不并行多项目会话：切换项目 = 全部旧会话 dispose（单工作目录单会话上下文，无项目级会话并存）
 - 不实现 TUI 专属 UI 能力：`ExtensionUIContext` 的终端方法（setStatus/setWidget/custom 等）为 no-op 桩，ZION 无终端 UI（见「已知限制与技术债」）
-- 不实现全部 slash 命令：`commandHandlers` 仅覆盖 ZION 落地命令（清单见目标节）；未实现命令（trust/hotkeys/model/settings）返回占位错误，不静默假执行；扩展运行时命令（goal）无原生运行时，转交 LLM 按自然语言语义执行
+- 不实现扩展命令运行时：扩展注册命令仅 goal 有 handler（转交 LLM 按自然语言语义执行），其余扩展命令即使出现在面板也无对应 handler（→「未知命令」错误）；pi 的会话树/分支体系命令（changelog/tree/clone/fork 等）已从命令清单裁剪（见命令聚合节）
 - main 进程保持 `.mjs` + JSDoc + checkJs：无 TS 转译管线，构建 = typecheck 门禁 + 复制（产物布局见「架构与主要流程」启动节；迁移方案见「已知限制与技术债」）
 - IPC 契约的类型形状与失败语义（`ZionAPI`、数据形状、stopReason）不在此重复，见 `src/shared/DESIGN.md`；通道名字面量全集在本模块（见「接口与依赖」节）
 
@@ -73,11 +73,16 @@ main.mjs：ipcMain.handle ×19 + agent:event / zion:ui-ask / zion:ui-notify / zi
 ## 接口与依赖
 
 **命令执行 dispatch（`zion:run-command`）**：`commandHandlers` 按命令名路由（main.mjs），handler 签名 `(args?: string) => Promise<RunCommandResult>`（形状归 shared 契约）：
-- `cmd(kind, message, data)` 结果工厂：`ok = kind !== 'error'`；kind 语义 info=仅日志 / ok=成功 toast / error=失败 toast；data 可选（new/import/resume 带 `{ id, items }`、export 带 `{ path }`、compact 带压缩结果）
-- `withWin(fn)`：原生 dialog 统一挂父窗口（`win` 为 null 时无父窗调用），export/import/quit 使用
+- `cmd(kind, message, data)` 结果工厂：`ok = kind !== 'error'`；kind 语义 info=仅日志 / ok=成功 toast / error=失败 toast；data 可选（JSDoc 类型 `Record<string, unknown> | null`：new/import/resume 带 `{ id, items }`、export 带 `{ path }`、compact 带压缩结果、弹层类带 `{ open, …载荷 }`）
+- `withWin(fn)`：原生 dialog 统一挂父窗口（`win` 为 null 时无父窗调用），export/import/quit/trust 使用
 - 会话类：new（confirm 确认 → `SessionManager.create` → `ensureSessionFor`）、session（id/消息数/显示名）、copy（`getLastAssistantText()` → clipboard）、name（`appendSessionInfo`）、compact（`s.compact()`）、export（路径参数 → `path.resolve(WORKSPACE_DIR, spec)` 直导，`.jsonl` 用同步 `exportToJsonl`、否则 `exportToHtml`；无参 → `dialog.showSaveDialog`）、import（路径参数或 `dialog.showOpenDialog` → `SessionManager.open(path, undefined, WORKSPACE_DIR)`）、resume（select 列表排除当前会话，选项带短 id 前缀反查）
 - 系统类：reload（`s.reload()` 重载 keybindings/extensions/skills/prompts/themes/context）、quit（`dialog.showMessageBox` 确认 → `app.quit()`）
-- 占位：trust/hotkeys（#25）、model/settings（#26）返回 `cmd('error', '…未实现…')`；goal 无扩展运行时 → `s.prompt(文本)` 转交 LLM（空参用默认指令文案兜底）
+- 弹层类（数据驱动触发，`data.open` 值域契约见 `src/shared/DESIGN.md` / ADR-0005；UI 状态全留 renderer）：
+  - trust：先 `hasTrustRequiringProjectResources(WORKSPACE_DIR)` 判定——项目内无 `.pi` 条目/`.agents/skills` → info；`new ProjectTrustStore('~/.pi/agent')` 读当前决定（已信任/已拒绝 → info）；未决 → `withWin` 原生 MessageBox（信任/拒绝/取消）→ `store.set` 写 `~/.pi/agent/trust.json`（SDK 官方存储，与 pi 交互模式同源；运行期门控未接入见「已知限制与技术债」）
+  - hotkeys：`cmd('ok', …, { open: 'hotkeys' })`——renderer 开快捷键速查弹层
+  - model：可见集合 = `settings.enabledModels` → `resolveModelScopeWithDiagnostics(patterns, s.modelRuntime)`（scoped，与 pi /scoped-models 同源），无配置或解析为空 → 回退 `s.modelRuntime.getAvailable()`（全量已认证）；无参 → `{ open: 'model-picker', models: [...] }`（label 为 `provider/model`——`Model.provider` 是 provider id 字符串非对象；当前模型标 `current`，一次往返）；带参 → label 在可见集合内校验后 `s.setModel`（集合外/无 auth 均转 `cmd('error')`）
+  - settings：`{ open: 'settings', currentModel, providers }`——currentModel 取 `s.model`（`provider/model`），providers 取 `~/.pi/agent/auth.json` 中带非空凭据的键
+- goal 无扩展运行时 → `s.prompt(文本)` 转交 LLM（空参用默认指令文案兜底）
 - 未知命令名 → `cmd('error', '未知命令 /<name>')`；handler 抛错 → console.error + `cmd('error', '/<name> 执行失败：…')`，**IPC 永不 reject**（错误以结构化结果返回，UI 统一渲染）
 
 IPC 通道全集（字面量与 handler 所在地；`protocol.ts` 头注释「完整清单」指向本节）：
@@ -92,7 +97,7 @@ send ×4（`webContents.send`；preload 经 `subscribe(channel, cb)` 统一订�
 - `agent:abort` / `agent:steer` / `agent:followUp` **不 await** SDK 调用即返回 `true`（fire-and-forget）：返回不代表 agent 已 idle；无当前会话时静默 no-op
 - `zion:switch-session` / `zion:new-session` / `zion:get-current` 的 `SessionPayload`（`{ id, items }`）中 `id` 来自 `sessionManager.getSessionId()`
 - `zion:list-sessions` → `listSessionInfos()`：`SessionManager.list` 结果 + 合并 `sessions` Map 中未落盘的内存会话（SDK `create` 无 assistant 消息不写盘，磁盘扫不到 → `/new` 后新仓立即可见；判定：id 不在磁盘列表且 `getSessionFile()` 不存在；合并项 `modified` 取当前时间、排列表顶）；`firstMessage` 截 80 字符、`modified` 转 ISO、按 modified 倒序；内存会话 `path` 为空串
-- `zion:run-command` → `commandHandlers[name](args)`：注册表外的名字返回 `cmd('error', '未知命令 /<name>')`；handler 抛错被捕获转 `cmd('error', …)`，不 reject（各命令行为见「架构与主要流程」命令执行 dispatch 节）
+- `zion:run-command` → `commandHandlers[name](args)`：注册表外的名字返回 `cmd('error', '未知命令 /<name>')`；handler 抛错被捕获转 `cmd('error', …)`，不 reject（各命令行为见「接口与依赖」命令执行 dispatch 节）
 - `zion:list-projects` → `listProjects()`：读 `~/.pi/agent/zion-projects.json`，缺失/损坏 → `[]`；条目依次过滤非 `string` 的 `path`、清洗控制字符（`[\u0000-\u001f\u007f]` 删除 + trim）、`fs.existsSync` 存在性过滤（清洗后为空或目录已失效的丢弃）后截 `PROJECTS_MAX`（8）条
 - `zion:get-project` → `{ path: WORKSPACE_DIR }`：只读查询当前工作目录，不创建/切换会话、不写最近清单（侧栏 Project 标题的数据源）
 - `zion:switch-project`：仅校验 `typeof dir === 'string' && dir.trim()`（否则抛 `'invalid project path'`）；目录存在性不校验、无路径白名单——不存在的目录会被 `ensureCurrentSession` 的 `mkdirSync recursive` 自建
@@ -141,7 +146,9 @@ send ×4（`webContents.send`；preload 经 `subscribe(channel, cb)` 统一订�
 - **timeout/signal 兜底 resolve undefined**：对齐 SDK RPC 语义（docs/rpc.md：dialog 带 timeout 时 agent 侧自动按默认值 resolve）；取消（Esc/遮罩/undefined 应答）与超时归一为 `undefined`，调用方按「用户未选择」处理
 - **TUI 方法 no-op 桩（custom 抛错）**：对齐 SDK RPC 降级语义（具体桩返回值见接口节）；`custom()` 例外——显式抛错让依赖终端覆盖层的扩展感知不可用，而非静默返回 undefined
 - **命令执行落在主进程（#24）而非渲染层**：面板/输入框只发 `runCommand(name, args)`，main 路由 `commandHandlers`——命令可触达 Node/主进程能力（clipboard/dialog/SessionManager/agent 会话），渲染层零 Node 边界不破；结果统一 `cmd()` 工厂形状，UI 渲染路径单一（info 写日志、ok 绿 toast、error 红 toast）
-- **未实现命令显式占位错误而非静默**：trust/hotkeys/model/settings 返回「未实现（#25/#26）」——面板可见但执行明确告知，防止「假执行」错觉；goal 是例外：ZION 无扩展命令运行时，转交 LLM 按自然语言语义执行（`s.prompt`）
+- **弹层类命令数据驱动触发（ADR-0005）**：命令结果 `data.open` 决定「开什么弹层」、载荷随附（models/currentModel/providers），UI 状态（store.modal、组件渲染）全留 renderer——零新增 IPC、runCommand 契约保持单一事实源；代价是主进程无法主动推弹层（当前无此需求）
+- **/model 可见集合 = scoped 而非全量**：`settings.enabledModels` → `resolveModelScopeWithDiagnostics`（内部 getAvailable 只含已认证），与 pi /scoped-models 同源同数量——面板所见即 pi 可切换的模型；无配置或解析为空回退全量已认证；带参切换同样限可见集合（集合外报错并提示前 6 个可选）
+- **/trust 写官方信任存储**：决定经 SDK `ProjectTrustStore` 落盘 `~/.pi/agent/trust.json`（与 pi 交互模式同一文件、重启不丢），`hasTrustRequiringProjectResources` 判定是否有可信任资源，原生 MessageBox 三选确认——「无资源/已信任/已拒绝」直接告知不弹框；运行期门控未接入见「已知限制与技术债」
 - **/new 后新仓立即可见**：`SessionManager.create` 空会话不落盘（无 assistant 消息，_persist 只置 flushed 标记），磁盘 `list` 扫不到；`listSessionInfos` 把 Map 中无盘文件实例合并进列表（`getSessionFile()` 存在即跳过，双保险），会话列表/switch/resume/rename 全走合并列表。代价：内存会话 `path` 为空串，对它执行 rename/delete 会因 `SessionManager.open('')` / `renameSync('')` 抛错 reject（见失败模式）
 
 ## 不变量、安全边界与失败模式
@@ -154,7 +161,7 @@ send ×4（`webContents.send`；preload 经 `subscribe(channel, cb)` 统一订�
 - `agent:prompt` 不因模型/请求失败 reject；abort/steer/followUp 无会话时返回 `true`
 - 每个 dialog 请求至多一次有效应答：`handleAnswer` 命中即清表，二次应答返回 false 不重复 resolve
 - 所有 IPC 返回均为可序列化 JSON
-- `commandHandlers` 覆盖 `BUILTIN_COMMANDS` + `EXTENSION_COMMANDS` 全部命令名（未实现者以占位错误兜底）
+- `commandHandlers` 实现 `BUILTIN_COMMANDS` 全部 14 个命令名；`EXTENSION_COMMANDS` 仅 goal 有 handler（其余扩展命令 → 「未知命令」错误）
 
 **安全边界**：
 - 渲染层零 Node 访问的配置事实归 shared（`main.mjs` createWindow 的 webPreferences）；本模块侧责任是：preload 不得暴露白名单之外的 API，main 不得把 Node 能力经其他通道传出
@@ -184,16 +191,18 @@ send ×4（`webContents.send`；preload 经 `subscribe(channel, cb)` 统一订�
 - `zion:delete-session` 先断引用后移文件：`fs.renameSync` 失败（权限/占用）→ IPC reject，但 Map 实例与指针已清、文件仍在原目录（半完成状态，可重试或手动恢复）
 - `zion:list-commands`：settings.json 缺失/解析失败 → `skills` 视为空数组，其余来源不受影响；单个 SKILL.md 不可读/损坏 → 跳过该条目，不中断整体
 - `zion:run-command`：handler 抛错 → 捕获转 `cmd('error', '/<name> 执行失败：…')` 返回（不 reject，错误走 toast）；未知命令名 → `cmd('error', '未知命令 /<name>')`
+- `/trust`：`~/.pi/agent/trust.json` 缺失视为未决（`store.get` 返回 null → 弹确认框）；文件损坏（非对象/非法值）→ `readTrustFile` 抛错 → 走 run-command 通用 catch 转 `cmd('error', '/trust 执行失败：…')`
+- `/model` 带参：目标不在可见集合 → `cmd('error', '模型 X 不在可用集合…')`（不 setModel）；`setModel` 抛错（无 auth/凭据失效）→ `cmd('error', '切换模型失败：…')`；scoped 解析异常 → 通用 catch 兜底
 - 对未落盘内存会话执行 rename/delete → `SessionManager.open('')` / `renameSync('')` 抛错，IPC reject（合并列表的边缘情况；UI 通常只对已持久化会话操作）
 
 ## 已知限制与技术债
 
 - 扩展 UI 桥仅覆盖 dialog（select/confirm/input）与 notify：`ExtensionUIContext` 其余方法为 TUI no-op 桩（ZION 无终端 UI），依赖终端能力的扩展功能（setWidget 组件工厂、custom 覆盖层、编辑器集成、主题系统）不可用，`custom()` 抛错
-- 项目信任未接入：`bindExtensions` 仅注入 `uiContext`，main.mjs 未传 `projectTrustContextFactory` / `resourceLoaderReloadOptions`，SDK 的 `resolveProjectTrusted` 不会触发，项目级资源（`.pi` 设置/扩展等）按未信任处理；ZION 未提供信任管理界面（root AGENTS.md「未做」清单；`/trust` 命令返回占位错误）
+- 项目信任只落盘、不门控：`/trust` 已把决定写入官方 `trust.json`（`ProjectTrustStore`），但会话创建路径未传 `projectTrustContextFactory`、未接 SDK 的 `resolveProjectTrusted`——运行期项目级资源（`.pi` 设置/扩展等）仍按 headless 未信任语义处理，`/trust` 目前是「状态查询 + 决定落盘」（root AGENTS.md「未做」清单）
 - 最近项目清单无管理 UI：无删除/固定条目能力，仅靠上限 8 截断自动淘汰；面板卡片列表不标注当前项目（当前项目名常驻侧栏 Project 标题，面板「取消」留在当前项目）
 - main 仍是 JS：通道名无运行时单一来源的问题仍在——未来迁 TS 时把 build:main 复制步骤替换为 tsc emit（dist-main 布局不变，见 `scripts/build-main.mjs` 注释）
 - abort/steer/followUp 为 fire-and-forget：`true` 不代表 agent 已 idle；若 UI 需要精确状态，后续应 await 或改用 SDK `waitForIdle`
-- 命令清单是静态快照：内置命令随 pi SDK 升级可能漂移、运行时注册的扩展命令无法被静态发现（维护规则见 AGENTS.md「本模块硬约束」）；命令执行覆盖不全——trust/hotkeys/model/settings 为占位错误（#25/#26），扩展命令仅 goal 有实现（转交 LLM），其余扩展命令即使出现在面板也无对应 handler
+- 命令清单是静态快照：内置命令随 pi SDK 升级可能漂移、运行时注册的扩展命令无法被静态发现（维护规则见 AGENTS.md「本模块硬约束」）；扩展命令仅 goal 有 handler（转交 LLM），其余扩展命令即使出现在面板也无对应 handler（→「未知命令」错误）
 - `sessions` Map 无自动淘汰：会话数随 `zion:new-session` 增长，仅 `zion:delete-session` 显式释放；`.trash` 回收目录只进不出，需人工清理（恢复 = 把文件移回原会话目录）
 
 ## 人工补充

@@ -1,6 +1,6 @@
 # src/shared —— IPC 类型契约（单一事实源）
 
-本模块只承载渲染进程 ↔ 主进程 IPC 的 TypeScript 类型契约（`ZionAPI` 桥面、`AgentSessionEvent` 事件、`FileNode`/`SessionInfoLike`/`SessionHistoryItem`/`SessionPayload`/`ProjectInfo`/`SwitchProjectResult`/`UiAsk`/`UiNotify`/`CommandItem`/`RunCommandResult` 数据形状），运行时零产物：所有消费方只做类型引用。
+本模块只承载渲染进程 ↔ 主进程 IPC 的 TypeScript 类型契约（`ZionAPI` 桥面、`AgentSessionEvent` 事件、`FileNode`/`SessionInfoLike`/`SessionHistoryItem`/`SessionPayload`/`ProjectInfo`/`SwitchProjectResult`/`UiAsk`/`UiNotify`/`CommandItem`/`RunCommandResult`/`ModalKind`/`ModelOption` 数据形状），运行时零产物：所有消费方只做类型引用。
 
 > 任务涉及本模块的接口契约、类型流向、通道名或失败语义时，先读 [DESIGN.md](DESIGN.md)；
 > 仅新增/调整某个数据类型的字段（不改桥面契约、不跨模块）时可跳过。
@@ -10,7 +10,7 @@
 - `src/shared/protocol.ts` —— 本模块唯一文件，全部契约
 - 消费方（仅类型引用，不产生运行时依赖）：
   - `src/renderer/src/env.d.ts` —— `import type { ZionAPI }` 声明 `window.zion`
-  - `src/renderer/src/store.ts`、`src/renderer/src/App.tsx`、`src/renderer/src/components/Sidebar.tsx`、`src/renderer/src/components/InputBar.tsx`、`src/renderer/src/components/ProjectPanel.tsx` —— `import type` 引用业务类型（InputBar 是命令面板，消费 `CommandItem`/`RunCommandResult` 并调用 `runCommand`；store 消费 `UiAsk`/`UiNotify`，驱动 AskDialog/toast；ProjectPanel 消费 `ProjectInfo`，项目选择面板；Sidebar 用 `scanTree` + `onTreeChanged` 驱动文件树）
+  - `src/renderer/src/store.ts`、`src/renderer/src/App.tsx`、`src/renderer/src/components/Sidebar.tsx`、`src/renderer/src/components/InputBar.tsx`、`src/renderer/src/components/ProjectPanel.tsx` —— `import type` 引用业务类型（InputBar 是命令面板，消费 `CommandItem`/`RunCommandResult` 并调用 `runCommand`，弹层类命令按 `data.open`（`ModalKind`）转 `openModal`（ADR-0005）；store 消费 `UiAsk`/`UiNotify`，驱动 AskDialog/toast；ProjectPanel 消费 `ProjectInfo`，项目选择面板；Sidebar 用 `scanTree` + `onTreeChanged` 驱动文件树）
   - `src/renderer/src/mockBridge.ts` —— 浏览器直开 vite dev（无 preload）时的纯调试桥：`import type { ZionAPI }` 全量实现桥形状（无 UI 语义的方法用 no-op 桩，如 `onTreeChanged`），改契约后 typecheck 强制同步
   - `src/main/main.mjs`、`src/main/skillscan.mjs`、`src/main/uibridge.mjs`、`src/preload/preload.cjs` —— JSDoc `@typedef {import('../shared/protocol.ts').X}` 引用（skillscan 消费 `CommandItem`；uibridge 消费 `UiAsk`/`UiNotify`；main.mjs 的 `commandHandlers` 产出/消费 `RunCommandResult`）
 

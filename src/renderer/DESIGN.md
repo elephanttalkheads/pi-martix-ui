@@ -2,9 +2,9 @@
 
 ## 目标与非目标
 
-**目标**：把 pi SDK 会话事件流渲染为黑客帝国风 UI——v4 四区骨架 + v5 回合化会话区（回合聚合消息流 + 凝结雨轨 / 思考块折叠 / 结算行 / 注入解码 / 液态玻璃）+ 4 态会话状态机 + 三件装饰（单层数字雨 / 轻扫描线 / 蠕虫入侵+Neo 头像）+ 会话脑机链路 + WebAudio 程序化音效；会话列表、文件树、历史恢复、项目选择面板（最近项目 / 原生目录浏览 → 切换工作目录与会话上下文）、扩展对话框（`ctx.ui` 的 confirm/select/input → AskDialog 弹层）与扩展通知（notify → toast）走真实 IPC；纯浏览器调试桥（`mockBridge.ts`：无 preload 时注入 mock ZionAPI，prompt 经真实事件派发路径，UI 全功能可演示）。
+**目标**：把 pi SDK 会话事件流渲染为黑客帝国风 UI——v4 四区骨架 + v5 回合化会话区（回合聚合消息流 + 凝结雨轨 / 思考块折叠 / 结算行 / 注入解码 / 液态玻璃）+ 4 态会话状态机 + 三件装饰（单层数字雨 / 轻扫描线 / 蠕虫入侵+Neo 头像）+ 会话脑机链路 + WebAudio 程序化音效；会话列表、文件树、历史恢复、项目选择面板（最近项目 / 原生目录浏览 → 切换工作目录与会话上下文）、扩展对话框（`ctx.ui` 的 confirm/select/input → AskDialog 弹层）与扩展通知（notify → toast）、模态弹层家族（ZionModal：模型选择 / 设置 / 快捷键速查，runCommand `data.open` 数据驱动触发）走真实 IPC；纯浏览器调试桥（`mockBridge.ts`：无 preload 时注入 mock ZionAPI，prompt 经真实事件派发路径，UI 全功能可演示）。
 
-**非目标**：不定义 IPC 契约（`src/shared/protocol.ts` 类型与主进程是事实源）；不提供 Node/凭据能力（隔离在 preload 白名单之后）；不做真实 context 统计（头部「上下文 12.4k / 128k」与「主控会话 #0047」为硬编码装饰）；不实现扩展对话框的 Promise 表/超时/AbortSignal 兜底（主进程 `src/main/uibridge.mjs` 是事实源）——本模块只消费 `UiAsk`/`UiNotify` 类型与 `uiAnswer`/`onUiAsk`/`onUiNotify` 桥面；不实现项目切换的主进程语义（`WORKSPACE_DIR` 变更、旧会话 dispose、`~/.pi/agent/zion-projects.json` 持久化在 `src/main/main.mjs`）——本模块只消费 `listProjects`/`browseProject`/`switchProject` 桥面；不做完整 markdown 渲染（仅围栏 + 行内 code/高亮子集，语法边界见「正文解析」）。
+**非目标**：不定义 IPC 契约（`src/shared/protocol.ts` 类型与主进程是事实源）；不提供 Node/凭据能力（隔离在 preload 白名单之后）；不做真实 context 统计（头部「上下文 12.4k / 128k」与「主控会话 #0047」为硬编码装饰）；不实现扩展对话框的 Promise 表/超时/AbortSignal 兜底（主进程 `src/main/uibridge.mjs` 是事实源）——本模块只消费 `UiAsk`/`UiNotify` 类型与 `uiAnswer`/`onUiAsk`/`onUiNotify` 桥面；不实现项目切换的主进程语义（`WORKSPACE_DIR` 变更、旧会话 dispose、`~/.pi/agent/zion-projects.json` 持久化在 `src/main/main.mjs`）——本模块只消费 `listProjects`/`browseProject`/`switchProject` 桥面；不做完整 markdown 渲染（仅围栏 + 行内 code/高亮子集，语法边界见「正文解析」）；不实现主进程主动弹窗（弹层只经 runCommand 结果 `data.open` 打开，无独立事件通道，ADR-0005 决策 2）；AskDialog/ProjectPanel 不迁移到 ZionModal 壳（ADR-0005 决策 1，维持现状）。
 
 **边界**：渲染层只消费 `window.zion`（ZionAPI）；事件类型源 `@earendil-works/pi-coding-agent`（经 `shared/protocol.ts` re-export）。主进程/preload 为 JS（`main.mjs`/`preload.cjs`），经 `tsconfig.node.json` checkJs 校验，IPC 通道名字面量在 main/preload 两处，本模块不持有。会话区词条（agent 回合 / 凝结雨轨 / 结算行 / 注入解码）定义以根 `CONTEXT.md` 为准，本文件只记实现语义，不重述定义。
 
@@ -51,7 +51,7 @@
 
 **启动恢复**（App useEffect，`window.zion?.getCurrentSession` 守卫——桥未注入直接 return 优雅降级）：`getCurrentSession` → `listSessions` → 标题经 `deriveSessionTitle`（title.ts 纯函数，规则见「设计决策与权衡」）→ `applySession(id, title, items)` 以历史重建回合 feed（仅文本段：user→operator 回合、assistant→agent 回合单 text 段；回合 time 取 `h.ts` 经 `fmtTime` 格式化（HH:MM，无 ts 回落当前时刻）——与实时回合 `msgTime` 同一格式化；无工具卡/结算行，`startedAt=0` 不计时）+ `setSessions` + `getProject` → `setCurrentProject`（侧栏 Project 标题）→ `listProjects` 判空：无最近项目 → `setProjectOpen(true)` 自动打开项目选择面板（启动引导，ADR-0003 决策 3）。
 
-**浏览器调试桥**（mockBridge.ts + main.tsx）：`installMockBridge()` 在 `window.zion` 缺失时（浏览器直开 vite dev、无 Electron preload）注入 mock ZionAPI，有桥（Electron 打包）检测后直接跳过，不影响生产。mock 数据按项目维度写死（`MOCK_SESSIONS`/`MOCK_ITEMS`/`MOCK_TREE`/`MOCK_PROJECTS`/`MOCK_COMMANDS`）；`prompt` 按输入生成模板回复，经 setTimeout 按真实时序派发 `agent_start → tool_execution_start → message_update(text_delta) → tool_execution_end → message_end → agent_end → agent_settled`（`abort` 置位后未触发的派发全部取消）——事件经 `onAgentEvent` 真实派发路径，feed 流式渲染与事件管线零改动。`browseProject` 浏览器无原生对话框，轮换到下一个 mock 项目模拟选择；`runCommand` 为 no-op（日志 + info toast，返回 `{ok:true, kind:'info'}`——`MOCK_COMMANDS` 已对齐真实内置命令清单，但命令不真正执行）；`onUiAsk`/`onUiNotify` 为空实现（无扩展弹层演示数据）。
+**浏览器调试桥**（mockBridge.ts + main.tsx）：`installMockBridge()` 在 `window.zion` 缺失时（浏览器直开 vite dev、无 Electron preload）注入 mock ZionAPI，有桥（Electron 打包）检测后直接跳过，不影响生产。mock 数据按项目维度写死（`MOCK_SESSIONS`/`MOCK_ITEMS`/`MOCK_TREE`/`MOCK_PROJECTS`/`MOCK_COMMANDS`）；`prompt` 按输入生成模板回复，经 setTimeout 按真实时序派发 `agent_start → tool_execution_start → message_update(text_delta) → tool_execution_end → message_end → agent_end → agent_settled`（`abort` 置位后未触发的派发全部取消）——事件经 `onAgentEvent` 真实派发路径，feed 流式渲染与事件管线零改动。`browseProject` 浏览器无原生对话框，轮换到下一个 mock 项目模拟选择；`runCommand` 为 no-op（日志 + info toast，返回 `{ok:true, kind:'info'}`——`MOCK_COMMANDS` 已对齐真实内置命令清单，但命令不真正执行；弹层类命令 model/settings/hotkeys 额外 `openModal(open)`（无载荷），浏览器调试可验证弹层交互流）；`onUiAsk`/`onUiNotify` 为空实现（无扩展弹层演示数据）。
 
 **会话切换/新建/重命名/删除**（Sidebar + SessionPod）：`.deck` 固定三等高槽并按槽吸附滚动；每仓保留 `.scard` 查询类，外层 `role="button"`，点击/Enter/Space 调 `selectSession` → `switchSession`（主进程懒创建实例，可能秒级；`switching` 锁防并发）→ `applySession`；`newSession` 同理；失败走 `log('err')`。中央名称牌常驻，标题统一走 `deriveSessionTitle`，编号为列表索引 + 1；只有名称牌 hover/focus 时展示等高的重命名/删除按钮。Sidebar 持有唯一 `preview`，仓 hover/focus 时按 anchor/sidebar rect 测量共享 `.session-hologram-layer`，显示标题与 `firstMessage` 第一条非空行（无内容显示「尚无会话内容」）；离开/真正离焦/列表滚动立即隐藏。重命名：`startRename` 以当前显示标题为草稿，名称牌中央替换为 `.s-title-edit`，Enter/blur 提交 `commitRename`、Esc 取消；`renameSession` → `setSessions`，当前会话另 `setSessionTitle(name)`（只改标题，不重置 feed）。删除：`askDelete` 两段确认——首击进入待确认态（2.5s 自动复位），此时才由 closed 帧切到 open 帧；再击先清待确认态再 `doDelete` → `deleteSession`（软删，移入 `.trash` 可恢复）→ `setSessions`；删除的是当前会话时主进程指针已落最近会话，`getCurrentSession` 重拉 + `applySession`（标题取新列表匹配，兜底短码）。点文件树行 → `pushUser` + `window.zion.prompt('读取 <path>')`（真实 prompt，无假动画）。
 
@@ -69,8 +69,17 @@
 - 开合：输入以 `/` 开头且 ≤48 字符时打开；Esc 仅关闭面板（不清输入）。
 - 过滤/排序：`name` startsWith 或 includes（不区分大小写）；command 优先 + `localeCompare` 字母序。
 - 插入与执行：skill → 插入 `运行技能 ${name}：`（仅文本，回发仍走 prompt）；command → 无 `argumentHint` 选中即 `send('/name')` 直接执行、有 `argumentHint` 回填 `/name `（带尾空格）待补参后 Enter 执行；输入 `/cmd args` 回车同样匹配 `/^\/[a-zA-Z0-9-]+(\s+.*)?$/` 走 `runCommand`。
-- 执行结果（`RunCommandResult`{ok, message, kind, data}）：`kind: 'error'` → err 日志 + error toast；`kind: 'ok'` → 日志 + info toast；`kind: 'info'`/缺省 → 仅日志；返回 falsy（桥缺失）静默。会话切换类命令（/new /import /resume 等）返回 `{id, items}` 载荷时 → `applySession(id, '会话 ' + 短码, items)` 重建 feed + `listSessions` 刷新会话列表（与 Sidebar 的 switchSession/newSession 契约一致，防 UI 停留旧会话）。
+- 执行结果（`RunCommandResult`{ok, message, kind, data}）：`kind: 'error'` → err 日志 + error toast；`kind: 'ok'` → 日志 + info toast；`kind: 'info'`/缺省 → 仅日志；返回 falsy（桥缺失）静默。会话切换类命令（/new /import /resume 等）返回 `{id, items}` 载荷时 → `applySession(id, '会话 ' + 短码, items)` 重建 feed + `listSessions` 刷新会话列表（与 Sidebar 的 switchSession/newSession 契约一致，防 UI 停留旧会话）；弹层类命令返回 `data.open`（`ModalKind`）时 → `openModal(kind, data)`（载荷随附，见下「弹层基础设施」）。
 - 行交互：`role="listbox"/option` + `aria-selected`；↑↓ 循环移动、`onMouseEnter` 同步 active、`onMouseDown` preventDefault 防点击丢焦点；空态 `palette-empty`「无匹配 skill / 命令」。
+- 外部触发：Ctrl+P（`useGlobalHotkeys`）派发 `zion:open-palette`，InputBar 监听后 `setOpen(true)` + `setActive(0)` + 聚焦输入——不要求文本以 `/` 开头，空查询展示全量列表；`modal` 非空时全局快捷键豁免，palette 不随弹层自动收起（见「已知限制与技术债」）。
+
+**弹层基础设施（ZionModal 家族，ADR-0005）**：
+- 触发两路：命令路径（InputBar 收到 `runCommand` 结果 `data.open` → `openModal(kind, data)`，载荷随附——主进程只管「该开什么」，UI 状态留 renderer，零新增 IPC）；快捷键路径（Ctrl+Shift+S / Ctrl+Shift+M，无载荷 → 组件自拉同命令）。
+- store 单槽：`modal`/`modalData`，`openModal` 新开自动关旧，同一时刻至多一个；与 AskDialog（`uiAsk`）/ProjectPanel（`projectOpen`）无互斥逻辑，靠 z-index 叠加（`.zion-modal-mask`=92 > `.ask-mask`=90）。
+- 壳层 ZionModal：遮罩点击关闭（面板 stopPropagation 防误关）、Esc 关闭（window capture 监听 + stopPropagation，优先于其他 keydown）、挂载即聚焦面板（`tabIndex=-1`）作初始焦点；视觉 v4 底子 + 轻装饰（glow 边框、`▚▞` 角标、打开时一次扫描线扫过 `.zion-modal-scan`，非常驻 CRT）。
+- 宿主 ModalHost（App.tsx）：按 `modal` 渲染 ModelPicker（宽 520）/ SettingsPanel（440）/ HotkeysPanel（440），标题/副标题/宽度集中定义，载荷自 `modalData` 解出。
+- 内容面板：ModelPicker —— 载荷缺省自拉 `runCommand('model')`，选中 `runCommand('model', label)`（主进程 setModel 落盘会话+settings，会话恢复时沿用），成功 → info toast + `openModal(null)` 关层，失败内联错误 `.mp-error`（不靠 toast 一闪而过）；SettingsPanel —— SND/DEC 开关走 store `setSndOn`/`setDecOn`（localStorage 持久化），当前模型行点击 → `openModal('model-picker')`（自拉），认证 provider 只读 + `~/.pi/agent/auth.json` 归属提示；HotkeysPanel —— `ZION_HOTKEYS` 常量表驱动，无状态。
+- 全局快捷键（App.tsx `useGlobalHotkeys`，要求 `ctrlKey && !altKey && !metaKey`）：Ctrl+P 命令面板 / Ctrl+Shift+S 设置 / Ctrl+Shift+M 模型 / Ctrl+K 项目面板（`setProjectOpen(true)`）；`modal` 非空时全部豁免（弹层内 Esc/焦点优先）。
 
 **扩展 UI 桥管线**（AskDialog.tsx + App.tsx 扩展订阅 effect）：
 - 订阅：`onUiAsk` → `setUiAsk`（store 单弹层槽 `uiAsk`，后到覆盖前）；`onUiNotify` → `pushToast`（3.3s 自动消失计时统一在 store.pushToast：3s 展示 + 0.3s 退出动画，App 只入队、不再按消息匹配重复计时）；effect cleanup 退订两通道。
@@ -97,7 +106,7 @@
 
 ## 接口与依赖
 
-**对外消费**（`window.zion`，ZionAPI，env.d.ts 声明）：`ping` / `prompt`（从不抛错，resolve 为 stopReason）/ `abort` / `steer` / `followUp` / `scanTree` / `listCommands`（命令面板数据，`CommandItem[]`）/ `runCommand`（执行 slash 命令，返回 `RunCommandResult`{ok, message, kind, data}；会话切换类命令经 `{id, items}` 载荷触发 feed 重建）/ `listSessions` / `getCurrentSession` / `switchSession` / `newSession` / `listProjects`（最近项目 `ProjectInfo[]`）/ `getProject`（当前项目工作目录，`{ path: string }`）/ `browseProject`（原生目录选择，取消返回 null）/ `switchProject`（切换工作目录+会话上下文，返回 `SwitchProjectResult`{path, id, items}）/ `uiAnswer`（扩展对话框应答，取消传 undefined）/ `onUiAsk` / `onUiNotify`（订阅扩展对话框与通知，返回退订函数）/ `renameSession` / `deleteSession`（rename/delete 均返回刷新后的完整会话列表）/ `onAgentEvent`（返回退订函数）/ `onTreeChanged`（工作区文件树变化订阅，Sidebar 经 `mergeTreeOpen` 实时合并展开态）。
+**对外消费**（`window.zion`，ZionAPI，env.d.ts 声明）：`ping` / `prompt`（从不抛错，resolve 为 stopReason）/ `abort` / `steer` / `followUp` / `scanTree` / `listCommands`（命令面板数据，`CommandItem[]`）/ `runCommand`（执行 slash 命令，返回 `RunCommandResult`{ok, message, kind, data}；会话切换类命令经 `{id, items}` 载荷触发 feed 重建，弹层类命令经 `data.open`（`ModalKind`）+ `models`/`currentModel`/`providers` 载荷打开对应弹层）/ `listSessions` / `getCurrentSession` / `switchSession` / `newSession` / `listProjects`（最近项目 `ProjectInfo[]`）/ `getProject`（当前项目工作目录，`{ path: string }`）/ `browseProject`（原生目录选择，取消返回 null）/ `switchProject`（切换工作目录+会话上下文，返回 `SwitchProjectResult`{path, id, items}）/ `uiAnswer`（扩展对话框应答，取消传 undefined）/ `onUiAsk` / `onUiNotify`（订阅扩展对话框与通知，返回退订函数）/ `renameSession` / `deleteSession`（rename/delete 均返回刷新后的完整会话列表）/ `onAgentEvent`（返回退订函数）/ `onTreeChanged`（工作区文件树变化订阅，Sidebar 经 `mergeTreeOpen` 实时合并展开态）。
 
 **对外不提供**：无公共导出——本模块是终端 UI。
 
@@ -145,6 +154,9 @@
 - **热区独立条而非 sidebar 子元素**：结构原因（`overflow: hidden` 裁剪 + 不盖内部滚动条）见「侧栏调宽」；条自身 `z-index` 须高于 sidebar/console 内容，负 margin 伸出的 4px 命中区才不被邻居压住（数值见 AGENTS.md 硬约束 6 层级表）。
 - **键盘调宽补齐可访问性**：WAI-ARIA separator 契约（`role="separator"`/`aria-orientation="vertical"`/`aria-valuenow` 实时同步）+ ←/→（Shift 大步进）/Esc 复位——纯鼠标功能补齐键盘路径（焦点归还未豁免 resizer，见「交互细节」：键盘入口靠 Tab 聚焦）。
 - **桥调用点全 `?.` 化**（本批）：所有 `window.zion` 调用点改为可选链或先守卫再直调（App 启动/selectFile、InputBar 预取与 prompt/abort、ProjectPanel 全套、AskDialog `answer`、Sidebar 会话/树）——桥未注入（纯浏览器）时 UI 不崩；与 mockBridge 注入互为双保险（失败模式见下）。
+- **数据驱动触发弹层、零新增 IPC**（ADR-0005 决策 2）：主进程只管「该开什么」（`data.open`），UI 状态留在 renderer——命令知识单点（主进程 dispatch），渲染层不按命令名自判；快捷键路径无载荷 → 组件自拉同命令（ModelPicker/SettingsPanel），与命令路径同一数据源，避免两份清单漂移。代价：主进程无法主动推弹层（当前无此需求）。
+- **全局快捷键单一事实源（`ZION_HOTKEYS`）**：注册（`useGlobalHotkeys`）与速查（HotkeysPanel）同源 `hotkeys.ts`——改快捷键只动一处，展示与行为不漂移；`modal` 非空时全局快捷键整体豁免（弹层内 Esc/焦点优先），ZionModal 的 Esc 用 window capture + stopPropagation 保证优先于其他 keydown 监听。
+- **弹层初始焦点捕获**：面板 `tabIndex=-1` 挂载即聚焦，Tab 循环留在弹层内；遮罩点击关闭与面板内点击 stopPropagation 分离，内容区误点不关层。
 
 ## 不变量、安全边界与失败模式
 
@@ -162,6 +174,8 @@
 - REDUCED 分支必须在动画路径早期返回且 done 仍执行（蠕虫直接命中）。
 - 会话脑机链路 DOM 数恒为 `0..3`；仅可见 active 链路启动字符脉冲，hover/dormant 不启动 rAF；路径终点必须来自当前 closed/open 图片 rect，禁止回退到固定屏幕像素。
 - 渲染进程零 Node 访问：所有数据经 ZionAPI 白名单。
+- `modal` 单槽：同一时刻至多一个 ZionModal（`openModal` 新开自动关旧）；ZionModal 打开期间 `useGlobalHotkeys` 全部豁免（`modal` 非空即跳过）。
+- `ZION_HOTKEYS` 是全局快捷键唯一事实源：注册（App.tsx）与速查（HotkeysPanel）同源，改快捷键必须同步 `hotkeys.ts` 与 `useGlobalHotkeys`，否则速查与实际行为漂移。
 
 **失败模式**：
 - 桥未注入（`window.zion` undefined）：调用点 `?.`/守卫不抛错，`useAgentEvents`、扩展 UI 订阅与启动恢复 effect 直接 return（空界面、扩展对话框落空、无项目引导）；纯浏览器直开 vite dev 时 `installMockBridge` 注入 mock（UI 全功能可演示，扩展弹层与 `onUiNotify` 驱动的主进程通知为空实现，mock 命令自推的 toast 可正常渲染）——Electron 下桥必在，smoke 经 `window.zion.ping` 自检，开发中先查 preload 注入。
@@ -178,10 +192,11 @@
 - `zion.sidebar-w` 读回非数字（`Number.isFinite` 守卫）忽略、回落默认；越界值经 `clampSide` 收敛到区间；拖拽松手在窗口外——监听挂在 window 上，正常收尾持久化。
 - 本地字体加载失败：styles.css 顶部 `@font-face` 引用的 `assets/fonts/ShareTechMono-Regular.woff2` 缺失/损坏时，按 `--font` 回退链走 ui-monospace/Courier New；字体声明只在 styles.css 一处，组件一律 `var(--font)`。
 - 会话仓 effect 锚点尚未注册：初始化观察/测量会从同一 `.session-pod` 与双帧图片 DOM 只读收集兜底；若图片/Sidebar rect 仍为 0，本帧跳过该仓或整次测量，等待 targetVersion、图片 load 或 ResizeObserver 的后续重测，不绘制猜测线路。连续滚动中只保留最新待应用布局，防止过时槽位在滚动停止后回跳。
+- 弹层自拉失败：ModelPicker/SettingsPanel 无载荷自拉 `runCommand` 时 reject 被 `.catch(() => {})` 静默吞掉（或 `ok:false` 无 message）——模型选择器停留「加载模型清单…」，设置面板停留空值（'—'）；关闭弹层重开可重试。
 
 ## 已知限制与技术债
 
-- 单元测试仅覆盖纯函数层（`deriveSessionTitle`、`toolfmt`、`parseBody`（markdown.test.mjs 8 用例）、会话摘要、会话链路 hash/锚点/路径，node:test）；组件、事件管线、store 逻辑无自动化测试（含命令面板键盘交互、AskDialog 三形态与 toast 自动消失，smoke 不查 `.palette`/`.ask-dialog`/`.neural-cables-layer`），UI 回归依赖 typecheck + smoke + e2e；链路另需人工覆盖侧栏 160/232/480、04–06 滚动换线、删除待确认开仓与 reduced-motion。
+- 单元测试仅覆盖纯函数层（`deriveSessionTitle`、`toolfmt`、`parseBody`（markdown.test.mjs 8 用例）、会话摘要、会话链路 hash/锚点/路径，node:test）；组件、事件管线、store 逻辑无自动化测试（含命令面板键盘交互、AskDialog 三形态与 toast 自动消失、快捷键注册；smoke 已覆盖 `.zion-modal` 打开契约与可见性、模型清单 scoped 计数，仍不查 `.palette`/`.ask-dialog`/`.neural-cables-layer`），UI 回归依赖 typecheck + smoke + e2e；链路另需人工覆盖侧栏 160/232/480、04–06 滚动换线、删除待确认开仓与 reduced-motion。
 - AskDialog.tsx 头部注释与实现不完全一致：注释声称的「Esc 取消 / select ↑↓/Enter / confirm danger 强调」实际只有 input 形态的 Esc/Enter 真实存在——select 选项纯鼠标（hover/click，`role="listbox"` 仅是标记），confirm 主按钮为 `.primary`（accent 绿）而非 danger 色；改注释或补实现前先认清现状。
 - 会话历史恢复只重建文本回合（无工具卡 / 结算行，`startedAt=0` 不计时）。
 - conv-head「上下文 12.4k / 128k」、「主控会话 #0047」、状态栏「TLS 1.3」为硬编码装饰，非真实数据。
@@ -192,5 +207,9 @@
 - 项目面板无测试覆盖（同组件层现状，smoke 不查 `.project-panel`）。
 - mockBridge 是纯演示：回复为模板句，会话/文件树/项目/命令是写死假数据，非真实 agent 行为；`onUiAsk`/`onUiNotify` 为空实现（无扩展弹层演示）；真实交互验证走 smoke + e2e（Electron 环境）。
 - 正文 markdown 是极简子集（``` 围栏 + 行内 code/高亮），无标题/列表/链接等扩展——新增语法须同时扩展 markdown.ts 与 markdown.test.mjs。
+- SettingsPanel 的 SND 开关只走 `store.setSndOn`（store + localStorage），不调 `SND.setEnabled`——音频引擎 `enabled` 标志不同步：面板关 SND 后声音仍响（状态栏按钮路径 `setSndOn(SND.toggle())` 是正确的，且 App 只在挂载时 `SND.setEnabled` 一次）；修法：`setSndOn` 内同步或面板改调 `SND.setEnabled`。
+- 焦点归还豁免表（App.tsx refocus 的 `closest` 列表）未含 `.zion-modal-mask`：弹层内点击（模型项/复选框）后 mouseup 焦点被归还 `#cmdline`，弹层失焦（Esc 仍可关——capture 监听；Tab 焦点循环需重新点击面板恢复）。
+- 命令面板不随模态弹层打开自动收起：`store.openModal` 注释声称「由 InputBar 自处理」未实现——命令执行路径靠 `send()` 的 `setText('')` 顺带收起，快捷键路径（palette 已开时按 Ctrl+Shift+S/M）palette 留在弹层遮罩后；ADR-0005 决策 3 的「打开模态弹层时自动收起」仅对命令路径成立。
+- ADR-0005 决策 3 的「全局模态互斥」未完全实现：互斥仅限 ZionModal 家族单槽；AskDialog（`uiAsk`）与 ProjectPanel（`projectOpen`）不受 `openModal` 影响，可与弹层同时存在（z-index 92 vs 90 叠加，按 DOM 序）。
 
 ## 人工补充
