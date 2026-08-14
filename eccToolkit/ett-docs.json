@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 2,
+  "modules": [
+    {
+      "path": "src/main",
+      "type": "module",
+      "agents": "src/main/AGENTS.md",
+      "design": "src/main/DESIGN.md",
+      "synced": "pending",
+      "pendingParent": "2216231dae53b8a1b22ce689d19291449b8d3f11"
+    },
+    {
+      "path": "src/renderer",
+      "type": "module",
+      "agents": "src/renderer/AGENTS.md",
+      "design": "src/renderer/DESIGN.md",
+      "synced": "pending",
+      "pendingParent": "2216231dae53b8a1b22ce689d19291449b8d3f11"
+    },
+    {
+      "path": "src/shared",
+      "type": "module",
+      "agents": "src/shared/AGENTS.md",
+      "design": "src/shared/DESIGN.md",
+      "synced": "pending",
+      "pendingParent": "2216231dae53b8a1b22ce689d19291449b8d3f11"
+    }
+  ]
+}
