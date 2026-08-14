@@ -1,6 +1,8 @@
 # 会话脑机链路 —— 视觉实现（Sidebar + NeuralCableLayer + neuralCable.ts）
 
 > 记录脑机链路（neural cable）特效的实现方式。事实源：`src/renderer/src/neuralCable.ts`、`src/renderer/src/components/NeuralCableLayer.tsx`、`src/renderer/src/components/Sidebar.tsx`、`styles.css` 的 `.neural-cable-*` 段。
+>
+> ⚠️ **实现是程序化 SVG，不依赖任何连接态 PNG 素材**：链路完全由运行时测量的 DOM 锚点 + 贝塞尔路径 + 字符脉冲组成。早期设计稿中的 `brain-link-slot-*.png` / `neural-cable-session-*.png` / `neural-cables/*`（connected/disconnected 两态）等素材**从未被代码引用**，已归档至 `ui-demo/废案/neural-cable-system/`（含 v2 设计 README），不要据此推断实现。
 
 **隐喻**：侧栏里，从 Neo 头像后脑勺接线口拉出一条条「神经缆线」，接到各会话培育仓左侧的机械柱；当前会话的缆线上跑着双向握手——Neo 发出脉冲包控制培育仓，培育仓收讫后回传应答。
 

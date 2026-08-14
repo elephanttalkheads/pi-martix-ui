@@ -1,8 +1,13 @@
-# ZION Neo 脑机接口连接线系统 v2
+# ZION Neo 脑机接口连接线系统 v2（已废弃）
+
+> ⚠️ **本文档与同目录素材已移入 `ui-demo/废案/`**：v2 素材方案被最终实现取代——
+> 实际脑机链路为程序化 SVG（`src/renderer/src/components/NeuralCableLayer.tsx` + `neuralCable.ts`，
+> 运行时测量 DOM 锚点重建贝塞尔路径，不使用本目录任何 PNG/SVG 整图）。
+> 权威实现说明见 `docs/neural-cable-visual.md`。本目录仅供历史追溯。
 
 ## 1. 交付范围
 
-本目录和 `src/renderer/src/assets/neural-cables-v2/` 共同构成可落地的动态连接线设计。它替代旧的固定画布 PNG 线路，但不会自动修改当前 React UI。
+本目录和 `neural-cables-v2/`（同目录）共同构成当时设计的动态连接线方案。它替代旧的固定画布 PNG 线路，但不会自动修改当前 React UI。
 
 核心交付：
 

@@ -37,6 +37,10 @@ src/shared/protocol.ts   IPC 类型契约单一事实源：AgentSessionEvent（r
 src/renderer/src/        React + TS 应用：store.ts(zustand) / App.tsx / env.d.ts(window.zion 声明) /
                          components/MatrixBg(深度分层数字雨),CrtOverlay, WormLayer(蠕虫动画),SoundFx,
                          DiffCard, Feed, InputBar（.tsx/.ts）
+docs/neural-cable-visual.md
+                         会话脑机链路（Sidebar + NeuralCableLayer + neuralCable.ts）视觉实现参考文档（事实源：
+                         代码 + styles.css 的 .neural-cable-* 段；实现是程序化 SVG，不依赖任何连接态 PNG 素材，
+                         早期素材已归档 ui-demo/废案/）。⚠️ 修改脑机链路设计时**必须同步更新本文档**
 tsconfig.json            renderer 类型检查（moduleResolution: bundler，strict，noEmit）
 tsconfig.node.json       main/preload checkJs（bundler 解析 + allowImportingTsExtensions，noEmit）
 scripts/                 smoke-cdp.mjs（冒烟）/ e2e-prompt.mjs（真实 prompt 回归）

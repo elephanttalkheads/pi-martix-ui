@@ -35,7 +35,7 @@
 
 ### 暂不作为本次接入前置条件的素材
 
-`src/renderer/src/assets/neural-cables/` 中的脑机线缆是独立覆盖层。它们当前不应被塞进每个培育仓卡片内部；线缆需要统一到 Sidebar 的真实纵向画布后，再作为 `.sidebar` 的绝对定位兄弟层接入。培育仓和信息 UI 可以先独立落地。
+早期设计稿中的脑机线缆覆盖层（`neural-cables/`、`neural-cables-v2/`，含 connected/disconnected 两态 PNG 与 v2 SVG）已随设计演进**归档至 `ui-demo/废案/neural-cable-system/`**，代码未引用。线缆最终实现为 Sidebar 内程序化 SVG（`NeuralCableLayer.tsx`，运行时测量 DOM 锚点重建路径，见 `docs/neural-cable-visual.md`），作为 `.sidebar` 的绝对定位兄弟层接入，不依赖任何整图素材。
 
 ## 3. 当前正式代码基线
 

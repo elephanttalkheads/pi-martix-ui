@@ -300,7 +300,7 @@
       <section class="core-wrap" data-od-id="neo-core">
         <div class="core-visual">
           <div class="neo-avatar" id="neo-avatar" aria-label="Neo 头像">
-            <img src="../../src/renderer/src/assets/neo-avatar/neo-idle.png" alt="Neo 像素头像" />
+            <img src="../../../src/renderer/src/assets/neo-avatar/neo-idle.png" alt="Neo 像素头像" />
           </div>
         </div>
         <div class="core-label">NEO · <b>121111</b> · IDLE</div>
@@ -387,8 +387,8 @@
         pod.dataset.odId = `session-pod-${String(id).padStart(2, '0')}`;
         pod.innerHTML = `
           <span class="pod-visual" aria-hidden="true">
-            <img class="pod-frame pod-frame-closed" src="../../src/renderer/src/assets/session-pod-horizontal-closed.png" alt="" draggable="false" />
-            <img class="pod-frame pod-frame-open" src="../../src/renderer/src/assets/session-pod-horizontal-open.png" alt="" draggable="false" />
+            <img class="pod-frame pod-frame-closed" src="../../../src/renderer/src/assets/session-pod-horizontal-closed.png" alt="" draggable="false" />
+            <img class="pod-frame pod-frame-open" src="../../../src/renderer/src/assets/session-pod-horizontal-open.png" alt="" draggable="false" />
           </span>
           <span class="pod-nameplate"><span class="pod-index">${String(id).padStart(2, '0')}</span><span class="pod-title">${title}</span><span class="pod-state">${id === activeId ? '●' : '○'}</span></span>
           <button class="pod-delete" aria-label="切换 ${title} 的开仓预览">×</button>`;
