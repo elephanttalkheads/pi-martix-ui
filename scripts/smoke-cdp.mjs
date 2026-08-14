@@ -2,6 +2,9 @@
 // 用法：node scripts/smoke-cdp.mjs
 import { spawn } from 'node:child_process';
 import { execSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 
 // 注意：9222 可能落入 Windows 动态保留端口段（netsh … show excludedportrange，曾实测 9220–9319 被保留），
 // 故用 9633；若再遇 bind 失败先查保留段。
@@ -89,6 +92,42 @@ try {
   });
   console.log('RUNCMD count:', JSON.stringify(r5.result.value));
 
+  // 弹层类命令：走真实 UI 路径（输入框输入 /settings + Enter → InputBar.send → openModal），
+  // 并验证 runCommand 契约 data.open（ADR-0005 数据驱动触发）
+  const r6 = await call('Runtime.evaluate', {
+    expression: `window.zion.runCommand('settings').then(r => ({ open: r.data?.open, kind: r.kind, ok: r.ok }))`,
+    returnByValue: true, awaitPromise: true,
+  });
+  console.log('RUNCMD settings:', JSON.stringify(r6.result.value));
+  // 模型清单 = scoped（settings.enabledModels 认证解析），与 pi /scoped-models 数量一致
+  const r6b = await call('Runtime.evaluate', {
+    expression: `window.zion.runCommand('model').then(r => ({ ok: r.ok, count: r.data?.models?.length, labels: (r.data?.models ?? []).map(m => m.label) }))`,
+    returnByValue: true, awaitPromise: true,
+  });
+  console.log('RUNCMD model:', JSON.stringify(r6b.result.value));
+  await sleep(400); // 等 renderer 处理 openModal
+  const r7 = await call('Runtime.evaluate', {
+    expression: `Boolean(document.querySelector('.zion-modal'))`,
+    returnByValue: true, awaitPromise: true,
+  });
+  console.log('MODAL visible:', JSON.stringify(r7.result.value));
+
+  // 直接调桥不触发 InputBar 的 openModal（那是 send() 的职责）——改走真实输入路径验证弹层打开
+  const r8 = await call('Runtime.evaluate', {
+    expression: `(async () => {
+      const input = document.querySelector('#cmdline');
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+      setter.call(input, '/settings');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      await new Promise(r => setTimeout(r, 200));
+      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      await new Promise(r => setTimeout(r, 500));
+      return Boolean(document.querySelector('.zion-modal'));
+    })()`,
+    returnByValue: true, awaitPromise: true,
+  });
+  console.log('MODAL via input:', JSON.stringify(r8.result.value));
+
   // 检查主进程日志里的桥注入标记
   await sleep(500);
   console.log('MAINLOG has bridge ok:', /preload bridge injected: true/.test(mainLog));
@@ -99,8 +138,19 @@ try {
   const unknownOk = r3.result.value?.ok === false && /未知命令/.test(r3.result.value?.message ?? '');
   const sessionOk = r4.result.value?.ok === true && r4.result.value?.kind === 'ok';
   const countOk = r5.result.value >= 14; // 内置 14 + 扩展
-  if (!bridgeOk || !unknownOk || !sessionOk || !countOk) {
-    console.error('SMOKE FAIL: bridge=' + bridgeOk + ' unknown=' + unknownOk + ' session=' + sessionOk + ' count=' + countOk);
+  // 弹层契约：settings 命令返回 data.open='settings'（数据驱动触发契约成立）
+  const modalContract = r6.result.value?.ok === true && r6.result.value?.open === 'settings';
+  // 模型清单 = scoped enabledModels（认证过滤），数量与 pi /scoped-models 一致（node 侧读 settings 对照）
+  let scopedCount = 0;
+  try {
+    const st = JSON.parse(readFileSync(join(homedir(), '.pi', 'agent', 'settings.json'), 'utf8'));
+    scopedCount = Array.isArray(st.enabledModels) ? st.enabledModels.filter((p) => typeof p === 'string').length : 0;
+  } catch { /* 无 settings → 0 */ }
+  const modelScoped = r6b.result.value?.ok === true && r6b.result.value?.count === scopedCount && scopedCount > 0;
+  // 真实 UI 路径：输入 /settings + Enter 后弹层 DOM 出现（InputBar.send → openModal）
+  const modalVisible = r8.result.value === true;
+  if (!bridgeOk || !unknownOk || !sessionOk || !countOk || !modalContract || !modalVisible || !modelScoped) {
+    console.error('SMOKE FAIL: bridge=' + bridgeOk + ' unknown=' + unknownOk + ' session=' + sessionOk + ' count=' + countOk + ' modalContract=' + modalContract + ' modalVisible=' + modalVisible + ' modelScoped=' + modelScoped + ' (expect ' + scopedCount + ')');
     process.exitCode = 1;
   } else {
     console.log('smoke run-command assertions ok');

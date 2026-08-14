@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type { ToolExecutionStartEvent } from '@earendil-works/pi-coding-agent';
-import type { FileNode, SessionHistoryItem, SessionInfoLike, UiAsk, UiNotify } from '../../shared/protocol';
+import type { FileNode, ModalKind, SessionHistoryItem, SessionInfoLike, UiAsk, UiNotify } from '../../shared/protocol';
 
 export type ToolStatus = 'run' | 'ok' | 'err';
 
@@ -141,6 +141,10 @@ interface FeedState {
   toasts: { id: number; message: string; type?: UiNotify['type'] }[];
   /** 项目选择面板开合（启动无最近项目时自动开） */
   projectOpen: boolean;
+  /** 当前模态弹层（null=无；ZionModal 渲染；同一时刻只开一个，新开自动关旧） */
+  modal: ModalKind | null;
+  /** 弹层载荷（主进程 runCommand data；如模型清单/当前模型/认证 provider） */
+  modalData: Record<string, unknown> | null;
   /** 在爬蠕虫计数（releaseWorm 开始 +1、done -1）——Neo 头像张嘴 = wormActive > 0 */
   wormActive: number;
 
@@ -170,6 +174,8 @@ interface FeedState {
   pushToast(n: UiNotify): void;
   dismissToast(id: number): void;
   setProjectOpen(open: boolean): void;
+  /** 打开/关闭模态弹层（开新层自动关旧层；同时收起命令面板由 InputBar 自处理） */
+  openModal(kind: ModalKind | null, data?: Record<string, unknown> | null): void;
   setCurrentProject(path: string | null): void;
   setTree(tree: FileNode[]): void;
   setSessions(sessions: SessionInfoLike[]): void;
@@ -243,6 +249,8 @@ export const useFeed = create<FeedState>()((set) => ({
   uiAsk: null,
   toasts: [],
   projectOpen: false,
+  modal: null,
+  modalData: null,
   wormActive: 0,
 
   pushUser(text) {
@@ -464,6 +472,9 @@ export const useFeed = create<FeedState>()((set) => ({
     set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) }));
   },
   setProjectOpen(open) { set({ projectOpen: open }); },
+  openModal(kind, data) {
+    set({ modal: kind, modalData: data ?? null });
+  },
   setCurrentProject(path) { set({ currentProject: path }); },
   setSessions(sessions) { set({ sessions }); },
   setSessionTitle(title) { set({ sessionTitle: title }); },

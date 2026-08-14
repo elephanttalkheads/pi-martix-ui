@@ -884,3 +884,98 @@ body {
 .pp-card-meta { font-size: 10px; color: var(--text-tertiary); margin-top: 4px; letter-spacing: 0.06em; }
 .pp-browse { align-self: stretch; text-align: center; }
 .pp-cancel { align-self: flex-end; margin-top: 8px; }
+
+/* ---------- 通用模态弹层 ZionModal（ADR-0005：v4 底子 + 轻装饰） ---------- */
+.zion-modal-mask {
+  position: fixed; inset: 0; z-index: 92;
+  background: rgba(0, 4, 2, 0.6);
+  display: flex; align-items: center; justify-content: center;
+  animation: zmask-in 0.18s ease-out;
+}
+@keyframes zmask-in { from { opacity: 0; } to { opacity: 1; } }
+.zion-modal {
+  position: relative;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  outline: none;
+  /* 轻装饰：绿 glow 边框 */
+  box-shadow: 0 0 18px rgba(61, 255, 143, 0.10), 0 0 46px rgba(61, 255, 143, 0.05);
+  padding: 16px 18px 14px;
+  animation: zmodal-in 0.22s ease-out;
+  max-height: 74vh; display: flex; flex-direction: column;
+}
+@keyframes zmodal-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+/* 打开时扫描线扫过（一次性，非常驻 CRT） */
+.zion-modal-scan {
+  position: absolute; inset: 0; pointer-events: none; overflow: hidden;
+}
+.zion-modal-scan::after {
+  content: ''; position: absolute; left: 0; right: 0; height: 22%;
+  background: linear-gradient(to bottom, transparent, rgba(61, 255, 143, 0.10), transparent);
+  animation: zscan 0.5s ease-out 1;
+}
+@keyframes zscan { from { top: -22%; } to { top: 110%; } }
+.zion-modal-head {
+  display: flex; align-items: center; gap: 8px;
+  padding-bottom: 8px; margin-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+.zion-modal-corner { color: var(--accent); font-size: 11px; opacity: 0.8; }
+.zion-modal-titles { flex: 1; min-width: 0; }
+.zion-modal-title { font-size: 13px; letter-spacing: 0.16em; color: var(--text-primary); margin: 0; }
+.zion-modal-sub { font-size: 10px; color: var(--text-tertiary); margin: 2px 0 0; letter-spacing: 0.05em; }
+.zion-modal-x {
+  background: none; border: none; color: var(--text-tertiary); cursor: pointer;
+  font-size: 12px; padding: 2px 4px;
+}
+.zion-modal-x:hover { color: var(--text-primary); }
+.zion-modal-body { overflow-y: auto; min-height: 0; }
+
+/* ---- 模型选择器 ---- */
+.mp-list { display: flex; flex-direction: column; gap: 2px; }
+.mp-item {
+  display: flex; align-items: center; gap: 8px; text-align: left;
+  background: none; border: 1px solid transparent; color: var(--text-secondary);
+  font-family: var(--font); font-size: 12px; letter-spacing: 0.04em;
+  padding: 7px 10px; cursor: pointer;
+}
+.mp-item:hover { border-color: var(--accent-muted); background: rgba(61, 255, 143, 0.06); color: var(--text-primary); }
+.mp-item.current { color: var(--accent); }
+.mp-item:disabled { opacity: 0.5; cursor: default; }
+.mp-mark { flex: none; width: 12px; text-align: center; color: var(--accent); }
+.mp-label { flex: 1; word-break: break-all; }
+.mp-tag { font-size: 10px; color: var(--text-tertiary); border: 1px solid var(--border); padding: 1px 5px; letter-spacing: 0.1em; }
+.mp-empty { font-size: 12px; color: var(--text-tertiary); padding: 14px 8px; }
+.mp-error {
+  font-size: 12px; color: var(--danger); border: 1px solid var(--danger);
+  padding: 7px 10px; margin-bottom: 8px; letter-spacing: 0.03em;
+}
+
+/* ---- 设置面板 ---- */
+.sp-body { display: flex; flex-direction: column; gap: 12px; }
+.sp-section { border: 1px solid var(--border); padding: 10px 12px; }
+.sp-h { font-size: 11px; letter-spacing: 0.2em; color: var(--accent-muted); margin: 0 0 6px; }
+.sp-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  font-size: 12px; color: var(--text-secondary); padding: 4px 0;
+}
+.sp-row.sp-click { background: none; border: none; width: 100%; font-family: var(--font); cursor: pointer; text-align: left; }
+.sp-row.sp-click:hover .sp-name { color: var(--text-primary); }
+.sp-name { letter-spacing: 0.05em; }
+.sp-val { color: var(--text-primary); font-size: 11px; word-break: break-all; text-align: right; }
+.sp-check { accent-color: var(--accent); }
+.sp-hint { font-size: 10px; color: var(--text-tertiary); margin: 4px 0 0; letter-spacing: 0.04em; }
+
+/* ---- 快捷键速查 ---- */
+.hk-list { display: flex; flex-direction: column; gap: 8px; }
+.hk-row { display: flex; align-items: center; gap: 12px; }
+.hk-keys {
+  flex: none; min-width: 120px; text-align: center;
+  border: 1px solid var(--accent-muted); color: var(--accent);
+  font-family: var(--font); font-size: 11px; letter-spacing: 0.1em;
+  padding: 4px 8px; background: rgba(61, 255, 143, 0.05);
+}
+.hk-label { font-size: 12px; color: var(--text-secondary); }

@@ -31,6 +31,17 @@ export default function InputBar() {
     return () => { alive = false; };
   }, []);
 
+  // 全局快捷键 Ctrl+P 打开命令面板（App.tsx 派发 zion:open-palette；弹层打开时忽略）
+  useEffect(() => {
+    const onOpenPalette = () => {
+      setOpen(true);
+      setActive(0);
+      inputRef.current?.focus();
+    };
+    window.addEventListener('zion:open-palette', onOpenPalette);
+    return () => window.removeEventListener('zion:open-palette', onOpenPalette);
+  }, []);
+
   const query = text.startsWith('/') ? text.slice(1) : '';
   const filtered = useMemo(() => {
     let list = items;
@@ -85,6 +96,13 @@ export default function InputBar() {
         } else {
           log('dim', `[CMD] ${r.message}`);
           if (r.kind === 'ok') pushToast({ message: r.message, type: 'info' });
+          // 弹层类命令（/model /settings /hotkeys）：数据驱动触发（ADR-0005），
+          // 主进程 data.open 指示弹层类型，载荷（models/currentModel/providers）随附
+          const openKind = r.data?.open;
+          if (openKind) {
+            const { openModal } = useFeed.getState();
+            openModal(openKind, r.data);
+          }
         }
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);

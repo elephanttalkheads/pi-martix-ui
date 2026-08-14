@@ -115,6 +115,18 @@ export interface CommandItem {
   argumentHint?: string;
 }
 
+/** 弹层类型（/model /settings /hotkeys 数据驱动触发，见 ADR-0005） */
+export type ModalKind = 'model-picker' | 'settings' | 'hotkeys';
+
+/** 模型选项（模型选择器清单项） */
+export interface ModelOption {
+  providerId: string;
+  modelId: string;
+  label: string;
+  /** 是否当前会话正在使用 */
+  current?: boolean;
+}
+
 /** 命令执行结果（zion:run-command 返回；renderer 渲染日志/toast） */
 export interface RunCommandResult {
   ok: boolean;
@@ -122,8 +134,24 @@ export interface RunCommandResult {
   message: string;
   /** 结果性质：info=日志即可，ok=成功（绿色 toast），error=失败（红色） */
   kind?: 'info' | 'ok' | 'error';
-  /** 命令专属载荷（如 session 统计、导出路径） */
-  data?: unknown;
+  /** 命令专属载荷（弹层类命令带 open；会话类带 id/items；export 带 path） */
+  data?: {
+    /** 弹层类命令：打开对应弹层（主进程只管「该开什么」，UI 状态留在 renderer） */
+    open?: ModalKind;
+    /** 模型清单（model-picker 打开时附带） */
+    models?: ModelOption[];
+    /** 当前模型（settings 面板展示） */
+    currentModel?: string;
+    /** 已认证 provider 列表（settings 面板只读展示） */
+    providers?: string[];
+    /** 会话切换类命令：新会话 id */
+    id?: string;
+    /** 会话切换类命令：重建 feed 的历史 */
+    items?: SessionHistoryItem[];
+    /** 导出路径等其它载荷 */
+    path?: string;
+    [key: string]: unknown;
+  };
 }
 
 /** 扩展对话框请求（main → renderer，经 uiBridge） */

@@ -4,7 +4,7 @@
 // 蠕虫在 tool_execution_start 的同步路径触发（不依赖 React 渲染时序——bash 等快工具
 // 的 tool_end 可能先于 useEffect 到达，导致时序竞争漏触发）。
 import { useEffect, useRef, useState } from 'react';
-import type { AgentSessionEvent } from '../../shared/protocol';
+import type { AgentSessionEvent, ModelOption } from '../../shared/protocol';
 import RainCanvas from './components/RainCanvas';
 import SignalCanvas from './components/SignalCanvas';
 import Sidebar from './components/Sidebar';
@@ -13,6 +13,10 @@ import Feed from './components/Feed';
 import InputBar from './components/InputBar';
 import AskDialog, { ToastHost } from './components/AskDialog';
 import ProjectPanel from './components/ProjectPanel';
+import ZionModal from './components/ZionModal';
+import ModelPicker from './components/ModelPicker';
+import SettingsPanel from './components/SettingsPanel';
+import HotkeysPanel from './components/HotkeysPanel';
 import { SND, useSoundFx } from './components/SoundFx';
 import { useFeed, parseEditFromTool, normPath, matchTreeRow, openAncestors, deriveSessionTitle, type EditInfo } from './store';
 import { releaseWorm } from './components/SignalCanvas';
@@ -173,9 +177,71 @@ function Clock() {
   );
 }
 
+// 全局快捷键（Q7/ADR-0005）：Ctrl+P 命令面板 / Ctrl+Shift+S 设置 / Ctrl+Shift+M 模型 / Ctrl+K 项目。
+// 与 /hotkeys 速查层同源（ZION_HOTKEYS）；模态弹层打开时忽略（弹层内 Esc/焦点优先）。
+function useGlobalHotkeys() {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!e.ctrlKey || e.altKey || e.metaKey) return;
+      const k = e.key.toLowerCase();
+      if (useFeed.getState().modal) return; // 模态弹层打开时忽略全局快捷键
+      if (e.shiftKey) {
+        if (k === 's') {
+          e.preventDefault();
+          useFeed.getState().openModal('settings');
+        } else if (k === 'm') {
+          e.preventDefault();
+          useFeed.getState().openModal('model-picker');
+        }
+      } else if (k === 'p') {
+        e.preventDefault();
+        window.dispatchEvent(new Event('zion:open-palette'));
+      } else if (k === 'k') {
+        e.preventDefault();
+        useFeed.getState().setProjectOpen(true);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+}
+
+// 模态弹层宿主（ADR-0005）：store.modal 驱动，同一时刻只开一个；载荷随附或组件自拉。
+function ModalHost() {
+  const modal = useFeed((s) => s.modal);
+  const modalData = useFeed((s) => s.modalData);
+  const openModal = useFeed((s) => s.openModal);
+  const close = () => openModal(null);
+  if (!modal) return null;
+  const data = modalData ?? {};
+  return (
+    <ZionModal
+      title={
+        modal === 'model-picker' ? '选择模型' : modal === 'settings' ? '设置' : '快捷键'
+      }
+      subtitle={
+        modal === 'model-picker'
+          ? 'setModel 落盘会话与 settings，会话恢复时沿用'
+          : modal === 'settings'
+            ? 'ZION 本地设置'
+            : '与主界面快捷键行为一致（ZION_HOTKEYS）'
+      }
+      onClose={close}
+      width={modal === 'model-picker' ? 520 : 440}
+    >
+      {modal === 'model-picker' && <ModelPicker models={(data.models as ModelOption[] | undefined) ?? null} />}
+      {modal === 'settings' && (
+        <SettingsPanel currentModel={data.currentModel as string | undefined} providers={data.providers as string[] | undefined} />
+      )}
+      {modal === 'hotkeys' && <HotkeysPanel />}
+    </ZionModal>
+  );
+}
+
 export default function App() {
   useAgentEvents();
   useSoundFx();
+  useGlobalHotkeys();
   const sessionState = useFeed((s) => s.sessionState);
   const sessionTitle = useFeed((s) => s.sessionTitle);
   const sndOn = useFeed((s) => s.sndOn);
@@ -327,6 +393,7 @@ export default function App() {
       <AskDialog />
       <ToastHost />
       <ProjectPanel />
+      <ModalHost />
 
       <div id="stage">
         <header className="titlebar">

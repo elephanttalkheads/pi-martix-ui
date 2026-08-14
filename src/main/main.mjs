@@ -7,7 +7,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
-import { createAgentSession, SessionManager } from '@earendil-works/pi-coding-agent';
+import { createAgentSession, SessionManager, hasTrustRequiringProjectResources, ProjectTrustStore, resolveModelScopeWithDiagnostics } from '@earendil-works/pi-coding-agent';
 import { collectCommands } from './skillscan.mjs';
 import { createUiBridge } from './uibridge.mjs';
 
@@ -337,11 +337,14 @@ ipcMain.handle('zion:list-commands', () => {
  * 统一命令结果工厂（kind: ok=成功 toast / info=仅日志 / error=失败 toast）
  * @param {'ok' | 'info' | 'error'} kind
  * @param {string} message
- * @param {unknown} [data]
+ * @param {Record<string, unknown> | null} [data]
  * @returns {import('../shared/protocol.ts').RunCommandResult}
  */
 function cmd(kind, message, data) {
-  return { ok: kind !== 'error', message, kind, ...(data !== undefined ? { data } : {}) };
+  /** @type {import('../shared/protocol.ts').RunCommandResult} */
+  const r = { ok: kind !== 'error', message, kind };
+  if (data != null) r.data = data;
+  return r;
 }
 
 /** dialog 调用统一挂父窗口（三处同形，提取防重复）
@@ -482,10 +485,106 @@ const commandHandlers = {
   },
 
   // ---- 待实现（后续 issue）——返回占位错误，避免假执行 ----
-  trust: async () => cmd('error', '项目信任处理未实现（#25 系统类命令）'),
-  hotkeys: async () => cmd('error', '快捷键速查弹层未实现（#25 系统类命令）'),
-  model: async () => cmd('error', '模型选择弹层未实现（#26 模型与设置类命令）'),
-  settings: async () => cmd('error', '设置面板未实现（#26 模型与设置类命令）'),
+  trust: async () => {
+    if (!hasTrustRequiringProjectResources(WORKSPACE_DIR)) {
+      return cmd('info', '当前项目没有需要信任的资源（项目内 .pi 条目或 .agents/skills）');
+    }
+    const store = new ProjectTrustStore(path.join(os.homedir(), '.pi', 'agent'));
+    const cur = store.get(WORKSPACE_DIR);
+    if (cur === true) return cmd('info', '当前项目已信任');
+    if (cur === false) return cmd('info', '当前项目已被拒绝信任');
+    /** @type {Electron.MessageBoxOptions} */
+    const opts = {
+      type: 'question',
+      title: '信任项目',
+      message: `信任项目 ${WORKSPACE_DIR}？\n信任后 pi 可访问项目内的 .pi 资源与 .agents/skills。`,
+      buttons: ['信任', '拒绝', '取消'],
+      defaultId: 0,
+      cancelId: 2,
+    };
+    const r = await withWin((w) => dialog.showMessageBox(w, opts));
+    if (r.response === 2) return cmd('info', '已取消信任确认');
+    store.set(WORKSPACE_DIR, r.response === 0);
+    return r.response === 0
+      ? cmd('ok', `已信任项目 ${WORKSPACE_DIR}`)
+      : cmd('info', `已拒绝信任 ${WORKSPACE_DIR}（ask 将继续忽略项目资源）`);
+  },
+  hotkeys: async () => cmd('ok', 'ZION 快捷键速查', { open: 'hotkeys' }),
+  model: async (args) => {
+    const s = await ensureCurrentSession();
+    const spec = (args ?? '').trim();
+    // 可见模型集合 = scoped（settings.enabledModels → resolveModelScope，内部 getAvailable 只含已认证）
+    // 优先，与 pi /scoped-models 同源同数量；无配置 → 回退全量已认证（getAvailable）
+    /** @type {string[]} */
+    let patterns = [];
+    try {
+      const settings = JSON.parse(
+        fs.readFileSync(path.join(os.homedir(), '.pi', 'agent', 'settings.json'), 'utf8'),
+      );
+      /** @type {unknown[]} */
+      const em = settings.enabledModels;
+      if (Array.isArray(em)) {
+        patterns = em.filter((p) => typeof p === 'string');
+      }
+    } catch { /* 无 settings 文件 → 回退路径 */ }
+    /** @type {import('@earendil-works/pi-coding-agent').ScopedModel[]} */
+    let scoped = [];
+    if (patterns.length > 0) {
+      const r = await resolveModelScopeWithDiagnostics(patterns, s.modelRuntime);
+      scoped = r.scopedModels;
+    }
+    // 归一化为 label + model（scoped 保序；回退按目录序）；Model.provider 即 provider id 字符串
+    /** @type {Array<{ label: string, model: { provider: string, id: string } }>} */
+    const visible =
+      scoped.length > 0
+        ? scoped.map((sm) => ({ label: `${sm.model.provider}/${sm.model.id}`, model: sm.model }))
+        : (await s.modelRuntime.getAvailable()).map((/** @type {{provider: string, id: string}} */ m) => ({
+            label: `${m.provider}/${m.id}`,
+            model: m,
+          }));
+    if (!spec) {
+      // 无参 → 弹模型选择器（数据驱动触发，清单随 data 附带，一次往返）
+      const current = s.model;
+      const list = visible.map((v) => ({
+        providerId: v.model.provider,
+        modelId: v.model.id,
+        label: v.label,
+        current: !!current && current.provider === v.model.provider && current.id === v.model.id,
+      }));
+      return cmd('ok', `共 ${list.length} 个可用模型（scoped ${patterns.length > 0 ? `：${patterns.length} 配置 / ${scoped.length} 已认证` : '未配置，回退已认证'}）`, {
+        open: 'model-picker',
+        models: list,
+      });
+    }
+    // 带参 → 校验在可见集合内再切换（无 auth 时 setModel 抛错，错误进日志+toast）
+    const target = visible.find((v) => v.label === spec);
+    if (!target) {
+      const avail = visible.slice(0, 6).map((v) => v.label).join(', ');
+      return cmd('error', `模型 ${spec} 不在可用集合（scoped/已认证）。可选：${avail}${visible.length > 6 ? ' …' : ''}`);
+    }
+    try {
+      await s.setModel(target.model);
+      return cmd('ok', `已切换模型 → ${spec}（落盘会话与 settings，恢复时沿用）`);
+    } catch (e) {
+      return cmd('error', `切换模型失败：${e instanceof Error ? e.message : String(e)}`);
+    }
+  },
+  settings: async () => {
+    // 收纳式设置面板：SND/DEC 开关在 renderer 侧（localStorage），主进程附当前模型与认证 provider
+    const s = await ensureCurrentSession();
+    let currentModel;
+    try {
+      currentModel = s.model ? `${s.model.provider}/${s.model.id}` : undefined;
+    } catch { /* 会话未就绪 */ }
+    /** @type {string[]} */
+    let providers = [];
+    try {
+      const authFile = path.join(os.homedir(), '.pi', 'agent', 'auth.json');
+      const auth = JSON.parse(fs.readFileSync(authFile, 'utf8'));
+      providers = Object.keys(auth ?? {}).filter((k) => auth[k] && typeof auth[k] === 'object' && Object.keys(auth[k]).length > 0);
+    } catch { /* 无 auth 文件/损坏 → 空 */ }
+    return cmd('ok', '设置面板', { open: 'settings', currentModel, providers });
+  },
 };
 
 ipcMain.handle('zion:run-command', async (_e, name, args) => {

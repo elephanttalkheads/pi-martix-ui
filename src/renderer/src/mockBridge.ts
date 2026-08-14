@@ -151,10 +151,18 @@ function createMock(): ZionAPI {
     scanTree: async () => MOCK_TREE,
     listCommands: async () => MOCK_COMMANDS,
     runCommand: async (name, args) => {
-      const { log, pushToast } = useFeed.getState();
+      const { log, pushToast, openModal } = useFeed.getState();
       const msg = `/mock:${name}${args ? ' ' + args : ''}（mock 模式，不真正执行）`;
       log('dim', `[CMD] ${msg}`);
       pushToast({ message: msg, type: 'info' });
+      // 弹层类命令：mock 也打开对应弹层（无载荷），保证浏览器调试可验证交互流
+      const openMap: Record<string, 'model-picker' | 'settings' | 'hotkeys'> = {
+        model: 'model-picker',
+        settings: 'settings',
+        hotkeys: 'hotkeys',
+      };
+      const open = openMap[name];
+      if (open) openModal(open);
       return { ok: true, message: msg, kind: 'info' };
     },
     listSessions: async () => MOCK_SESSIONS[project] ?? [],
