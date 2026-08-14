@@ -53,8 +53,20 @@ feed 中表示一次工具调用生命周期（开始→结束）的细线角标
 _Avoid_: 工具卡、命令卡片
 
 **命令面板（palette）**：
-输入栏以 `/` 开头触发的弹出清单，聚合本机全部 skills（用户级/共享/项目/扩展包/settings.skills）与命令（内置 21 个 + 扩展白名单），主进程 `skillscan.mjs` 扫描、`zion:list-commands` 传输；↑↓/Enter/Tab/Esc 操作，选中 skill 插入「运行技能 X：」、命令插入 `/name`（执行语义属宿主 TUI 层，面板只做插入）。
+输入栏以 `/` 开头触发的弹出清单，聚合本机全部 skills（用户级/共享/项目/扩展包/settings.skills）与命令（内置 14 个 + 扩展白名单），主进程 `skillscan.mjs` 扫描、`zion:list-commands` 传输；↑↓/Enter/Tab/Esc 操作，**选中命令即执行**（无参数命令直接 `runCommand`、带参数命令回填 `/name <args>` 由用户补参）；选中 skill 插入「运行技能 X：」。
 _Avoid_: 快捷菜单、autocomplete
+
+**弹层（modal）**：
+覆盖在主界面之上的模态面板，由通用 `ZionModal` 提供遮罩/点击关闭/Esc/焦点捕获/开关动画。现役成员：模型选择器（/model）、设置面板（/settings）、快捷键速查（/hotkeys）、AskDialog、项目面板。同一时刻只开一个模态弹层，新开自动关旧；命令面板属轻量 palette，开模态时自动收起。
+_Avoid_: 对话框、弹窗、popup
+
+**模型选择器**：
+`/model` 无参时打开的弹层，枚举主进程 ModelRuntime 可用模型清单，选中后 `session.setModel` 切换当前会话模型（落盘会话与 settings，会话恢复沿用）；无 auth 时内联报错。`/model <provider/model>` 带参则校验后直接切换，不弹层。
+_Avoid_: 模型菜单、模型弹窗
+
+**快捷键速查**：
+`/hotkeys` 打开的弹层，展示 ZION 全局快捷键（常量表驱动，与实现同源）。
+_Avoid_: 快捷键帮助、hotkeys 命令
 
 **编辑类工具调用**：
 会对工作目录文件产生修改的工具调用（edit / batch_execute / write / apply_patch / bash 写操作[重定向/echo/printf/tee/sed -i/cp/mv/touch] 等）。它是蠕虫入侵与 diff 卡的触发源；bash 写入经启发式解析提取目标路径与内容。
@@ -115,3 +127,7 @@ _Avoid_: 打字机、乱码特效
 **项目（project）**：
 agent 的工作目录及其会话上下文集合。主进程 `WORKSPACE_DIR` 可变——切换项目 = 更新工作目录 + 废弃旧会话实例（`dispose()` + sessions Map 清空）+ 按新目录 `continueRecent`/新建；最近项目持久化于 `~/.pi/agent/zion-projects.json`（path + lastUsed，上限 8），启动有最近项目自动恢复、无则打开项目选择面板；面板也可经侧栏「切换项目」随时打开。
 _Avoid_: 工作区、目录切换
+
+**信任决策（trust）**：
+项目资源信任的显式确认：主进程查 `hasTrustRequiringProjectResources`，仅当项目确有需信任资源时弹原生确认框；决策写入 `~/.pi/agent/trust.json`（路径→bool）。已信任项目 `/trust` 直接返回信息不重复打扰。
+_Avoid_: 授权、权限设置
