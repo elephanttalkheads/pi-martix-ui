@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>ZION Study 01 — Matrix Illumination Wave</title>
+  <style>
+    @font-face { font-family: Matrix; src: url("../font/Matrix-Code.ttf") format("truetype"); }
+    @font-face { font-family: Sarasa; src: url("../font/SarasaTermSC-Regular.ttf") format("truetype"); }
+    :root { color-scheme: dark; --green:#00ff66; --white:#d9ffe3; --dim:#087a38; }
+    * { box-sizing:border-box; }
+    html, body { width:100%; height:100%; margin:0; overflow:hidden; background:#000; }
+    body { font-family:Sarasa, monospace; color:var(--green); }
+    canvas { position:fixed; inset:0; width:100%; height:100%; background:#000; }
+    .fog { position:fixed; inset:0; pointer-events:none; background:
+      radial-gradient(ellipse at 50% 55%, transparent 0 22%, rgba(0,7,2,.2) 44%, rgba(0,0,0,.86) 100%),
+      linear-gradient(90deg, rgba(0,0,0,.82), transparent 16% 84%, rgba(0,0,0,.82)); }
+    .masthead { position:fixed; inset:22px 26px auto; display:flex; align-items:flex-start; justify-content:space-between; gap:24px; }
+    .identity { display:grid; gap:4px; text-transform:uppercase; letter-spacing:.22em; }
+    .identity strong { color:var(--white); font-size:clamp(18px,2vw,28px); font-weight:400; text-shadow:0 0 14px rgba(104,255,154,.7); }
+    .identity span, .meta { font-size:10px; opacity:.66; }
+    .meta { text-align:right; line-height:1.7; letter-spacing:.18em; }
+    .callout { position:fixed; left:clamp(28px,8vw,130px); bottom:clamp(44px,9vh,100px); width:min(540px,72vw); padding:18px 22px 20px 28px; border-left:3px solid var(--green); background:linear-gradient(90deg,rgba(0,18,6,.88),rgba(0,8,3,.42) 70%,transparent); box-shadow:-12px 0 32px rgba(0,255,102,.08); }
+    .callout::before { content:""; position:absolute; left:0; right:28%; top:0; height:1px; background:linear-gradient(90deg,var(--green),transparent); }
+    .eyebrow { font-size:10px; letter-spacing:.34em; opacity:.58; }
+    h1 { margin:9px 0 4px; font-size:clamp(25px,5vw,58px); line-height:.92; font-weight:400; letter-spacing:-.04em; color:var(--white); text-shadow:0 0 22px rgba(0,255,85,.42); }
+    p { margin:12px 0 0; max-width:48ch; color:#72d98f; font-size:12px; line-height:1.75; }
+    button { position:fixed; right:28px; bottom:28px; min-width:150px; min-height:44px; border:1px solid rgba(0,255,102,.5); color:var(--white); background:rgba(0,11,3,.82); font:11px Sarasa,monospace; letter-spacing:.2em; cursor:pointer; clip-path:polygon(9px 0,100% 0,100% calc(100% - 9px),calc(100% - 9px) 100%,0 100%,0 9px); }
+    button:hover, button:focus-visible { outline:none; background:#00ff66; color:#001b09; box-shadow:0 0 30px rgba(0,255,102,.38); }
+    .reticle { position:fixed; left:50%; top:50%; width:min(50vw,620px); aspect-ratio:1; translate:-50% -50%; border:1px solid rgba(0,255,102,.08); border-radius:50%; pointer-events:none; }
+    .reticle::before, .reticle::after { content:""; position:absolute; inset:17%; border:1px dashed rgba(132,255,169,.08); border-radius:50%; }
+    .reticle::after { inset:42%; border-style:solid; box-shadow:0 0 28px rgba(0,255,102,.08); }
+    @media (prefers-reduced-motion:reduce) { button { display:none; } }
+  </style>
+</head>
+<body>
+  <canvas id="rain" aria-hidden="true"></canvas>
+  <div class="fog" aria-hidden="true"></div>
+  <div class="reticle" aria-hidden="true"></div>
+  <header class="masthead">
+    <div class="identity"><strong>ZION // SIMULATION VEIL</strong><span>STUDY 01 · FIXED GLYPH FIELD / MOVING LIGHT</span></div>
+    <div class="meta">GRID LOCKED<br>WAVEFORM ACTIVE<br>PALETTE 00FF66</div>
+  </header>
+  <section class="callout">
+    <div class="eyebrow">REZMASON PRINCIPLE / ORIGINAL CANVAS STUDY</div>
+    <h1>符号不坠落。<br>光穿过符号。</h1>
+    <p>每个字形固定在网格中；列偏移、非同步速度、锯齿亮度波和高能头部共同制造“雨”的错觉。</p>
+  </section>
+  <button id="impulse" type="button">INJECT IMPULSE</button>
+  <script>
+    (() => {
+      const canvas = document.querySelector('#rain');
+      const ctx = canvas.getContext('2d');
+      const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+      const glyphs = 'ｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿﾀﾁﾂﾃﾄ0123456789ZXCVBNM<>+=*';
+      let width = 0, height = 0, dpr = 1, columns = [], cells = [], start = performance.now(), impulseAt = -99;
+      const fract = value => value - Math.floor(value);
+      const hash = value => fract(Math.sin(value * 127.1) * 43758.5453);
+      const wobble = value => value + .3 * Math.sin(Math.SQRT2 * value) + .2 * Math.sin(Math.sqrt(5) * value);
+
+      function resize() {
+        dpr = Math.min(devicePixelRatio || 1, 2);
+        width = innerWidth; height = innerHeight;
+        canvas.width = Math.round(width * dpr); canvas.height = Math.round(height * dpr);
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        const cell = Math.max(17, Math.min(24, width / 68));
+        const countX = Math.ceil(width / cell) + 2;
+        const countY = Math.ceil(height / cell) + 2;
+        columns = Array.from({length:countX}, (_, x) => ({
+          x, offset:hash(x + 11) * 940, speed:.42 + hash(x + 71) * .9, length:.72 + hash(x + 31) * 1.5,
+          depth:.35 + Math.pow(hash(x + 141), 1.8) * .8
+        }));
+        cells = Array.from({length:countX * countY}, (_, i) => glyphs[Math.floor(hash(i + 991) * glyphs.length)]);
+        canvas.dataset.cell = String(cell); canvas.dataset.rows = String(countY);
+      }
+
+      function brightness(col, row, time) {
+        const rainTime = (row * .062 + col.offset + time * col.speed) / (8.2 * col.length);
+        return 1 - fract(wobble(rainTime));
+      }
+
+      function draw(now) {
+        const time = reduced ? 12 : (now - start) / 1000;
+        const cell = Number(canvas.dataset.cell), rows = Number(canvas.dataset.rows);
+        ctx.fillStyle = '#000'; ctx.fillRect(0, 0, width, height);
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = `${cell * .82}px Matrix, monospace`;
+        for (const col of columns) {
+          for (let row = 0; row < rows; row++) {
+            const b = brightness(col, row, time);
+            const below = brightness(col, row + 1, time);
+            const head = b > .82 && b > below;
+            const x = (col.x - .35) * cell, y = (row - .2) * cell;
+            const wave = impulseAt > 0 ? 1 - Math.min(1, Math.abs(Math.hypot(x - width*.52, y - height*.48) - (time - impulseAt) * 420) / 100) : 0;
+            const energy = Math.min(1, Math.pow(b, 2.1) * col.depth + wave * .9);
+            if (energy < .06) continue;
+            const glyph = cells[col.x * rows + row];
+            if (head || wave > .5) {
+              ctx.shadowColor = '#55ff88'; ctx.shadowBlur = 22 + energy * 24;
+              ctx.fillStyle = `rgba(216,255,226,${.35 + energy * .65})`;
+            } else {
+              ctx.shadowColor = '#00ff66'; ctx.shadowBlur = 4 + energy * 12;
+              ctx.fillStyle = `rgba(${8 + energy*30},${80 + energy*175},${30 + energy*70},${.22 + energy * .62})`;
+            }
+            ctx.fillText(glyph, x, y);
+          }
+        }
+        ctx.shadowBlur = 0;
+        if (!reduced) requestAnimationFrame(draw);
+      }
+
+      addEventListener('resize', resize, {passive:true});
+      document.querySelector('#impulse').addEventListener('click', () => { impulseAt = (performance.now() - start) / 1000; });
+      resize(); requestAnimationFrame(draw);
+    })();
+  </script>
+</body>
+</html>

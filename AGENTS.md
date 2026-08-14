@@ -37,6 +37,8 @@ src/shared/protocol.ts   IPC 类型契约单一事实源：AgentSessionEvent（r
 src/renderer/src/        React + TS 应用：store.ts(zustand) / App.tsx / env.d.ts(window.zion 声明) /
                          components/MatrixBg(深度分层数字雨),CrtOverlay, WormLayer(蠕虫动画),SoundFx,
                          DiffCard, Feed, InputBar（.tsx/.ts）
+DESIGN.md                项目级视觉单一事实源；任何界面、视觉重构、动效、声音或品牌素材任务必须先读。
+                         默认大胆、前卫、视觉优先；真实状态、可控性、可访问性与性能降级是硬边界
 docs/neural-cable-visual.md
                          会话脑机链路（Sidebar + NeuralCableLayer + neuralCable.ts）视觉实现参考文档（事实源：
                          代码 + styles.css 的 .neural-cable-* 段；实现是程序化 SVG，不依赖任何连接态 PNG 素材，
@@ -44,8 +46,8 @@ docs/neural-cable-visual.md
 tsconfig.json            renderer 类型检查（moduleResolution: bundler，strict，noEmit）
 tsconfig.node.json       main/preload checkJs（bundler 解析 + allowImportingTsExtensions，noEmit）
 scripts/                 smoke-cdp.mjs（冒烟）/ e2e-prompt.mjs（真实 prompt 回归）
-ui-demo/                 index-v4.html = 最新视觉参考：极简方向（按 design-doc/agent-ui-reference-design.md
-                         收敛 v3 的过度装饰——去 boot/CRT/视差/glitch，绿色语义化，日志改抽屉，
+ui-demo/                 index-v4.html = 历史视觉实现（不再限制未来构图；新设计以根目录 DESIGN.md 为准）：
+                         该版本曾收敛 v3 的 boot/CRT/视差/glitch，采用绿色语义化并将日志改为抽屉，
                          蠕虫简化为一次性写入信号脉冲）；index-v3.html = 重度氛围版（含 releaseWorm、
                          addDiffCard、SND、CRT 层、深度分层数字雨）；index-v2.html = 稳定基线；
                          brand-spec.md 设计系统；react/agent-ui-design-spec.md = v4 纯文本复刻规格
@@ -96,7 +98,7 @@ research/                技术调研（壳层 / pi-SDK / pi-RPC）；matrix-sty
 ## Subagents
 
 - 需要**视觉/多媒体能力**的任务（截图分析、图像理解、UI 还原比对、图表/示意图解读等）→ 统一交给 `vision` subagent：
-  `runs.run('main', { agent: 'vision', task: '...' })`（模型 MiniMax-M3，思考深度 max，别名 `multimodal` / `vision-m3`）
+  `runs.run('main', { agent: 'vision', task: '...' })`（模型 MiniMax-M3，思考深度 max，别名 `multimodal` / `vision-m3`）（如果你有视觉能力，则忽略这条规则即可）
 - 主会话默认模型（deepseek）无图像输入能力，**不要**用主会话假装处理图片内容；涉及图像的 prompt 一律改派 `vision`
 - `vision` 无法加载或理解图像时，要求它如实说明，不得编造图片内容
 

@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>ZION Design Effects Lab</title>
+  <style>
+    @font-face{font-family:Sarasa;src:url("../font/SarasaTermSC-Regular.ttf") format("truetype")}
+    *{box-sizing:border-box}html,body{margin:0;min-height:100%;background:#000704;color:#9cffb7;font-family:Sarasa,monospace}
+    body{padding:clamp(26px,5vw,72px);background-image:linear-gradient(rgba(0,255,92,.04) 1px,transparent 1px),linear-gradient(90deg,rgba(0,255,92,.04) 1px,transparent 1px);background-size:52px 52px}
+    header{max-width:1180px;margin:0 auto 36px;padding-bottom:22px;border-bottom:1px solid #176d35;display:flex;align-items:end;justify-content:space-between;gap:24px}
+    h1{margin:0;color:#e1ffe8;font-weight:400;font-size:clamp(28px,5vw,64px);letter-spacing:-.06em;line-height:.9}header p{max-width:46ch;margin:0;color:#4fa66a;font-size:11px;line-height:1.7}
+    main{max-width:1180px;margin:auto;display:grid;grid-template-columns:repeat(3,1fr);gap:18px}.card{position:relative;min-height:520px;border:1px solid #145e30;background:#000;overflow:hidden;box-shadow:0 30px 70px #000}.card::before{content:attr(data-id);position:absolute;z-index:3;left:14px;top:12px;color:#ddffe6;font-size:10px;letter-spacing:.2em;text-shadow:0 0 12px #00ff66}.card img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:saturate(.86) brightness(.82);transition:transform .5s ease,filter .5s ease}.card:hover img{transform:scale(1.035);filter:saturate(1.1) brightness(1)}.card a{position:absolute;z-index:4;left:0;right:0;bottom:0;min-height:76px;padding:17px 18px;background:linear-gradient(90deg,rgba(0,18,7,.98),rgba(0,7,3,.92));border-top:1px solid #207e43;color:#b9ffca;text-decoration:none;font-size:13px;letter-spacing:.09em}.card a span{display:block;margin-top:6px;color:#438b59;font-size:9px;letter-spacing:.12em}.card a:hover,.card a:focus-visible{outline:none;background:#00ff66;color:#001407}.card a:hover span,.card a:focus-visible span{color:#075c25}
+    @media(max-width:900px){main{grid-template-columns:1fr}.card{min-height:410px}header{align-items:start;flex-direction:column}}
+    @media(prefers-reduced-motion:reduce){.card img{transition:none}.card:hover img{transform:none}}
+  </style>
+</head>
+<body>
+  <header><h1>ZION<br>EFFECTS LAB</h1><p>三个独立、无依赖的原创视觉研究。它们复现参考项目的机制，不复制其资产或界面。</p></header>
+  <main>
+    <article class="card" data-id="STUDY 01"><img src="screenshots/matrix-wave.png" alt="数字雨光波 demo 截图"><a href="matrix-wave.html">ILLUMINATION WAVE<span>FIXED GLYPHS / MOVING LIGHT / BLOOM</span></a></article>
+    <article class="card" data-id="STUDY 02"><img src="screenshots/crt-material.png" alt="CRT 材质 demo 截图"><a href="crt-material.html">CRT MATERIAL PIPELINE<span>NOISE / BURN-IN / RGB / CURVATURE</span></a></article>
+    <article class="card" data-id="STUDY 03"><img src="screenshots/zion-command-hud.png" alt="Zion 环形界面 demo 截图"><a href="zion-command-hud.html">COMMAND GEOMETRY<span>RADIAL FUI / ROUTES / STABLE ZONES</span></a></article>
+  </main>
+</body>
+</html>
