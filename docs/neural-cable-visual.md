@@ -33,7 +33,7 @@
 - 一个回合 = 五段状态机（L = 路径长度）：
   1. **脉冲出站**：4 字符短脉冲（24px），Neo → 仓体，320px/s（`PULSE_SPEED_PX_PER_SECOND`），`anchor = t·v`、slot 距离 `anchor − k·step`；
   2. **回传生长**：脉冲尾端到达仓体后同帧触发——尾部锚定仓体、头部以 140px/s（`RETURN_GROW_SPEED_PX_PER_SECOND`）伸向 Neo，`anchor = L − t·v`、slot 距离 `anchor + k·step`，直至铺满全缆；
-  3. **维持传输**：1s（`RETURN_HOLD_MS`）——两端锚定，slot 位置固定铺满全缆，内容以 90px/s（`RETURN_FLOW_PX_PER_SECOND`）等效流速向 Neo 滚动（`flowStep` 槽位偏移），读作「连接已建立、数据正在倒入 Neo」；
+  3. **维持传输**：1s（`RETURN_HOLD_MS`）——两端锚定，字符位置固定铺满全缆，内容按 slot 异相突变（不同步，读作数据噪声）；一道连续亮度波（±40px 高斯衰减增亮至多 +0.8）在维持期内从仓体端扫到 Neo 端恰好一次，读作「一整批数据倒入 Neo」；
   4. **回传收缩**：头部锚定 Neo、尾部以 240px/s（`RETURN_SHRINK_SPEED_PX_PER_SECOND`）脱离仓体追向 Neo，可见尾界 `tailLimit = L − t·v`，长度减至 0；
   5. **休止**：0.6s（`PULSE_REST_MS`）——链路只剩 bed/nerve/ring，无任何字符。
 - 两个方向的信号永不同屏；active 期间 `.neural-cable-static` 静态字符流全程隐藏。SVG path 始终按 Neo→仓体定义，dormant 静态线路不反转。

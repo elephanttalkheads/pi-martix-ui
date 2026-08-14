@@ -27,7 +27,6 @@ const TRANSITION_MS = 90;
 const PULSE_SPEED_PX_PER_SECOND = 320;
 const RETURN_GROW_SPEED_PX_PER_SECOND = 140;
 const RETURN_SHRINK_SPEED_PX_PER_SECOND = 240;
-const RETURN_FLOW_PX_PER_SECOND = 90;
 const RETURN_HOLD_MS = 1000;
 const PULSE_REST_MS = 600;
 const PULSE_STEP = 8;
@@ -153,22 +152,24 @@ function NeuralCable({
       let anchor = 0;
       let stepSign = 1;
       let tailLimit = length;
-      let flowStep = 0;
+      let slotLimit = chars.length;
+      let waveDist = -1;
       let rest = false;
 
       if (cycleTime < outboundMs) {
-        // 脉冲：短促的 4 字符包，Neo → 仓体。
+        // 脉冲：短促的 4 字符包，Neo → 仓体；池内其余 slot 必须限位隐藏。
         anchor = cycleTime * PULSE_SPEED_PX_PER_SECOND / 1000;
         stepSign = -1;
+        slotLimit = PULSE_TAIL_LENGTH;
       } else if (cycleTime < outboundMs + growMs) {
         // 回传生长：头部伸向 Neo，尾部锚定仓体，长度渐增。
         anchor = length - (cycleTime - outboundMs) * RETURN_GROW_SPEED_PX_PER_SECOND / 1000;
       } else if (cycleTime < outboundMs + growMs + RETURN_HOLD_MS) {
-        // 维持传输：两端锚定铺满全缆，内容持续向 Neo 滚动。
+        // 维持传输：两端锚定铺满全缆；字符位置固定、内容异相突变，
+        // 一道连续亮度波在维持期内从仓体扫向 Neo 恰好一次。
         anchor = 0;
-        flowStep = Math.floor(
-          (cycleTime - outboundMs - growMs) * RETURN_FLOW_PX_PER_SECOND / 1000 / PULSE_STEP,
-        );
+        waveDist = length
+          - (cycleTime - outboundMs - growMs) / RETURN_HOLD_MS * length;
       } else if (cycleTime < outboundMs + growMs + RETURN_HOLD_MS + shrinkMs) {
         // 回传收缩：头部锚定 Neo，尾部脱离仓体追向 Neo，长度减至 0。
         anchor = 0;
@@ -182,7 +183,7 @@ function NeuralCable({
       chars.forEach((char, index) => {
         if (!char) return;
         const distance = anchor + index * stepSign * PULSE_STEP;
-        if (rest || distance < 0 || distance > tailLimit || distance > length) {
+        if (rest || index >= slotLimit || distance < 0 || distance > tailLimit || distance > length) {
           char.setAttribute('visibility', 'hidden');
           return;
         }
@@ -194,15 +195,21 @@ function NeuralCable({
         const jitter = Math.sin(now * 0.011 + index * 1.7 + signature.id) * 1.5;
         const x = point.x - Math.sin(angle) * jitter;
         const y = point.y + Math.cos(angle) * jitter;
-        const flowBase = index + flowStep;
-        const glyphIndex = (flowBase + signature.staticOffset
-          + ((flowBase + mutationStep + signature.id) % 3 === 0 ? mutationStep : 0)) % signature.glyphs.length;
+        const glyphIndex = (index + signature.staticOffset
+          + ((index + mutationStep + signature.id) % 3 === 0 ? mutationStep : 0)) % signature.glyphs.length;
+
+        const baseOpacity = Math.max(0.18, 1 - index / 18);
+        // 亮度波：波前连续移动，±40px 高斯衰减增亮，读作数据倒入 Neo。
+        const waveOffset = waveDist >= 0 ? distance - waveDist : 0;
+        const waveBoost = waveDist >= 0
+          ? Math.exp(-(waveOffset * waveOffset) / (2 * 40 * 40)) * 0.8
+          : 0;
 
         char.textContent = signature.glyphs[glyphIndex];
         char.setAttribute('x', x.toFixed(2));
         char.setAttribute('y', y.toFixed(2));
         char.setAttribute('transform', `rotate(${(angle * 180 / Math.PI).toFixed(2)} ${x.toFixed(2)} ${y.toFixed(2)})`);
-        char.setAttribute('fill-opacity', Math.max(0.18, 1 - index / 18).toFixed(2));
+        char.setAttribute('fill-opacity', Math.min(1, baseOpacity + waveBoost).toFixed(2));
         char.setAttribute('visibility', 'visible');
       });
       animationFrame = requestAnimationFrame(animate);
