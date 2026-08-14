@@ -52,8 +52,6 @@ ui-demo/                 index-v4.html = 最新视觉参考：极简方向（按
                          （供无多模态模型按文字复刻 demo 为真实 Agent UI，含令牌/算法/mock 替换点）
 research/                技术调研（壳层 / pi-SDK / pi-RPC）；matrix-style-references.md = 黑客帝国风格
                          参考作品调研（数字雨/电影 UI/CRT 还原，含 6 项优化清单及完成状态）
-pi-matrix-demo-handoff.md demo → 正式 UI 交接文档：v3 模块清单、mock→真实实现映射表。
-                         注意：开屏加载页（boot/CRT 亮线/药丸）已明确不实现
 ```
 
 关键 SDK 行为（docs/sdk.md）：
@@ -93,7 +91,7 @@ pi-matrix-demo-handoff.md demo → 正式 UI 交接文档：v3 模块清单、mo
 
 - 唯一推送目标：`origin/main`（GitHub）。Gitee 由镜像/手动同步，不直接推
 - 提交信息中文、聚焦单件事；动环境变量前先读后写（本项目曾发生 setx 覆盖 PATH 事故，恢复法见 D:\skills-guide\用户配置\环境变量备份与恢复记录-2026-08-11.md）
-- **提交/推送仅在用户明确指示（如「提交推送」）时执行**：届时先运行 doc-update 技能（见下方 ETT 规则块）同步模块文档，再 git add/commit/push；goal 自主推进等其余场景一律不自动提交、不暂存提交
+- **提交/推送仅在用户明确指示（如「提交推送」）时执行**
 
 ## Subagents
 
