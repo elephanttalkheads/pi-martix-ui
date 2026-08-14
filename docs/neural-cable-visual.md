@@ -27,15 +27,17 @@
   4. `.neural-cable-ring` × N + `.neural-cable-receiver`：环与接收器位图（`image-rendering: pixelated`），用 `getPointAtLength(长度 × ringFractions)` 定位；
   5. `.neural-cable-pulse`：脉冲包（见下节）。
 
-## 双向握手动画（仅当前会话、非 reduced-motion）
+## 五段握手动画（仅当前会话、非 reduced-motion）
 
-- 18 个 SVG `<text>` 字符组成信号包（`PULSE_TAIL_LENGTH=18`、`PULSE_STEP=8px`）：头字符近白 `#c8ffd4`（600 字重），尾部 `#3dff8f`，透明度 1→0.18 线性衰减。出站脉冲与回传包共用同一组字符元素与外观参数。
-- 一个回合 = 三段状态机：
-  1. **脉冲出站**：Neo → 仓体，180px/s（`PULSE_SPEED_PX_PER_SECOND`），`headDistance = t·v`、尾节 `distance = head − i·step`；
-  2. **回传包**：脉冲尾端到达仓体后同一帧触发，仓体 → Neo，120px/s（`RETURN_SPEED_PX_PER_SECOND`），`headDistance = L − t·v`、尾节 `distance = head + i·step`——同形异速，方向语义靠节奏区分；
-  3. **休止 1200ms**（`PULSE_REST_MS`）：链路只剩 bed/nerve/ring，无任何字符。
-- 两个方向的包永不同屏；active 期间 `.neural-cable-static` 静态字符流全程隐藏。SVG path 始终按 Neo→仓体定义，dormant 静态线路不反转。
-- 每帧逐字符 `getPointAtLength` 定位 + 沿切线 `rotate` + 法向 ±1.5px 正弦抖动；每 120ms 约 1/3 尾节突变换字（`mutationStep`），形成数据流动感。
+- 信号字符为 SVG `<text>` 池：脉冲相只用前 4 个（`PULSE_TAIL_LENGTH=4`），回传相铺满全缆，池大小按 `ceil(路径长/8)+2` 随路径重测量动态分配（`PULSE_STEP=8px`）。slot 0 恒为「亮端」：头字符近白 `#c8ffd4`（600 字重），其余 `#3dff8f`，透明度按 slot 1→0.18 梯度衰减。
+- 一个回合 = 五段状态机（L = 路径长度）：
+  1. **脉冲出站**：4 字符短脉冲（24px），Neo → 仓体，320px/s（`PULSE_SPEED_PX_PER_SECOND`），`anchor = t·v`、slot 距离 `anchor − k·step`；
+  2. **回传生长**：脉冲尾端到达仓体后同帧触发——尾部锚定仓体、头部以 140px/s（`RETURN_GROW_SPEED_PX_PER_SECOND`）伸向 Neo，`anchor = L − t·v`、slot 距离 `anchor + k·step`，直至铺满全缆；
+  3. **维持传输**：1s（`RETURN_HOLD_MS`）——两端锚定，slot 位置固定铺满全缆，内容以 90px/s（`RETURN_FLOW_PX_PER_SECOND`）等效流速向 Neo 滚动（`flowStep` 槽位偏移），读作「连接已建立、数据正在倒入 Neo」；
+  4. **回传收缩**：头部锚定 Neo、尾部以 240px/s（`RETURN_SHRINK_SPEED_PX_PER_SECOND`）脱离仓体追向 Neo，可见尾界 `tailLimit = L − t·v`，长度减至 0；
+  5. **休止**：0.6s（`PULSE_REST_MS`）——链路只剩 bed/nerve/ring，无任何字符。
+- 两个方向的信号永不同屏；active 期间 `.neural-cable-static` 静态字符流全程隐藏。SVG path 始终按 Neo→仓体定义，dormant 静态线路不反转。
+- 每帧逐字符 `getPointAtLength` 定位 + 沿切线 `rotate` + 法向 ±1.5px 正弦抖动；每 120ms 约 1/3 字符突变换字（`mutationStep`），形成数据流动感。
 - reduced-motion：脉冲与回传整体不渲染（`display: none`），回退静态线。
 
 ## 字体与字符集（Matrix Code 统一后）

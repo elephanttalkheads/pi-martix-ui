@@ -24,11 +24,15 @@ import {
 
 const MAX_VISIBLE_CABLES = 3;
 const TRANSITION_MS = 90;
-const PULSE_SPEED_PX_PER_SECOND = 180;
-const RETURN_SPEED_PX_PER_SECOND = 120;
-const PULSE_REST_MS = 1200;
+const PULSE_SPEED_PX_PER_SECOND = 320;
+const RETURN_GROW_SPEED_PX_PER_SECOND = 140;
+const RETURN_SHRINK_SPEED_PX_PER_SECOND = 240;
+const RETURN_FLOW_PX_PER_SECOND = 90;
+const RETURN_HOLD_MS = 1000;
+const PULSE_REST_MS = 600;
 const PULSE_STEP = 8;
-const PULSE_TAIL_LENGTH = 18;
+const PULSE_TAIL_LENGTH = 4;
+const DEFAULT_STREAM_POOL = 64;
 
 type CableGeometry = {
   sessionId: string;
@@ -97,12 +101,15 @@ function NeuralCable({
   const ringRefs = useRef<Array<SVGImageElement | null>>([]);
   const pulseRefs = useRef<Array<SVGTextElement | null>>([]);
   const staticRef = useRef<SVGTextElement | null>(null);
+  const [poolSize, setPoolSize] = useState(DEFAULT_STREAM_POOL);
   const { signature } = cable;
 
   useLayoutEffect(() => {
     const path = pathRef.current;
     if (!path) return;
     const length = path.getTotalLength();
+    // 回传流需要铺满整条缆线，字符池按路径长度分配（+2 兜底取整误差）。
+    setPoolSize(Math.ceil(length / PULSE_STEP) + 2);
     signature.ringFractions.forEach((fraction, index) => {
       const ring = ringRefs.current[index];
       if (!ring) return;
@@ -122,41 +129,60 @@ function NeuralCable({
       return;
     }
 
-    // active 链路进入双向握手循环，静态字符流全程让位。
+    // active 链路进入握手循环，静态字符流全程让位。
     staticText?.setAttribute('visibility', 'hidden');
 
     const length = path.getTotalLength();
-    const tailSpan = (PULSE_TAIL_LENGTH - 1) * PULSE_STEP;
-    const outboundMs = ((length + tailSpan) / PULSE_SPEED_PX_PER_SECOND) * 1000;
-    const returnMs = ((length + tailSpan) / RETURN_SPEED_PX_PER_SECOND) * 1000;
-    const cycleMs = outboundMs + returnMs + PULSE_REST_MS;
+    const pulseSpan = (PULSE_TAIL_LENGTH - 1) * PULSE_STEP;
+    const outboundMs = ((length + pulseSpan) / PULSE_SPEED_PX_PER_SECOND) * 1000;
+    const growMs = (length / RETURN_GROW_SPEED_PX_PER_SECOND) * 1000;
+    const shrinkMs = (length / RETURN_SHRINK_SPEED_PX_PER_SECOND) * 1000;
+    const cycleMs = outboundMs + growMs + RETURN_HOLD_MS + shrinkMs + PULSE_REST_MS;
     const startedAt = performance.now();
     let animationFrame = 0;
 
-    const hideTail = () => chars.forEach((char) => char?.setAttribute('visibility', 'hidden'));
+    const hideAll = () => chars.forEach((char) => char?.setAttribute('visibility', 'hidden'));
 
     const animate = (now: number) => {
       const cycleTime = (now - startedAt) % cycleMs;
-      if (cycleTime >= outboundMs + returnMs) {
-        // 休止期：链路只剩 bed/nerve/ring，无任何字符。
-        hideTail();
-        animationFrame = requestAnimationFrame(animate);
-        return;
+      const mutationStep = Math.floor(now / 120);
+
+      // 五段状态机：脉冲出站 → 回传生长 → 维持传输 → 回传收缩 → 休止。
+      // SVG path 按 Neo → 仓体定义；slot 0 恒为「亮端」
+      //（脉冲相 = 冲向仓体的头部，回传相 = 靠 Neo 端）。
+      let anchor = 0;
+      let stepSign = 1;
+      let tailLimit = length;
+      let flowStep = 0;
+      let rest = false;
+
+      if (cycleTime < outboundMs) {
+        // 脉冲：短促的 4 字符包，Neo → 仓体。
+        anchor = cycleTime * PULSE_SPEED_PX_PER_SECOND / 1000;
+        stepSign = -1;
+      } else if (cycleTime < outboundMs + growMs) {
+        // 回传生长：头部伸向 Neo，尾部锚定仓体，长度渐增。
+        anchor = length - (cycleTime - outboundMs) * RETURN_GROW_SPEED_PX_PER_SECOND / 1000;
+      } else if (cycleTime < outboundMs + growMs + RETURN_HOLD_MS) {
+        // 维持传输：两端锚定铺满全缆，内容持续向 Neo 滚动。
+        anchor = 0;
+        flowStep = Math.floor(
+          (cycleTime - outboundMs - growMs) * RETURN_FLOW_PX_PER_SECOND / 1000 / PULSE_STEP,
+        );
+      } else if (cycleTime < outboundMs + growMs + RETURN_HOLD_MS + shrinkMs) {
+        // 回传收缩：头部锚定 Neo，尾部脱离仓体追向 Neo，长度减至 0。
+        anchor = 0;
+        tailLimit = length
+          - (cycleTime - outboundMs - growMs - RETURN_HOLD_MS) * RETURN_SHRINK_SPEED_PX_PER_SECOND / 1000;
+      } else {
+        // 休止：链路只剩 bed/nerve/ring，无任何字符。
+        rest = true;
       }
 
-      // SVG path 按 Neo → 仓体定义：出站脉冲顺向（Neo 发往仓体），
-      // 脉冲头部到达仓体后同一帧触发回传包，反向（仓体回传 Neo）且速度更慢。
-      const outbound = cycleTime < outboundMs;
-      const phaseTime = outbound ? cycleTime : cycleTime - outboundMs;
-      const headDistance = outbound
-        ? phaseTime * PULSE_SPEED_PX_PER_SECOND / 1000
-        : length - phaseTime * RETURN_SPEED_PX_PER_SECOND / 1000;
-      const step = outbound ? -PULSE_STEP : PULSE_STEP;
-      const mutationStep = Math.floor(now / 120);
       chars.forEach((char, index) => {
         if (!char) return;
-        const distance = headDistance + index * step;
-        if (distance < 0 || distance > length) {
+        const distance = anchor + index * stepSign * PULSE_STEP;
+        if (rest || distance < 0 || distance > tailLimit || distance > length) {
           char.setAttribute('visibility', 'hidden');
           return;
         }
@@ -168,13 +194,15 @@ function NeuralCable({
         const jitter = Math.sin(now * 0.011 + index * 1.7 + signature.id) * 1.5;
         const x = point.x - Math.sin(angle) * jitter;
         const y = point.y + Math.cos(angle) * jitter;
-        const glyphIndex = (index + signature.staticOffset
-          + ((index + mutationStep + signature.id) % 3 === 0 ? mutationStep : 0)) % signature.glyphs.length;
+        const flowBase = index + flowStep;
+        const glyphIndex = (flowBase + signature.staticOffset
+          + ((flowBase + mutationStep + signature.id) % 3 === 0 ? mutationStep : 0)) % signature.glyphs.length;
 
         char.textContent = signature.glyphs[glyphIndex];
         char.setAttribute('x', x.toFixed(2));
         char.setAttribute('y', y.toFixed(2));
         char.setAttribute('transform', `rotate(${(angle * 180 / Math.PI).toFixed(2)} ${x.toFixed(2)} ${y.toFixed(2)})`);
+        char.setAttribute('fill-opacity', Math.max(0.18, 1 - index / 18).toFixed(2));
         char.setAttribute('visibility', 'visible');
       });
       animationFrame = requestAnimationFrame(animate);
@@ -183,7 +211,7 @@ function NeuralCable({
     animationFrame = requestAnimationFrame(animate);
     return () => {
       cancelAnimationFrame(animationFrame);
-      hideTail();
+      hideAll();
     };
   }, [cable.path, reducedMotion, signature, state]);
 
@@ -230,13 +258,12 @@ function NeuralCable({
         aria-hidden="true"
       />
       <g className="neural-cable-pulse" aria-hidden="true">
-        {Array.from({ length: PULSE_TAIL_LENGTH }, (_, index) => (
+        {Array.from({ length: Math.max(poolSize, PULSE_TAIL_LENGTH) }, (_, index) => (
           <text
             key={index}
             ref={(node) => { pulseRefs.current[index] = node; }}
             className={index === 0 ? 'neural-cable-pulse-head' : 'neural-cable-pulse-tail'}
             visibility="hidden"
-            fillOpacity={Math.max(0.18, 1 - index / PULSE_TAIL_LENGTH).toFixed(2)}
           />
         ))}
       </g>
