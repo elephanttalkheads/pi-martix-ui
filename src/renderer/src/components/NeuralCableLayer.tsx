@@ -25,6 +25,7 @@ import {
 const MAX_VISIBLE_CABLES = 3;
 const TRANSITION_MS = 90;
 const PULSE_SPEED_PX_PER_SECOND = 180;
+const RETURN_SPEED_PX_PER_SECOND = 120;
 const PULSE_REST_MS = 1200;
 const PULSE_STEP = 8;
 const PULSE_TAIL_LENGTH = 18;
@@ -95,6 +96,7 @@ function NeuralCable({
   const pathRef = useRef<SVGPathElement | null>(null);
   const ringRefs = useRef<Array<SVGImageElement | null>>([]);
   const pulseRefs = useRef<Array<SVGTextElement | null>>([]);
+  const staticRef = useRef<SVGTextElement | null>(null);
   const { signature } = cable;
 
   useLayoutEffect(() => {
@@ -113,15 +115,21 @@ function NeuralCable({
   useEffect(() => {
     const path = pathRef.current;
     const chars = pulseRefs.current;
+    const staticText = staticRef.current;
     if (!path || state !== 'active' || reducedMotion) {
       chars.forEach((char) => char?.setAttribute('visibility', 'hidden'));
+      staticText?.removeAttribute('visibility');
       return;
     }
 
+    // active 链路进入双向握手循环，静态字符流全程让位。
+    staticText?.setAttribute('visibility', 'hidden');
+
     const length = path.getTotalLength();
     const tailSpan = (PULSE_TAIL_LENGTH - 1) * PULSE_STEP;
-    const travelMs = ((length + tailSpan) / PULSE_SPEED_PX_PER_SECOND) * 1000;
-    const cycleMs = travelMs + PULSE_REST_MS;
+    const outboundMs = ((length + tailSpan) / PULSE_SPEED_PX_PER_SECOND) * 1000;
+    const returnMs = ((length + tailSpan) / RETURN_SPEED_PX_PER_SECOND) * 1000;
+    const cycleMs = outboundMs + returnMs + PULSE_REST_MS;
     const startedAt = performance.now();
     let animationFrame = 0;
 
@@ -129,18 +137,25 @@ function NeuralCable({
 
     const animate = (now: number) => {
       const cycleTime = (now - startedAt) % cycleMs;
-      if (cycleTime >= travelMs) {
+      if (cycleTime >= outboundMs + returnMs) {
+        // 休止期：链路只剩 bed/nerve/ring，无任何字符。
         hideTail();
         animationFrame = requestAnimationFrame(animate);
         return;
       }
 
-      // SVG path 仍按 Neo → 仓体定义；active 信号包从 path 尾端反向回传到 Neo。
-      const headDistance = length - cycleTime * PULSE_SPEED_PX_PER_SECOND / 1000;
+      // SVG path 按 Neo → 仓体定义：出站脉冲顺向（Neo 发往仓体），
+      // 脉冲头部到达仓体后同一帧触发回传包，反向（仓体回传 Neo）且速度更慢。
+      const outbound = cycleTime < outboundMs;
+      const phaseTime = outbound ? cycleTime : cycleTime - outboundMs;
+      const headDistance = outbound
+        ? phaseTime * PULSE_SPEED_PX_PER_SECOND / 1000
+        : length - phaseTime * RETURN_SPEED_PX_PER_SECOND / 1000;
+      const step = outbound ? -PULSE_STEP : PULSE_STEP;
       const mutationStep = Math.floor(now / 120);
       chars.forEach((char, index) => {
         if (!char) return;
-        const distance = headDistance + index * PULSE_STEP;
+        const distance = headDistance + index * step;
         if (distance < 0 || distance > length) {
           char.setAttribute('visibility', 'hidden');
           return;
@@ -188,7 +203,7 @@ function NeuralCable({
         d={cable.path}
         vectorEffect="non-scaling-stroke"
       />
-      <text className="neural-cable-static" dy="3.5">
+      <text ref={staticRef} className="neural-cable-static" dy="3.5">
         <textPath href={`#${pathId}`} startOffset={signature.staticOffset}>
           {staticGlyphs}
         </textPath>

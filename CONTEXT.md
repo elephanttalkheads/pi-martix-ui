@@ -28,6 +28,14 @@ _Avoid_: 第几条线、固定线路、物理插槽
 Neo 头像与当前可见会话培育仓之间的冗余拓扑指示；可以呼应当前会话或指向状态，但不能成为会话状态的唯一信息来源。
 _Avoid_: 脑机接口连接线、会话状态线、神经电缆
 
+**脉冲包**：
+会话脑机链路双向握手的出站半程——从 Neo 发往会话培育仓的信号；出站期间链路上的静态字符流让位。
+_Avoid_: 信号包、数据包
+
+**回传包**：
+会话脑机链路双向握手的返程半程——培育仓收讫脉冲包后向 Neo 回送的应答；与脉冲包永不同屏。
+_Avoid_: 响应包、ACK
+
 **会话状态机**：
 界面全局 4 态：`READY`（空闲）/ `RUNNING`（工具执行中）/ `STREAMING`（文本流式输出中）/ `CANCELLING`（中断处理中）。由 agent 事件唯一驱动：agent_start→RUNNING、tool_execution_start→RUNNING、message_update→STREAMING、abort→CANCELLING、agent_end→READY。
 _Avoid_: busy、loading

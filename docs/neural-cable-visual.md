@@ -2,7 +2,7 @@
 
 > 记录脑机链路（neural cable）特效的实现方式。事实源：`src/renderer/src/neuralCable.ts`、`src/renderer/src/components/NeuralCableLayer.tsx`、`src/renderer/src/components/Sidebar.tsx`、`styles.css` 的 `.neural-cable-*` 段。
 
-**隐喻**：侧栏里，从 Neo 头像后脑勺接线口拉出一条条「神经缆线」，接到各会话培育仓左侧的机械柱；当前会话的缆线上有信号脉冲在跑。
+**隐喻**：侧栏里，从 Neo 头像后脑勺接线口拉出一条条「神经缆线」，接到各会话培育仓左侧的机械柱；当前会话的缆线上跑着双向握手——Neo 发出脉冲包控制培育仓，培育仓收讫后回传应答。
 
 ## 锚点与布线（neuralCable.ts）
 
@@ -23,17 +23,20 @@
 - 每条缆线五层图元（自下而上）：
   1. `.neural-cable-bed`：3.6px 深绿黑描边线床；
   2. `.neural-cable-nerve`：1.2px 神经线——休眠 `#1da754` / 悬停 `#23c468` / 当前 `#3dff8f`（1.25px）；
-  3. `.neural-cable-static`：静态字符流——`textPath` 沿路径铺签名字符串（glyphs 拼两遍），11px、letter-spacing 4px，fill `#23c468`（当前会话升 `#3dff8f`）；
+  3. `.neural-cable-static`：静态字符流——`textPath` 沿路径铺签名字符串（glyphs 拼两遍），11px、letter-spacing 4px，fill `#23c468`（当前会话升 `#3dff8f`）；active 链路握手循环期间全程隐藏让位；
   4. `.neural-cable-ring` × N + `.neural-cable-receiver`：环与接收器位图（`image-rendering: pixelated`），用 `getPointAtLength(长度 × ringFractions)` 定位；
   5. `.neural-cable-pulse`：脉冲包（见下节）。
 
-## 脉冲包动画（仅当前会话、非 reduced-motion）
+## 双向握手动画（仅当前会话、非 reduced-motion）
 
-- 18 个 SVG `<text>` 字符组成信号包（`PULSE_TAIL_LENGTH=18`、`PULSE_STEP=8px`）：头字符近白 `#c8ffd4`（600 字重），尾部 `#3dff8f`，透明度 1→0.18 线性衰减。
-- 速度 180px/s（`PULSE_SPEED_PX_PER_SECOND`），一趟走完后静默 1200ms（`PULSE_REST_MS`）再循环。
-- **方向：从仓体反向回传 Neo**——path 按 Neo→仓体定义，但 `headDistance = L − t·v`（见 commit「反转会话链路脉冲方向」）。
+- 18 个 SVG `<text>` 字符组成信号包（`PULSE_TAIL_LENGTH=18`、`PULSE_STEP=8px`）：头字符近白 `#c8ffd4`（600 字重），尾部 `#3dff8f`，透明度 1→0.18 线性衰减。出站脉冲与回传包共用同一组字符元素与外观参数。
+- 一个回合 = 三段状态机：
+  1. **脉冲出站**：Neo → 仓体，180px/s（`PULSE_SPEED_PX_PER_SECOND`），`headDistance = t·v`、尾节 `distance = head − i·step`；
+  2. **回传包**：脉冲尾端到达仓体后同一帧触发，仓体 → Neo，120px/s（`RETURN_SPEED_PX_PER_SECOND`），`headDistance = L − t·v`、尾节 `distance = head + i·step`——同形异速，方向语义靠节奏区分；
+  3. **休止 1200ms**（`PULSE_REST_MS`）：链路只剩 bed/nerve/ring，无任何字符。
+- 两个方向的包永不同屏；active 期间 `.neural-cable-static` 静态字符流全程隐藏。SVG path 始终按 Neo→仓体定义，dormant 静态线路不反转。
 - 每帧逐字符 `getPointAtLength` 定位 + 沿切线 `rotate` + 法向 ±1.5px 正弦抖动；每 120ms 约 1/3 尾节突变换字（`mutationStep`），形成数据流动感。
-- reduced-motion：脉冲整体不渲染（`display: none`）。
+- reduced-motion：脉冲与回传整体不渲染（`display: none`），回退静态线。
 
 ## 字体与字符集（Matrix Code 统一后）
 

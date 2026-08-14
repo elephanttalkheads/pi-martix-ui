@@ -19,7 +19,7 @@ This note records the production decisions that intentionally override or narrow
 
 - State priority: `active > hover/focus > dormant > hidden`.
 - Dormant cables are completely static. Hover/focus only brightens a dormant cable; it does not start a pulse.
-- Only the active session emits a signal packet. The packet travels from the pod receiver back to Neo at approximately `180 px/s`; after the tail clears Neo, the cable rests for `1.2 s` before the next packet. The SVG path and dormant glyph layout remain defined from Neo to pod.
+- Only the active session runs a bidirectional handshake: an 18-glyph pulse packet travels from Neo to the pod at approximately `180 px/s` while the static glyph stream yields; the moment the pulse tail reaches the pod, a return packet travels back to Neo at approximately `120 px/s`; after the return tail clears Neo, the cable rests for `1.2 s`. The two directions never share the cable at the same time. The SVG path and dormant glyph layout remain defined from Neo to pod.
 - When deck scrolling changes the visible set, outgoing cables fade for `90 ms`, identities and paths swap, then incoming cables fade for `90 ms`. The DOM never contains a fourth cable during the transition.
 - If the current session is outside the visible three slots, no offscreen cable or automatic scrolling is added.
 
