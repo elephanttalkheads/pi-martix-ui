@@ -51,7 +51,7 @@
 
 **启动恢复**（App useEffect，`window.zion?.getCurrentSession` 守卫——桥未注入直接 return 优雅降级）：`getCurrentSession` → `listSessions` → 标题经 `deriveSessionTitle`（title.ts 纯函数，规则见「设计决策与权衡」）→ `applySession(id, title, items)` 以历史重建回合 feed（仅文本段：user→operator 回合、assistant→agent 回合单 text 段；回合 time 取 `h.ts` 经 `fmtTime` 格式化（HH:MM，无 ts 回落当前时刻）——与实时回合 `msgTime` 同一格式化；无工具卡/结算行，`startedAt=0` 不计时）+ `setSessions` + `getProject` → `setCurrentProject`（侧栏 Project 标题）→ `listProjects` 判空：无最近项目 → `setProjectOpen(true)` 自动打开项目选择面板（启动引导，ADR-0003 决策 3）。
 
-**浏览器调试桥**（mockBridge.ts + main.tsx）：`installMockBridge()` 在 `window.zion` 缺失时（浏览器直开 vite dev、无 Electron preload）注入 mock ZionAPI，有桥（Electron 打包）检测后直接跳过，不影响生产。mock 数据按项目维度写死（`MOCK_SESSIONS`/`MOCK_ITEMS`/`MOCK_TREE`/`MOCK_PROJECTS`/`MOCK_COMMANDS`）；`prompt` 按输入生成模板回复，经 setTimeout 按真实时序派发 `agent_start → tool_execution_start → message_update(text_delta) → tool_execution_end → message_end → agent_end → agent_settled`（`abort` 置位后未触发的派发全部取消）——事件经 `onAgentEvent` 真实派发路径，feed 流式渲染与事件管线零改动。`browseProject` 浏览器无原生对话框，轮换到下一个 mock 项目模拟选择；`onUiAsk`/`onUiNotify` 为空实现（无扩展弹层演示数据）。
+**浏览器调试桥**（mockBridge.ts + main.tsx）：`installMockBridge()` 在 `window.zion` 缺失时（浏览器直开 vite dev、无 Electron preload）注入 mock ZionAPI，有桥（Electron 打包）检测后直接跳过，不影响生产。mock 数据按项目维度写死（`MOCK_SESSIONS`/`MOCK_ITEMS`/`MOCK_TREE`/`MOCK_PROJECTS`/`MOCK_COMMANDS`）；`prompt` 按输入生成模板回复，经 setTimeout 按真实时序派发 `agent_start → tool_execution_start → message_update(text_delta) → tool_execution_end → message_end → agent_end → agent_settled`（`abort` 置位后未触发的派发全部取消）——事件经 `onAgentEvent` 真实派发路径，feed 流式渲染与事件管线零改动。`browseProject` 浏览器无原生对话框，轮换到下一个 mock 项目模拟选择；`runCommand` 为 no-op（日志 + info toast，返回 `{ok:true, kind:'info'}`——`MOCK_COMMANDS` 已对齐真实内置命令清单，但命令不真正执行）；`onUiAsk`/`onUiNotify` 为空实现（无扩展弹层演示数据）。
 
 **会话切换/新建/重命名/删除**（Sidebar + SessionPod）：`.deck` 固定三等高槽并按槽吸附滚动；每仓保留 `.scard` 查询类，外层 `role="button"`，点击/Enter/Space 调 `selectSession` → `switchSession`（主进程懒创建实例，可能秒级；`switching` 锁防并发）→ `applySession`；`newSession` 同理；失败走 `log('err')`。中央名称牌常驻，标题统一走 `deriveSessionTitle`，编号为列表索引 + 1；只有名称牌 hover/focus 时展示等高的重命名/删除按钮。Sidebar 持有唯一 `preview`，仓 hover/focus 时按 anchor/sidebar rect 测量共享 `.session-hologram-layer`，显示标题与 `firstMessage` 第一条非空行（无内容显示「尚无会话内容」）；离开/真正离焦/列表滚动立即隐藏。重命名：`startRename` 以当前显示标题为草稿，名称牌中央替换为 `.s-title-edit`，Enter/blur 提交 `commitRename`、Esc 取消；`renameSession` → `setSessions`，当前会话另 `setSessionTitle(name)`（只改标题，不重置 feed）。删除：`askDelete` 两段确认——首击进入待确认态（2.5s 自动复位），此时才由 closed 帧切到 open 帧；再击先清待确认态再 `doDelete` → `deleteSession`（软删，移入 `.trash` 可恢复）→ `setSessions`；删除的是当前会话时主进程指针已落最近会话，`getCurrentSession` 重拉 + `applySession`（标题取新列表匹配，兜底短码）。点文件树行 → `pushUser` + `window.zion.prompt('读取 <path>')`（真实 prompt，无假动画）。
 
@@ -68,12 +68,14 @@
 - 数据：mount 预取一次 `window.zion.listCommands()`（`CommandItem[]`；主进程 `zion:list-commands` 聚合扫描 skills+命令，数据源 `skillscan.mjs` 属主进程模块）；失败静默 → 空面板。
 - 开合：输入以 `/` 开头且 ≤48 字符时打开；Esc 仅关闭面板（不清输入）。
 - 过滤/排序：`name` startsWith 或 includes（不区分大小写）；command 优先 + `localeCompare` 字母序。
-- 插入与发送：skill → `运行技能 ${name}：`；command → `/name`。仅改输入框文本，随后与普通输入同路径 `send()` → `window.zion.prompt`。
+- 插入与执行：skill → 插入 `运行技能 ${name}：`（仅文本，回发仍走 prompt）；command → 无 `argumentHint` 选中即 `send('/name')` 直接执行、有 `argumentHint` 回填 `/name `（带尾空格）待补参后 Enter 执行；输入 `/cmd args` 回车同样匹配 `/^\/[a-zA-Z0-9-]+(\s+.*)?$/` 走 `runCommand`。
+- 执行结果（`RunCommandResult`{ok, message, kind, data}）：`kind: 'error'` → err 日志 + error toast；`kind: 'ok'` → 日志 + info toast；`kind: 'info'`/缺省 → 仅日志；返回 falsy（桥缺失）静默。会话切换类命令（/new /import /resume 等）返回 `{id, items}` 载荷时 → `applySession(id, '会话 ' + 短码, items)` 重建 feed + `listSessions` 刷新会话列表（与 Sidebar 的 switchSession/newSession 契约一致，防 UI 停留旧会话）。
 - 行交互：`role="listbox"/option` + `aria-selected`；↑↓ 循环移动、`onMouseEnter` 同步 active、`onMouseDown` preventDefault 防点击丢焦点；空态 `palette-empty`「无匹配 skill / 命令」。
 
 **扩展 UI 桥管线**（AskDialog.tsx + App.tsx 扩展订阅 effect）：
-- 订阅：`onUiAsk` → `setUiAsk`（store 单弹层槽 `uiAsk`，后到覆盖前）；`onUiNotify` → `pushToast` + 3s `setTimeout` 按 message+type 匹配当前队列后 `dismissToast`；effect cleanup 退订两通道。
+- 订阅：`onUiAsk` → `setUiAsk`（store 单弹层槽 `uiAsk`，后到覆盖前）；`onUiNotify` → `pushToast`（3.3s 自动消失计时统一在 store.pushToast：3s 展示 + 0.3s 退出动画，App 只入队、不再按消息匹配重复计时）；effect cleanup 退订两通道。
 - 渲染（App 顶层 fragment，fixed 定位）：confirm = 消息 + 确认(`.primary`)/取消；input = placeholder=message，Enter 确定 / Esc 取消（取消=undefined），30ms 延迟聚焦；select = hover 移 active、点击选项即答、无选项显示「（无选项）」，仅取消按钮；遮罩 mousedown（`target===currentTarget`）＝取消。
+- toast 渲染（`.toast-host` fixed 右下 14px，z-index 85 低于遮罩）：`.toast` 入场 `toast-in` 0.25s 自下而上滑入 + 淡入，3s 后 `toast-out` 0.3s 淡出（`forwards`）——与 store 3.3s 移除 DOM 对齐；`type` 只改左边框色（默认/ok 绿、warning 黄、error 红）。
 - 应答：`answer()` 成对执行 `window.zion.uiAnswer(ask.id, result)`（→ `zion:ui-answer` → 主进程 `handleAnswer` 按 id resolve 扩展 Promise）与 `setUiAsk(null)`；取消一律传 undefined。
 - 超时兜底在主进程（uibridge.mjs：Promise 表 + timeout/AbortSignal → resolve undefined；`dispatchUi` 于窗口创建时注入，闭包经 `win` 判空）——渲染层不持有任何超时逻辑。
 
@@ -95,7 +97,7 @@
 
 ## 接口与依赖
 
-**对外消费**（`window.zion`，ZionAPI，env.d.ts 声明）：`ping` / `prompt`（从不抛错，resolve 为 stopReason）/ `abort` / `steer` / `followUp` / `scanTree` / `listCommands`（命令面板数据，`CommandItem[]`）/ `listSessions` / `getCurrentSession` / `switchSession` / `newSession` / `listProjects`（最近项目 `ProjectInfo[]`）/ `getProject`（当前项目工作目录，`{ path: string }`）/ `browseProject`（原生目录选择，取消返回 null）/ `switchProject`（切换工作目录+会话上下文，返回 `SwitchProjectResult`{path, id, items}）/ `uiAnswer`（扩展对话框应答，取消传 undefined）/ `onUiAsk` / `onUiNotify`（订阅扩展对话框与通知，返回退订函数）/ `renameSession` / `deleteSession`（rename/delete 均返回刷新后的完整会话列表）/ `onAgentEvent`（返回退订函数）/ `onTreeChanged`（工作区文件树变化订阅，Sidebar 经 `mergeTreeOpen` 实时合并展开态）。
+**对外消费**（`window.zion`，ZionAPI，env.d.ts 声明）：`ping` / `prompt`（从不抛错，resolve 为 stopReason）/ `abort` / `steer` / `followUp` / `scanTree` / `listCommands`（命令面板数据，`CommandItem[]`）/ `runCommand`（执行 slash 命令，返回 `RunCommandResult`{ok, message, kind, data}；会话切换类命令经 `{id, items}` 载荷触发 feed 重建）/ `listSessions` / `getCurrentSession` / `switchSession` / `newSession` / `listProjects`（最近项目 `ProjectInfo[]`）/ `getProject`（当前项目工作目录，`{ path: string }`）/ `browseProject`（原生目录选择，取消返回 null）/ `switchProject`（切换工作目录+会话上下文，返回 `SwitchProjectResult`{path, id, items}）/ `uiAnswer`（扩展对话框应答，取消传 undefined）/ `onUiAsk` / `onUiNotify`（订阅扩展对话框与通知，返回退订函数）/ `renameSession` / `deleteSession`（rename/delete 均返回刷新后的完整会话列表）/ `onAgentEvent`（返回退订函数）/ `onTreeChanged`（工作区文件树变化订阅，Sidebar 经 `mergeTreeOpen` 实时合并展开态）。
 
 **对外不提供**：无公共导出——本模块是终端 UI。
 
@@ -120,8 +122,9 @@
 - **`setSessionTitle` 与 `applySession` 分工**：改名当前会话只走 `setSessionTitle`（仅更新 `sessionTitle`，feed/状态机/token 全不动）——`applySession` 会重建 feed，误用会把正在进行的对话内容冲掉。
 - **删除是软删除 + 两段确认，开仓只表示待确认**：`deleteSession` 为软删（主进程语义，UI 只展示 log），侧栏用「首击待确认 + 2.5s 自动复位」防误触；open 培育仓帧只在这段待确认窗口显示，再击确认前先清状态，绝不把打开状态绑定到 active/hover/focus。删除当前会话后主进程指针自动落回最近会话，渲染层不自行猜 id，`getCurrentSession` 重拉。
 - **日志前端自收集**：`store.logs` 上限 120 行（LOG_MAX），`role="log"`，收起时 `aria-hidden`。
-- **交互细节**：焦点归还挂 `mouseup` 而非 `mousedown`（v4 §7.5），且存在非折叠选区（`!isCollapsed`）时跳过归还——mousedown 即抢焦会打断双击选词/单击定位光标，且 focus 可编辑元素会清掉刚建立的选区；mouseup + 选区检测保住拖选/双击选中的文本可复制。豁免 `.ask-mask`/`.project-panel`/`.palette`/`.s-title-edit`/`.session-pod-actions`；培育仓操作层必须豁免，否则点击重命名后 0ms 焦点归还会让自动聚焦的编辑框立刻 blur。`.side-resizer` 未豁免——点击热区后焦点仍归还 `#cmdline`，键盘调宽须 Tab 聚焦 separator。Enter 在 STREAMING/CANCELLING 时切换为中断而非发送；面板打开且有候选时 Enter/Tab 插入选中项（不回发）。
-- **命令面板只插入、不执行**：选中项仅写入输入框、不触发任何行为，回车后与普通输入同路径 `prompt`；命令执行语义归宿主 TUI 层（InputBar 头注释明示），渲染层不维护命令实现，避免两处命令知识漂移。
+- **交互细节**：焦点归还挂 `mouseup` 而非 `mousedown`（v4 §7.5），且存在非折叠选区（`!isCollapsed`）时跳过归还——mousedown 即抢焦会打断双击选词/单击定位光标，且 focus 可编辑元素会清掉刚建立的选区；mouseup + 选区检测保住拖选/双击选中的文本可复制。豁免 `.ask-mask`/`.project-panel`/`.palette`/`.s-title-edit`/`.session-pod-actions`；培育仓操作层必须豁免，否则点击重命名后 0ms 焦点归还会让自动聚焦的编辑框立刻 blur。`.side-resizer` 未豁免——点击热区后焦点仍归还 `#cmdline`，键盘调宽须 Tab 聚焦 separator。Enter 在 STREAMING/CANCELLING 时切换为中断而非发送；面板打开且有候选时 Enter/Tab 插入选中项（skill 仅插文本，command 无参即执行、有参回填）。
+- **命令单通道经 `runCommand` 路由、实现归主进程**：命令无参选中即执行、有参回填 `/name` 待补参，`/cmd args` 回车同路径——渲染层只路由不实现命令，语义归主进程 dispatch（skillscan.mjs 聚合），避免两处命令知识漂移；skills 仍只插文本模板（走 prompt，与命令区分）。
+- **会话切换命令按结果载荷驱动重建**（非命令名白名单）：`runCommand` 返回 `{id, items}` 即 `applySession` 重建 feed + 重拉会话列表——渲染层无需知道哪些命令会切会话，统一按载荷形状处理；其余结果只写日志/toast，feed 不动。
 - **command 优先 + 字母序**：面板 max-height 320px 截断时命令恒在可见区（命令少、skills 多），字母序给稳定预期。
 - **启动预取一次**：`listCommands` 主进程聚合扫描较重，仅 mount 调用一次，打开/过滤面板不再查主进程（代价见「已知限制与技术债」）。
 - **本地字体替代 Google Fonts**：styles.css 顶部 `@font-face` 引入 `assets/fonts/ShareTechMono-Regular.woff2`（latin 子集 13.5KB，来源 @fontsource/share-tech-mono，font-display: swap），替代 demo（index-v4.html）的 Google Fonts `@import`——离线/墙内可用，「离线字体」未做项闭环；`--font` 回退链不变，latin 子集无 CJK，中文文案走系统字体回退。
@@ -161,7 +164,7 @@
 - 渲染进程零 Node 访问：所有数据经 ZionAPI 白名单。
 
 **失败模式**：
-- 桥未注入（`window.zion` undefined）：调用点 `?.`/守卫不抛错，`useAgentEvents`、扩展 UI 订阅与启动恢复 effect 直接 return（空界面、扩展对话框落空、无项目引导）；纯浏览器直开 vite dev 时 `installMockBridge` 注入 mock（UI 全功能可演示，扩展弹层/toast 为空实现）——Electron 下桥必在，smoke 经 `window.zion.ping` 自检，开发中先查 preload 注入。
+- 桥未注入（`window.zion` undefined）：调用点 `?.`/守卫不抛错，`useAgentEvents`、扩展 UI 订阅与启动恢复 effect 直接 return（空界面、扩展对话框落空、无项目引导）；纯浏览器直开 vite dev 时 `installMockBridge` 注入 mock（UI 全功能可演示，扩展弹层与 `onUiNotify` 驱动的主进程通知为空实现，mock 命令自推的 toast 可正常渲染）——Electron 下桥必在，smoke 经 `window.zion.ping` 自检，开发中先查 preload 注入。
 - 主进程超时兜底不通知渲染层：timeout 只 resolve 扩展 Promise，弹层保持打开（残留）直到用户点取消/遮罩——无害但可见；单弹层槽被新 ask 覆盖后，旧 Promise 同样只能等超时。
 - prompt 错误回合：不抛错（SDK 语义），由 `message_end` stopReason 处理；InputBar 另有 catch 兜底日志。
 - `scanTree`/`listSessions`/`switchSession`/`newSession`/`renameSession`/`deleteSession` 失败：各自 catch → `log('err')`，UI 不崩（空列表占位文案）。
