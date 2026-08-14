@@ -72,10 +72,39 @@ try {
   });
   console.log('PING:', JSON.stringify(r2.result.value));
 
+  // 命令执行链路（#24）：runCommand 通道 + 错误路径 + 命令清单 argumentHint
+  const r3 = await call('Runtime.evaluate', {
+    expression: `window.zion.runCommand('nosuch')`,
+    returnByValue: true, awaitPromise: true,
+  });
+  console.log('RUNCMD unknown:', JSON.stringify(r3.result.value));
+  const r4 = await call('Runtime.evaluate', {
+    expression: `window.zion.runCommand('session').then(r => ({ ok: r.ok, kind: r.kind }))`,
+    returnByValue: true, awaitPromise: true,
+  });
+  console.log('RUNCMD session:', JSON.stringify(r4.result.value));
+  const r5 = await call('Runtime.evaluate', {
+    expression: `window.zion.listCommands().then(l => l.filter(i => i.kind === 'command').length)`,
+    returnByValue: true, awaitPromise: true,
+  });
+  console.log('RUNCMD count:', JSON.stringify(r5.result.value));
+
   // 检查主进程日志里的桥注入标记
   await sleep(500);
   console.log('MAINLOG has bridge ok:', /preload bridge injected: true/.test(mainLog));
   if (!/preload bridge injected: true/.test(mainLog)) console.log('MAINLOG:', mainLog.slice(-500));
+
+  // 断言：桥注入 + runCommand 错误路径正确 + session 命令真实执行
+  const bridgeOk = /preload bridge injected: true/.test(mainLog);
+  const unknownOk = r3.result.value?.ok === false && /未知命令/.test(r3.result.value?.message ?? '');
+  const sessionOk = r4.result.value?.ok === true && r4.result.value?.kind === 'ok';
+  const countOk = r5.result.value >= 14; // 内置 14 + 扩展
+  if (!bridgeOk || !unknownOk || !sessionOk || !countOk) {
+    console.error('SMOKE FAIL: bridge=' + bridgeOk + ' unknown=' + unknownOk + ' session=' + sessionOk + ' count=' + countOk);
+    process.exitCode = 1;
+  } else {
+    console.log('smoke run-command assertions ok');
+  }
 
   ws.close();
 } finally {

@@ -17,6 +17,7 @@ const api = {
   followUp: (text) => ipcRenderer.invoke('agent:followUp', text),
   scanTree: () => ipcRenderer.invoke('zion:scan-tree'),
   listCommands: () => ipcRenderer.invoke('zion:list-commands'),
+  runCommand: (name, args) => ipcRenderer.invoke('zion:run-command', name, args),
   listSessions: () => ipcRenderer.invoke('zion:list-sessions'),
   listProjects: () => ipcRenderer.invoke('zion:list-projects'),
   getProject: () => ipcRenderer.invoke('zion:get-project'),

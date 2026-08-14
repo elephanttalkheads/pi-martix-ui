@@ -56,6 +56,8 @@ export interface ZionAPI {
   scanTree(): Promise<FileNode[]>;
   /** 命令面板：本机全部 skills + 命令清单（主进程聚合扫描） */
   listCommands(): Promise<CommandItem[]>;
+  /** 执行 slash 命令（主进程 dispatch）；返回结构化结果（ok/message + 可选 data） */
+  runCommand(name: string, args?: string): Promise<RunCommandResult>;
   /** 工作区会话列表（SessionManager.list 精简） */
   listSessions(): Promise<SessionInfoLike[]>;
   /** 当前会话（惰性确保：continueRecent 或新建）+ 其历史；返回会话信息与历史 */
@@ -109,6 +111,19 @@ export interface CommandItem {
   kind: 'skill' | 'command';
   /** 来源标注（skill：用户/共享/项目/settings/扩展·包名；command：内置/扩展） */
   source: string;
+  /** 命令参数提示（官方 BUILTIN_SLASH_COMMANDS.argumentHint，如 '<provider/model>'）；缺省=无参数命令 */
+  argumentHint?: string;
+}
+
+/** 命令执行结果（zion:run-command 返回；renderer 渲染日志/toast） */
+export interface RunCommandResult {
+  ok: boolean;
+  /** 展示消息（写日志 / toast 文案） */
+  message: string;
+  /** 结果性质：info=日志即可，ok=成功（绿色 toast），error=失败（红色） */
+  kind?: 'info' | 'ok' | 'error';
+  /** 命令专属载荷（如 session 统计、导出路径） */
+  data?: unknown;
 }
 
 /** 扩展对话框请求（main → renderer，经 uiBridge） */

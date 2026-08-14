@@ -12,29 +12,27 @@ import { join } from 'node:path';
  * @typedef {import('../shared/protocol.ts').CommandItem} CommandItem
  */
 
-/** 内置 slash 命令（pi 源码 dist/core/slash-commands.js BUILTIN_SLASH_COMMANDS） */
+/** 内置 slash 命令（pi 源码 dist/core/slash-commands.js BUILTIN_SLASH_COMMANDS 对齐）
+ * 裁剪说明（ZION 无对应物，面板不展示）：changelog/tree/clone/fork/scoped-models/login/logout/share
+ * - changelog/tree/clone/fork：会话树/分支体系，ZION 未实现
+ * - scoped-models：Ctrl+P 循环模型，ZION 无此交互
+ * - login/logout：并入 /settings 认证管理（待实现）
+ * - share：依赖 GitHub gist token，延后
+ * hotkeys 保留：映射为 ZION 快捷键速查弹层（见 main.mjs dispatch） */
 export const BUILTIN_COMMANDS = /** @type {const} */ ([
-  { name: 'settings', description: 'Open settings menu' },
-  { name: 'model', description: 'Select model (opens selector UI)' },
-  { name: 'scoped-models', description: 'Enable/disable models for Ctrl+P cycling' },
-  { name: 'export', description: 'Export session (HTML default, or specify path: .html/.jsonl)' },
-  { name: 'import', description: 'Import and resume a session from a JSONL file' },
-  { name: 'share', description: 'Share session as a secret GitHub gist' },
+  { name: 'settings', description: 'Open settings menu（ZION 设置面板）' },
+  { name: 'model', description: 'Select model（打开模型选择器）', argumentHint: '<provider/model>' },
+  { name: 'export', description: 'Export session（HTML 默认，可指定路径 .html/.jsonl）', argumentHint: '[path]' },
+  { name: 'import', description: 'Import and resume a session from a JSONL file', argumentHint: '<path>' },
   { name: 'copy', description: 'Copy last agent message to clipboard' },
-  { name: 'name', description: 'Set session display name' },
+  { name: 'name', description: 'Set session display name', argumentHint: '<name>' },
   { name: 'session', description: 'Show session info and stats' },
-  { name: 'changelog', description: 'Show changelog entries' },
-  { name: 'hotkeys', description: 'Show all keyboard shortcuts' },
-  { name: 'fork', description: 'Create a new fork from a previous user message' },
-  { name: 'clone', description: 'Duplicate the current session at the current position' },
-  { name: 'tree', description: 'Navigate session tree (switch branches)' },
-  { name: 'trust', description: 'Save project trust decision for future sessions' },
-  { name: 'login', description: 'Configure provider authentication' },
-  { name: 'logout', description: 'Remove provider authentication' },
+  { name: 'hotkeys', description: 'Show ZION keyboard shortcuts（快捷键速查）' },
+  { name: 'trust', description: 'Save project trust decision for current project' },
   { name: 'new', description: 'Start a new session' },
   { name: 'compact', description: 'Manually compact the session context' },
   { name: 'resume', description: 'Resume a different session' },
-  { name: 'reload', description: 'Reload keybindings, extensions, skills, prompts, themes, and context files' },
+  { name: 'reload', description: 'Reload extensions, skills, prompts, themes, and context files' },
   { name: 'quit', description: 'Quit ZION' },
 ]);
 
@@ -131,7 +129,7 @@ export function collectCommands({ userSkillsDir, sharedSkillsDir, projectSkillsD
     walkPkg(packagesRoot);
   }
 
-  for (const c of BUILTIN_COMMANDS) push({ name: c.name, description: c.description, kind: 'command', source: '内置' });
+  for (const c of BUILTIN_COMMANDS) push({ name: c.name, description: c.description, kind: 'command', source: '内置', ...(/** @type {{ argumentHint?: string }} */ (c)).argumentHint ? { argumentHint: /** @type {{ argumentHint?: string }} */ (c).argumentHint } : {} });
   for (const c of EXTENSION_COMMANDS) push({ name: c.name, description: c.description, kind: 'command', source: '扩展' });
   return items;
 }

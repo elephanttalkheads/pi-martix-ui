@@ -66,6 +66,16 @@ test('collectCommands：聚合 + 去重 + 内置/扩展命令', () => {
   }
 });
 
-test('BUILTIN_COMMANDS 权威清单完整性（22 个）', () => {
-  assert.equal(BUILTIN_COMMANDS.length, 22);
+test('BUILTIN_COMMANDS 权威清单完整性（14 个，ZION 裁剪后）', () => {
+  assert.equal(BUILTIN_COMMANDS.length, 14);
+  // 裁剪验证：ZION 无对应物的命令不在清单中
+  for (const dropped of ['changelog', 'tree', 'clone', 'fork', 'scoped-models', 'login', 'logout', 'share']) {
+    assert.ok(!BUILTIN_COMMANDS.some((c) => c.name === dropped), `应裁剪 /${dropped}`);
+  }
+  // 保留命令：无参数命令不带 argumentHint；带参数命令必须带 hint
+  for (const c of BUILTIN_COMMANDS) {
+    if (['export', 'import', 'name', 'model'].includes(c.name)) {
+      assert.ok(c.argumentHint, `/${c.name} 应有 argumentHint`);
+    }
+  }
 });

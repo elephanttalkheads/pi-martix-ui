@@ -1,11 +1,13 @@
 // 输入栏 —— v4 规格 §5.9：快捷指令按钮 + ❯ 提示符 + 切角发送按钮
 // 生成中按钮切换为「中断」（红色系）；/clear 本地清空 feed；其余指令原样发真实 prompt。
 // 命令面板：输入 / 弹出本机全部 skills + 命令（主进程聚合扫描），↑↓/Enter/Tab/Esc 操作，
-// 选中 skill 插入「运行技能 X：」、命令插入 /name（执行语义属宿主 TUI 层，此处仅插入文本）。
+// 选中 skill 插入「运行技能 X：」；选中 command → 无参数直接执行（runCommand）、
+// 有参数（argumentHint）回填 /name 待补参后 Enter 执行。输入 /cmd args 回车也走 runCommand。
+// 注意：QUICK_CMDS 为快捷文本按钮（发 prompt），不是命令执行。
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useFeed } from '../store';
 import { SND } from './SoundFx';
-import type { CommandItem } from '../../../shared/protocol';
+import type { CommandItem, SessionHistoryItem } from '../../../shared/protocol';
 
 const QUICK_CMDS = ['/status 系统状态', '/trace 回放链路', '检索记忆库', '扫描项目风险'];
 
@@ -51,10 +53,44 @@ export default function InputBar() {
     const pushUser = useFeed.getState().pushUser;
     const reset = useFeed.getState().reset;
     const log = useFeed.getState().log;
+    const pushToast = useFeed.getState().pushToast;
     if (value === '/clear') {
       reset();
       log('dim', '[CMD] 清空会话视图');
       setText('');
+      return;
+    }
+    // /cmd args → 主进程命令执行（真实语义）；否则原样 prompt
+    const cmdMatch = /^\/([a-zA-Z0-9-]+)(?:\s+(.*))?$/.exec(value);
+    if (cmdMatch) {
+      const [, name, args] = cmdMatch;
+      setText('');
+      log('dim', `[CMD] /${name}${args ? ' ' + args : ''}`);
+      SND.send();
+      try {
+        const r = await window.zion?.runCommand?.(name, args?.trim() ?? undefined);
+        if (!r) return;
+        // 会话切换类命令（/new /import /resume）：主进程已切 currentSession，返回 {id, items}
+        // → 重建 feed（与 Sidebar 的 switchSession/newSession 契约一致，防 UI 停留旧会话）
+        const d = r.data as { id?: string; items?: SessionHistoryItem[] } | undefined;
+        if (r.ok && d?.id && Array.isArray(d.items)) {
+          const applySession = useFeed.getState().applySession;
+          const setSessions = useFeed.getState().setSessions;
+          applySession(d.id, `会话 ${d.id.slice(0, 4)}`, d.items);
+          void window.zion?.listSessions?.()?.then(setSessions)?.catch(() => {});
+        }
+        if (r.kind === 'error') {
+          log('err', `[CMD] /${name} 失败：${r.message}`);
+          pushToast({ message: r.message, type: 'error' });
+        } else {
+          log('dim', `[CMD] ${r.message}`);
+          if (r.kind === 'ok') pushToast({ message: r.message, type: 'info' });
+        }
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        log('err', `[CMD] /${name} 异常：${msg}`);
+        pushToast({ message: msg, type: 'error' });
+      }
       return;
     }
     pushUser(value);
@@ -80,11 +116,22 @@ export default function InputBar() {
     await window.zion?.abort?.();
   };
 
-  /** 选中条目：skill → 插入运行模板；command → 插入 /name */
+  /** 选中条目：skill → 插入运行模板；command → 无参数直接执行 / 有参数回填待补 */
   const insert = (item: CommandItem) => {
-    setText(item.kind === 'skill' ? `运行技能 ${item.name}：` : `/${item.name}`);
+    if (item.kind === 'skill') {
+      setText(`运行技能 ${item.name}：`);
+      setOpen(false);
+      inputRef.current?.focus();
+      return;
+    }
+    // command：无参数直接执行；有参数回填 /name 待补参（Enter 走 runCommand）
     setOpen(false);
-    inputRef.current?.focus();
+    if (item.argumentHint) {
+      setText(`/${item.name} `);
+      inputRef.current?.focus();
+    } else {
+      void send(`/${item.name}`);
+    }
   };
 
   const onInputChange = (v: string) => {

@@ -26,7 +26,7 @@ export const NEO_SOURCE_ANCHOR = [82 / 256, 114 / 256] as const;
 /** 培育仓左侧机械柱：1672×941 横向帧的 (159, 556)。 */
 export const POD_RECEIVER_ANCHOR = [159 / 1672, 556 / 941] as const;
 
-import { MATRIX_CHARS } from './matrixGlyphs';
+import { MATRIX_CHARS } from './matrixGlyphs.ts';
 
 const GLYPHS = MATRIX_CHARS;
 

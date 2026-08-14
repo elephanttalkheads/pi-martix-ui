@@ -2,7 +2,7 @@
 // 模式：多会话并存（Map<sessionId, AgentSession>，懒创建）+ 当前指针切换
 // 事件转发只发当前会话；createAgentSession（复用 ~/.pi/agent 配置）→ session.subscribe → IPC → renderer
 // 参考：tbrandenburg/pi-desktop；docs/sdk.md
-import { app, BrowserWindow, ipcMain, dialog } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, clipboard } from 'electron';
 import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -172,7 +172,32 @@ async function ensureCurrentSession() {
 async function listSessionInfos() {
   fs.mkdirSync(WORKSPACE_DIR, { recursive: true });
   const infos = await SessionManager.list(WORKSPACE_DIR);
-  return infos
+  const diskIds = new Set(infos.map((i) => i.id));
+  // 合并内存中未落盘的活跃会话：SDK 的 SessionManager.create 不写盘（无 assistant 消息时
+  // _persist 只置 flushed 标记），磁盘 list 扫不到 → /new 后新仓在侧栏不可见，
+  // 必须等切换会话触发列表刷新才出现。此处把 sessions Map 里有实例但磁盘无文件的会话补进列表。
+  /** @type {import('@earendil-works/pi-coding-agent').SessionInfo[]} */
+  const merged = [...infos];
+  for (const s of sessions.values()) {
+    const id = s.sessionManager.getSessionId();
+    if (!id || diskIds.has(id)) continue;
+    const file = s.sessionManager.getSessionFile();
+    if (file && fs.existsSync(file)) continue; // 已落盘（双保险）
+    const name = s.sessionManager.getSessionName();
+    const now = new Date();
+    merged.push({
+      id,
+      path: file ?? '',
+      name,
+      firstMessage: '',
+      messageCount: s.state.messages.length,
+      modified: now,
+      cwd: WORKSPACE_DIR,
+      created: now,
+      allMessagesText: '',
+    });
+  }
+  return merged
     .map((i) => ({
       id: i.id,
       path: i.path,
@@ -302,6 +327,176 @@ ipcMain.handle('zion:list-commands', () => {
     packagesRoot: npmRoot,
     settingsSkillPaths: settingsSkills,
   });
+});
+
+// ---- 命令执行 dispatch（#24）—— zion:run-command 主进程路由 ----
+// handler 注册表：name → (args?) => Promise<RunCommandResult>。
+// 未实现命令（UI 弹层类）返回明确占位错误，不静默吞掉。
+
+/**
+ * 统一命令结果工厂（kind: ok=成功 toast / info=仅日志 / error=失败 toast）
+ * @param {'ok' | 'info' | 'error'} kind
+ * @param {string} message
+ * @param {unknown} [data]
+ * @returns {import('../shared/protocol.ts').RunCommandResult}
+ */
+function cmd(kind, message, data) {
+  return { ok: kind !== 'error', message, kind, ...(data !== undefined ? { data } : {}) };
+}
+
+/** dialog 调用统一挂父窗口（三处同形，提取防重复）
+ * @template T
+ * @param {(w: import('electron').BrowserWindow) => Promise<T>} fn
+ * @returns {Promise<T>}
+ */
+function withWin(fn) {
+  return win ? fn(win) : fn(/** @type {never} */ (null));
+}
+
+/** @type {Record<string, (args?: string) => Promise<import('../shared/protocol.ts').RunCommandResult>>} */
+const commandHandlers = {
+  // ---- 会话管理类 ----
+  new: async () => {
+    const ok = await uiBridge.confirm('新建会话', '创建新会话并切换过去？（当前上下文保留可恢复）', { timeout: 30000 });
+    if (!ok) return cmd('info', '已取消新建会话');
+    const sm = SessionManager.create(WORKSPACE_DIR);
+    const id = sm.getSessionId();
+    const s = await ensureSessionFor(sm, id);
+    return cmd('ok', `已新建会话 ${id.slice(0, 8)}`, { id, items: historyFromSession(s) });
+  },
+  session: async () => {
+    const s = await ensureCurrentSession();
+    const id = s.sessionManager.getSessionId();
+    const msgs = s.state.messages.length;
+    const infos = await listSessionInfos();
+    const cur = infos.find((i) => i.id === id);
+    return cmd('ok', `会话 ${id.slice(0, 8)} · ${msgs} 条消息 · ${cur?.name ?? '未命名'}`, { id, msgs });
+  },
+  copy: async () => {
+    const s = await ensureCurrentSession();
+    const text = s.getLastAssistantText();
+    if (!text) return cmd('error', '当前会话还没有 assistant 消息可复制');
+    clipboard.writeText(text);
+    return cmd('ok', `已复制末条回复（${text.length} 字符）到剪贴板`);
+  },
+  name: async (args) => {
+    const s = await ensureCurrentSession();
+    const name = (args ?? '').trim();
+    if (!name) return cmd('error', '用法：/name <会话名>');
+    s.sessionManager.appendSessionInfo(name);
+    return cmd('ok', `会话已命名为「${name}」`);
+  },
+  compact: async () => {
+    const s = await ensureCurrentSession();
+    const r = await s.compact();
+    return cmd('ok', '上下文压缩完成', r);
+  },
+  export: async (args) => {
+    const s = await ensureCurrentSession();
+    const spec = (args ?? '').trim();
+    const isJsonl = spec.toLowerCase().endsWith('.jsonl');
+    // 带路径参数：直接导出到指定路径（官方语义 or specify path）
+    if (spec) {
+      const target = path.resolve(WORKSPACE_DIR, spec);
+      const out = isJsonl ? s.exportToJsonl(target) : await s.exportToHtml(target);
+      return cmd('ok', `已导出 → ${out}`, { path: out });
+    }
+    /** @type {Electron.SaveDialogOptions} */
+    const opts = {
+      title: '导出会话',
+      defaultPath: path.join(os.homedir(), `zion-session.${isJsonl ? 'jsonl' : 'html'}`),
+      filters: isJsonl
+        ? [{ name: 'JSONL 会话', extensions: ['jsonl'] }]
+        : [{ name: 'HTML 会话', extensions: ['html'] }],
+    };
+    const r = await withWin((w) => dialog.showSaveDialog(w, opts));
+    if (r.canceled || !r.filePath) return cmd('info', '已取消导出');
+    const out = isJsonl ? s.exportToJsonl(r.filePath) : await s.exportToHtml(r.filePath);
+    return cmd('ok', `已导出 → ${out}`, { path: out });
+  },
+  import: async (args) => {
+    const preset = (args ?? '').trim();
+    /** @type {Electron.OpenDialogOptions} */
+    const opts = {
+      title: '导入会话',
+      filters: [{ name: 'JSONL 会话', extensions: ['jsonl'] }],
+      properties: ['openFile'],
+    };
+    const r = preset
+      ? { canceled: false, filePaths: [preset] }
+      : await withWin((w) => dialog.showOpenDialog(w, opts));
+    if (r.canceled || r.filePaths.length === 0) return cmd('info', '已取消导入');
+    const sm = SessionManager.open(r.filePaths[0], undefined, WORKSPACE_DIR);
+    const id = sm.getSessionId();
+    const s = await ensureSessionFor(sm, id);
+    return cmd('ok', `已导入会话 ${id.slice(0, 8)}（${r.filePaths[0]}）`, { id, items: historyFromSession(s) });
+  },
+  resume: async () => {
+    const infos = await listSessionInfos();
+    if (infos.length === 0) return cmd('error', '没有可恢复的会话');
+    const cur = currentSession?.sessionManager.getSessionId();
+    const candidates = infos.filter((i) => i.id !== cur);
+    if (candidates.length === 0) return cmd('info', '已在最新会话');
+    // 选项带短 id 前缀，反查用短码匹配——会话名/首条消息含分隔符也不会错选
+    const label = (/** @type {import('../shared/protocol.ts').SessionInfoLike} */ i) => `[${i.id.slice(0, 8)}] ${(i.name ?? i.firstMessage) || '未命名'} · ${i.modified.slice(0, 10)}`;
+    const pick = await uiBridge.select('恢复会话', candidates.map(label), { timeout: 30000 });
+    if (pick === undefined) return cmd('info', '已取消恢复');
+    const short = /^\[([0-9a-f]{8})\]/.exec(pick)?.[1];
+    const info = short ? candidates.find((i) => i.id.startsWith(short)) : undefined;
+    if (!info) return cmd('error', '选择未匹配到会话');
+    const sm = SessionManager.open(info.path, undefined, WORKSPACE_DIR);
+    const id = sm.getSessionId();
+    const s = await ensureSessionFor(sm, id);
+    return cmd('ok', `已切换到会话 ${id.slice(0, 8)}`, { id, items: historyFromSession(s) });
+  },
+
+  // ---- 系统类 ----
+  reload: async () => {
+    const s = await ensureCurrentSession();
+    await s.reload();
+    return cmd('ok', '已重载 keybindings / extensions / skills / prompts / themes / context');
+  },
+  quit: async () => {
+    /** @type {Electron.MessageBoxOptions} */
+    const opts = {
+      type: 'question',
+      title: '退出 ZION',
+      message: '确定退出 ZION？',
+      buttons: ['退出', '取消'],
+      defaultId: 1,
+      cancelId: 1,
+    };
+    const r = await withWin((w) => dialog.showMessageBox(w, opts));
+    if (r.response !== 0) return cmd('info', '已取消退出');
+    app.quit();
+    return cmd('ok', '正在退出 ZION');
+  },
+
+  // ---- 扩展命令 ----
+  // goal：pi-goal 扩展运行时注册的命令，ZION 未实现扩展命令运行时 → 转交 LLM（自然语言语义）
+  goal: async (args) => {
+    const s = await ensureCurrentSession();
+    const text = (args ?? '').trim();
+    await s.prompt(text || '/goal 自主模式：启动/状态/暂停/恢复/清除/队列');
+    return cmd('info', `/goal 已转交 agent 执行（扩展命令，ZION 未实现原生运行时）`);
+  },
+
+  // ---- 待实现（后续 issue）——返回占位错误，避免假执行 ----
+  trust: async () => cmd('error', '项目信任处理未实现（#25 系统类命令）'),
+  hotkeys: async () => cmd('error', '快捷键速查弹层未实现（#25 系统类命令）'),
+  model: async () => cmd('error', '模型选择弹层未实现（#26 模型与设置类命令）'),
+  settings: async () => cmd('error', '设置面板未实现（#26 模型与设置类命令）'),
+};
+
+ipcMain.handle('zion:run-command', async (_e, name, args) => {
+  const h = commandHandlers[/** @type {string} */ (name)];
+  if (!h) return cmd('error', `未知命令 /${String(name)}`);
+  try {
+    return await h(typeof args === 'string' ? args : undefined);
+  } catch (e) {
+    console.error('[zion] run-command failed:', name, String(e));
+    return cmd('error', `/${String(name)} 执行失败：${e instanceof Error ? e.message : String(e)}`);
+  }
 });
 
 ipcMain.handle('agent:prompt', async (_e, text) => {

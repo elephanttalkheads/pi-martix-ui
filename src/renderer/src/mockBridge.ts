@@ -5,6 +5,7 @@
 // 生产（Electron 打包）必有 preload 桥，installMockBridge 检测到 window.zion 后直接跳过。
 import type { ZionAPI } from '../../shared/protocol';
 import type { AgentSessionEvent } from '@earendil-works/pi-coding-agent';
+import { useFeed } from './store';
 import type {
   SessionHistoryItem,
   SessionInfoLike,
@@ -82,10 +83,13 @@ const MOCK_PROJECTS: ProjectInfo[] = [
 ];
 
 const MOCK_COMMANDS: CommandItem[] = [
-  { name: 'status', description: 'Show current session/agent status', kind: 'command', source: '内置' },
-  { name: 'trace', description: 'Toggle agent trace output', kind: 'command', source: '内置' },
-  { name: 'clear', description: 'Clear the conversation', kind: 'command', source: '内置' },
-  { name: 'goal', description: 'Start an autonomous goal session', kind: 'command', source: '扩展' },
+  { name: 'session', description: 'Show session info and stats', kind: 'command', source: '内置' },
+  { name: 'copy', description: 'Copy last agent message to clipboard', kind: 'command', source: '内置' },
+  { name: 'name', description: 'Set session display name', kind: 'command', source: '内置', argumentHint: '<name>' },
+  { name: 'new', description: 'Start a new session', kind: 'command', source: '内置' },
+  { name: 'export', description: 'Export session（HTML 默认）', kind: 'command', source: '内置', argumentHint: '[path]' },
+  { name: 'compact', description: 'Manually compact the session context', kind: 'command', source: '内置' },
+  { name: 'goal', description: 'Goal 自主模式：启动/状态/暂停/恢复/清除/队列（pi-goal 扩展）', kind: 'command', source: '扩展' },
   { name: 'code-review', description: 'Review changes since a fixed point', kind: 'skill', source: '用户级' },
   { name: 'tdd', description: 'Test-driven development workflow', kind: 'skill', source: '用户级' },
 ];
@@ -146,6 +150,13 @@ function createMock(): ZionAPI {
     followUp: async () => true,
     scanTree: async () => MOCK_TREE,
     listCommands: async () => MOCK_COMMANDS,
+    runCommand: async (name, args) => {
+      const { log, pushToast } = useFeed.getState();
+      const msg = `/mock:${name}${args ? ' ' + args : ''}（mock 模式，不真正执行）`;
+      log('dim', `[CMD] ${msg}`);
+      pushToast({ message: msg, type: 'info' });
+      return { ok: true, message: msg, kind: 'info' };
+    },
     listSessions: async () => MOCK_SESSIONS[project] ?? [],
     getCurrentSession: async () => payload(currentId),
     switchSession: async (id) => { currentId = id; return payload(id); },
