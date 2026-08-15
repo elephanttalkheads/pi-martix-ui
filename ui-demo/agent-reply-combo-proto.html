@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<!--
+  PROTOTYPE(一次性,验证后即弃)—— agent 回复 UI 选定方案组合 demo
+  选定:3.1 A 亮度波显影 / 3.2 A 脑波褶 / 3.3 C 机械继电器 / 3.4 A 烧录显影 / 3.5 C 封存带 / 3.6 C 磁带纹 / 3.7 B 字形蛾
+  结构:operator 回合 + agent 回合#1(闭环:全套入场编舞) + agent 回合#2(流式中:活态元件)
+  目的:验证七个「电影时刻」同框时的节奏与互相抢戏程度
+-->
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PROTO · agent 回复组合</title>
+<style>
+  @font-face { font-family: 'Sarasa Term SC'; src: url('font/SarasaTermSC-Regular.ttf'); font-display: swap; }
+  @font-face { font-family: 'Matrix Code'; src: url('font/Matrix-Code.ttf'); font-display: swap; }
+  :root {
+    --surface: rgba(2, 18, 9, 0.92);
+    --text-primary: #3dff8f;
+    --text-secondary: #23c468;
+    --text-tertiary: #1da754;
+    --accent: #00ff41;
+    --accent-muted: #14b850;
+    --bright: #c2ffd9;
+    --warning: #ffb000;
+    --danger: #ff5555;
+    --del-text: #e89a9a;
+    --border: rgba(61, 255, 143, 0.18);
+    --font: 'Share Tech Mono', 'Sarasa Term SC', ui-monospace, monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  body { background: #010a04; color: var(--text-primary); font-family: var(--font); font-size: 15px; overflow-y: auto; }
+  body::after {
+    content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 50;
+    background: repeating-linear-gradient(0deg, rgba(0,0,0,0.16) 0 1px, transparent 1px 3px);
+  }
+  .feed { max-width: 780px; margin: 0 auto; padding: 36px 28px 80px; }
+  .turn { position: relative; padding-left: 40px; margin-bottom: 26px; }
+  /* operator 回合(不在重构范围,仅提供语境) */
+  .op { text-align: right; color: var(--text-secondary); margin-bottom: 26px; }
+  .op .op-head { font-size: 12px; letter-spacing: 0.14em; color: var(--text-tertiary); }
+
+  /* ---- 3.6 C 磁带纹雨轨 ---- */
+  .rail { position: absolute; left: 0; top: 20px; bottom: 2px; width: 26px; border-left: 1px solid var(--border); pointer-events: none; }
+  .rail canvas { position: absolute; inset: 0; }
+  .rail .seal {
+    position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+    color: var(--accent-muted); font-size: 13px; animation: sealIn 0.5s ease-out both;
+  }
+  @keyframes sealIn { from { opacity: 0; transform: translate(-50%, -30%); } to { opacity: 1; transform: translate(-50%, -50%); } }
+
+  /* ---- 3.1 A 亮度波显影 ---- */
+  .msg { margin-bottom: 16px; max-width: 720px; }
+  .msg-head { display: flex; align-items: center; gap: 8px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--text-tertiary); margin-bottom: 10px; }
+  .msg-head .origin { width: 7px; height: 7px; background: var(--accent); transform: rotate(45deg); animation: ping 0.9s ease-out 1; }
+  @keyframes ping { 0% { box-shadow: 0 0 0 0 rgba(0,255,65,0.8); } 100% { box-shadow: 0 0 0 14px rgba(0,255,65,0); } }
+  .msg-head .m-time { margin-left: auto; }
+  .msg-body { font-size: 15px; line-height: 1.8; white-space: pre-wrap; }
+  .hl { color: var(--bright); }
+  code { font-size: 13px; background: rgba(61,255,143,0.08); border: 1px solid var(--border); padding: 0 4px; }
+  .msg-code { font-size: 13px; line-height: 1.55; white-space: pre; border-left: 1px solid var(--border); padding-left: 12px; margin-top: 10px; color: var(--text-secondary); }
+  .ln { display: block; opacity: 0.1; filter: blur(2px); color: var(--text-tertiary); animation: develop 0.85s ease-out forwards; }
+  @keyframes develop {
+    0% { opacity: 0.1; filter: blur(2px); color: var(--text-tertiary); }
+    55% { opacity: 1; filter: blur(0); color: var(--bright); text-shadow: 0 0 12px rgba(194,255,217,0.55); }
+    100% { opacity: 1; filter: blur(0); color: inherit; text-shadow: none; }
+  }
+
+  /* ---- 3.2 A 脑波褶 ---- */
+  .think summary {
+    list-style: none; cursor: pointer; font-size: 12px; letter-spacing: 0.14em;
+    color: var(--text-tertiary); text-transform: uppercase; user-select: none;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .think summary::-webkit-details-marker { display: none; }
+  .think summary::before { content: '▸'; font-size: 13px; transition: transform 0.15s; }
+  .think[open] summary::before { transform: rotate(90deg); }
+  .eeg { width: 72px; height: 14px; overflow: visible; }
+  .eeg path { fill: none; stroke: var(--text-tertiary); stroke-width: 1; }
+  .streaming .eeg path { stroke: var(--accent); stroke-dasharray: 6 4; animation: eegflow 0.8s linear infinite; }
+  @keyframes eegflow { to { stroke-dashoffset: -10; } }
+  .streaming .eeg { animation: eegamp 1.6s ease-in-out infinite; transform-origin: left center; }
+  @keyframes eegamp { 0%, 100% { transform: scaleY(0.4); } 50% { transform: scaleY(1); } }
+  .st-tag { color: var(--accent-muted); letter-spacing: 0.1em; }
+  .think-body { font-size: 13px; line-height: 1.7; color: var(--text-tertiary); margin-top: 8px; border-left: 1px dashed var(--border); padding-left: 12px; }
+  .think-body .tl { display: block; }
+  .think-body .tl:nth-child(1) { opacity: 0.38; }
+  .think-body .tl:nth-child(2) { opacity: 0.55; }
+  .think-body .tl:nth-child(3) { opacity: 0.72; }
+  .think-body .tl:nth-child(4) { opacity: 0.86; }
+  .think-body .tl:nth-child(5) { opacity: 1; color: var(--text-secondary); }
+
+  /* ---- 3.3 C 机械继电器 ---- */
+  .track {
+    border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
+    background: repeating-linear-gradient(90deg, transparent 0 34px, rgba(61,255,143,0.05) 34px 35px);
+    padding: 4px 0; margin-bottom: 16px;
+  }
+  .unit { display: flex; align-items: center; gap: 12px; padding: 7px 10px; flex-wrap: wrap; }
+  .unit + .unit { border-top: 1px dashed rgba(61,255,143,0.10); }
+  .contact { width: 10px; height: 10px; flex: none; border: 1px solid var(--text-tertiary); }
+  .unit.ok .contact { background: var(--accent); border-color: var(--accent); animation: clack 0.3s ease-out 1; }
+  @keyframes clack { 0% { box-shadow: 0 0 0 0 rgba(0,255,65,0.9); } 100% { box-shadow: 0 0 0 9px rgba(0,255,65,0); } }
+  .unit.run .contact { background: var(--warning); border-color: var(--warning); animation: coil 0.8s ease-in-out infinite; }
+  @keyframes coil { 0%, 100% { opacity: 0.35; } 50% { opacity: 1; box-shadow: 0 0 8px rgba(255,176,0,0.7); } }
+  .urest { flex: 1; display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+  .tname { color: var(--text-primary); }
+  .desc { color: var(--text-secondary); font-size: 13px; }
+  .dur { font-size: 12px; letter-spacing: 0.12em; padding: 1px 6px; border: 1px solid var(--border); background: rgba(2,14,7,0.8); color: var(--text-tertiary); }
+  .unit.ok .dur { color: var(--accent-muted); }
+  .unit.run .dur { color: var(--warning); }
+
+  /* ---- 3.4 A 烧录显影 ---- */
+  .diff { position: relative; padding: 10px 14px; margin-bottom: 16px; }
+  .ring { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+  .ring rect {
+    fill: none; stroke: var(--accent-muted); stroke-width: 1; vector-effect: non-scaling-stroke;
+    stroke-dasharray: 400; stroke-dashoffset: 400; animation: draw 1.2s ease-in-out 2.6s forwards;
+  }
+  @keyframes draw { to { stroke-dashoffset: 0; } }
+  .dhead { display: flex; align-items: baseline; gap: 10px; font-size: 12px; margin-bottom: 8px; }
+  .dfile { color: var(--text-primary); }
+  .plus { color: var(--accent-muted); }
+  .minus { color: var(--danger); }
+  .mod { color: var(--warning); letter-spacing: 0.18em; font-size: 11px; margin-left: auto; }
+  .dl { display: flex; font-size: 13px; line-height: 1.55; white-space: pre; }
+  .ln-no { flex: none; width: 44px; text-align: right; padding-right: 10px; color: var(--text-tertiary); user-select: none; }
+  .ln-sign { flex: none; width: 14px; text-align: center; user-select: none; }
+  .dl.add { background: rgba(61,255,143,0.07); animation: burn 0.9s ease-out both; }
+  .dl.add .ln-sign { color: var(--accent); }
+  .dl.add .ln-code { color: var(--text-primary); animation: cool 0.9s ease-out both; }
+  @keyframes burn { 0%,35% { background: rgba(194,255,217,0.28); } 100% { background: rgba(61,255,143,0.07); } }
+  @keyframes cool { 0% { color: var(--bright); text-shadow: 0 0 10px rgba(194,255,217,0.8); } 100% { color: var(--text-primary); } }
+  .dl.del { background: rgba(255,85,85,0.08); animation: char 1.1s ease-out both; }
+  .dl.del .ln-sign { color: var(--danger); }
+  .dl.del .ln-code { color: var(--del-text); }
+  @keyframes char { 0% { background: rgba(255,85,85,0.22); } 100% { opacity: 0.45; background: rgba(255,85,85,0.03); } }
+  .dl.ctx .ln-sign { color: transparent; }
+  .dl.ctx .ln-code { color: var(--text-secondary); }
+
+  /* ---- 3.5 C 封存带 ---- */
+  .settle { display: flex; align-items: center; gap: 8px; font-size: 12px; letter-spacing: 0.1em; color: var(--text-tertiary); }
+  .settle .seal { color: var(--accent-muted); }
+  .tape {
+    display: inline-flex; align-items: center; gap: 8px;
+    border-top: 1px solid currentColor; border-bottom: 1px solid currentColor;
+    padding: 2px 10px 2px 8px; opacity: 0.85;
+    animation: unroll 0.65s cubic-bezier(0.3, 0, 0.2, 1) 3.4s both;
+  }
+  @keyframes unroll { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 0 0 0); } }
+  .eol { flex: none; width: 8px; height: 12px; background: currentColor; animation: eolblink 0.9s steps(2) 4.2s 2; opacity: 0; }
+  @keyframes eolblink { 0%, 100% { opacity: 0; } 50% { opacity: 0.9; } }
+
+  /* ---- 3.7 B 字形蛾 ---- */
+  .caret {
+    display: inline-block; min-width: 9px; text-align: center;
+    font-family: 'Matrix Code', var(--font); font-size: 13px; color: var(--bright);
+    vertical-align: -0.1em; animation: mothblink 1.1s ease-in-out infinite;
+  }
+  @keyframes mothblink { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+  /* ---------- 浮条(非设计对象) ---------- */
+  #bar {
+    position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%); z-index: 99;
+    display: flex; align-items: center; gap: 12px;
+    background: #101010; border: 1px solid #444; border-radius: 999px;
+    color: #eee; padding: 7px 16px; font-family: ui-monospace, monospace; font-size: 12px;
+    box-shadow: 0 4px 18px rgba(0,0,0,0.6);
+  }
+  #bar button { background: #222; color: #eee; border: 1px solid #555; border-radius: 12px; padding: 0 10px; height: 24px; cursor: pointer; font-size: 13px; }
+  #bar .tag { color: #777; font-size: 10px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+    .ln { opacity: 1; filter: none; color: inherit; }
+    .ring rect { stroke-dashoffset: 0; }
+    .dl.del { opacity: 0.45; }
+    .eol { opacity: 0.9; }
+    .caret { opacity: 1; }
+  }
+</style>
+</head>
+<body>
+<div class="feed" id="feed"></div>
+
+<div id="bar">
+  <span class="tag">PROTO · 组合 3.1A 3.2A 3.3C 3.4A 3.5C 3.6C 3.7B</span>
+  <button id="replay" title="重播">↻ 重播</button>
+</div>
+
+<script>
+  const MOTH = 'アィウェオカキクケコサシスセソタチツテト012345789*+<>:|';
+  const EEG_PATH = 'M0,7 L8,7 L11,2 L14,12 L17,7 L26,7 L30,4 L33,10 L36,7 L46,7 L49,1 L53,13 L56,7 L72,7';
+  const DIFF_ROWS = [
+    { t: ' ', n: '41', c: '' },
+    { t: '-', n: '42', c: 'height: number;' },
+    { t: '-', n: '43', c: '' },
+    { t: '-', n: '44', c: 'weight: number;' },
+    { t: '-', n: '45', c: '' },
+    { t: '+', n: '42', c: '@IsInt() @Min(50) @Max(280)' },
+    { t: '+', n: '43', c: 'height: number;' },
+    { t: '+', n: '44', c: '' },
+    { t: '+', n: '45', c: '@IsInt() @Min(10) @Max(500)' },
+    { t: '+', n: '46', c: 'weight: number;' },
+    { t: ' ', n: '47', c: '' },
+  ];
+
+  const rowHtml = (r, i) => `
+    <div class="dl ${r.t === '+' ? 'add' : r.t === '-' ? 'del' : 'ctx'}" style="animation-delay:${1.2 + i * 0.09}s">
+      <span class="ln-no">${r.n}</span><span class="ln-sign">${r.t === ' ' ? '·' : r.t}</span><span class="ln-code">${r.c || ' '}</span>
+    </div>`;
+
+  function build() {
+    document.getElementById('feed').innerHTML = `
+      <div class="op">
+        <div class="op-head">OPERATOR · 15:41</div>
+        <div>给 palette.dto.ts 的 height/weight 补上字段校验</div>
+      </div>
+
+      <div class="turn">
+        <div class="rail" id="rail1"><span class="seal">◆</span></div>
+        <div class="msg">
+          <div class="msg-head"><span class="origin"></span>zion-core<span class="m-time">15:42:07</span></div>
+          <div class="msg-body"><span class="ln" style="animation-delay:0.15s">已读取 <code>palette.dto.ts</code>(68 行)。三个 DTO 结构完整,</span><span class="ln" style="animation-delay:0.29s">但<span class="hl">【字段校验缺失】</span>:<code>height</code> 与 <code>weight</code> 没有下限约束,</span><span class="ln" style="animation-delay:0.43s">负数会直接进入 <code>calcBMI()</code>。补丁已写入:</span></div>
+        </div>
+        <details class="think">
+          <summary><span class="t-label">思路</span>
+            <svg class="eeg" viewBox="0 0 72 14" aria-hidden="true"><path d="${EEG_PATH}"/></svg>
+          </summary>
+          <div class="think-body">
+            <span class="tl">用户要 BMI 工具的 DTO 校验——先确认字段边界</span>
+            <span class="tl">height/weight 都是 int,业务合理域 50–280 / 10–500</span>
+            <span class="tl">class-validator 用 @IsInt + @Min/@Max 组合即可</span>
+            <span class="tl">不引入自定义 pipe,保持与现有 DTO 风格一致</span>
+            <span class="tl">给出补丁,不改 calcBMI 逻辑本身</span>
+          </div>
+        </details>
+        <div class="track" style="margin-top:14px">
+          <div class="unit ok"><span class="contact"></span><span class="urest"><span class="tname">[read]</span><span class="desc">backend/src/dto/palette.dto.ts</span></span><span class="dur">0.3s</span></div>
+          <div class="unit ok"><span class="contact"></span><span class="urest"><span class="tname">[edit]</span><span class="desc">palette.dto.ts · +5 −4</span></span><span class="dur">0.8s</span></div>
+        </div>
+        <div class="diff">
+          <svg class="ring" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><rect x="1" y="1" width="98" height="98" pathLength="400"/></svg>
+          <div class="dhead"><span class="dfile">✎ backend/src/dto/palette.dto.ts</span><span class="plus">+5</span><span class="minus">−4</span><span class="mod">MODIFIED</span></div>
+          ${DIFF_ROWS.map(rowHtml).join('')}
+        </div>
+        <div class="settle"><span class="seal">◆</span><span class="tape">已结算 · 2 tools · 1832 tok · 4.1s</span><span class="eol"></span></div>
+      </div>
+
+      <div class="turn streaming">
+        <div class="rail" id="rail2"></div>
+        <details class="think" open>
+          <summary><span class="t-label">思路</span><span class="st-tag">· 思考中…</span>
+            <svg class="eeg" viewBox="0 0 72 14" aria-hidden="true"><path d="${EEG_PATH}"/></svg>
+          </summary>
+          <div class="think-body">
+            <span class="tl">检查调用方是否也传了未校验的数值…</span>
+          </div>
+        </details>
+        <div class="track">
+          <div class="unit run"><span class="contact"></span><span class="urest"><span class="tname">[bash]</span><span class="desc">npm run test:dto</span></span><span class="dur">执行中…</span></div>
+        </div>
+        <div class="msg">
+          <div class="msg-body">测试跑到第三个用例,目前全部通过<span class="caret" id="moth">${MOTH[0]}</span></div>
+        </div>
+      </div>`;
+  }
+
+  /* 3.6 C 磁带纹:活动轨 canvas;闭环轨静态纹 */
+  const W = 26;
+  function tapeLive(cv) {
+    const ctx = cv.getContext('2d');
+    const H = cv.height;
+    const rows = [];
+    for (let y = 0; y < H; y += 5) rows.push({ y, len: 3 + Math.random() * 8, x: 3 + Math.random() * 8, hot: Math.random() < 0.06 });
+    return setInterval(() => {
+      ctx.globalCompositeOperation = 'destination-out';
+      ctx.fillStyle = 'rgba(0,0,0,0.10)';
+      ctx.fillRect(0, 0, W, H);
+      ctx.globalCompositeOperation = 'source-over';
+      for (const r of rows) {
+        r.y -= 2.2;
+        if (r.y < -4) { r.y = H + 4; r.len = 3 + Math.random() * 8; r.x = 3 + Math.random() * 8; r.hot = Math.random() < 0.06; }
+        ctx.fillStyle = r.hot ? 'rgba(194,255,217,0.8)' : 'rgba(0,255,65,0.4)';
+        ctx.fillRect(r.x, r.y, r.len, 1.4);
+      }
+    }, 60);
+  }
+  function tapeStill(cv) {
+    const ctx = cv.getContext('2d');
+    for (let y = 0; y < cv.height; y += 5) {
+      ctx.fillStyle = 'rgba(20,184,80,0.28)';
+      ctx.fillRect(3 + Math.random() * 8, y, 3 + Math.random() * 8, 1.4);
+    }
+  }
+
+  let mothTimer = null, tapeTimer = null;
+  const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  function mount() {
+    build();
+    if (mothTimer) clearInterval(mothTimer);
+    if (tapeTimer) clearInterval(tapeTimer);
+    // 闭环轨:静态纹(在 seal ◆ 下面)
+    const r1 = document.getElementById('rail1');
+    const c1 = document.createElement('canvas');
+    c1.width = W; c1.height = Math.max(60, r1.clientHeight || 300);
+    r1.insertBefore(c1, r1.firstChild);
+    tapeStill(c1);
+    // 活动轨:磁带纹(流式回合)
+    const r2 = document.getElementById('rail2');
+    const c2 = document.createElement('canvas');
+    c2.width = W; c2.height = Math.max(60, r2.clientHeight || 300);
+    r2.appendChild(c2);
+    if (!REDUCED) tapeTimer = tapeLive(c2); else tapeStill(c2);
+    // 字形蛾
+    const moth = document.getElementById('moth');
+    if (!REDUCED) mothTimer = setInterval(() => { moth.textContent = MOTH[Math.random() * MOTH.length | 0]; }, 120);
+  }
+
+  document.getElementById('replay').onclick = mount;
+  mount();
+</script>
+</body>
+</html>
