@@ -24,13 +24,13 @@ import {
 
 const MAX_VISIBLE_CABLES = 3;
 const TRANSITION_MS = 90;
-const PULSE_SPEED_PX_PER_SECOND = 320;
+const PULSE_SPEED_PX_PER_SECOND = 560;
 const RETURN_GROW_SPEED_PX_PER_SECOND = 140;
 const RETURN_SHRINK_SPEED_PX_PER_SECOND = 240;
 const RETURN_HOLD_MS = 1000;
 const PULSE_REST_MS = 600;
 const PULSE_STEP = 8;
-const PULSE_TAIL_LENGTH = 4;
+const PULSE_TAIL_LENGTH = 6;
 const DEFAULT_STREAM_POOL = 64;
 
 type CableGeometry = {
@@ -100,6 +100,7 @@ function NeuralCable({
   const ringRefs = useRef<Array<SVGImageElement | null>>([]);
   const pulseRefs = useRef<Array<SVGTextElement | null>>([]);
   const staticRef = useRef<SVGTextElement | null>(null);
+  const warheadRef = useRef<SVGCircleElement | null>(null);
   const [poolSize, setPoolSize] = useState(DEFAULT_STREAM_POOL);
   const { signature } = cable;
 
@@ -122,8 +123,10 @@ function NeuralCable({
     const path = pathRef.current;
     const chars = pulseRefs.current;
     const staticText = staticRef.current;
+    const warhead = warheadRef.current;
     if (!path || state !== 'active' || reducedMotion) {
       chars.forEach((char) => char?.setAttribute('visibility', 'hidden'));
+      warhead?.setAttribute('visibility', 'hidden');
       staticText?.removeAttribute('visibility');
       return;
     }
@@ -140,7 +143,10 @@ function NeuralCable({
     const startedAt = performance.now();
     let animationFrame = 0;
 
-    const hideAll = () => chars.forEach((char) => char?.setAttribute('visibility', 'hidden'));
+    const hideAll = () => {
+      chars.forEach((char) => char?.setAttribute('visibility', 'hidden'));
+      warhead?.setAttribute('visibility', 'hidden');
+    };
 
     const animate = (now: number) => {
       const cycleTime = (now - startedAt) % cycleMs;
@@ -180,6 +186,10 @@ function NeuralCable({
         rest = true;
       }
 
+      // 弹头光点只在脉冲相出现，取代头部字符。
+      const isPulse = slotLimit === PULSE_TAIL_LENGTH;
+      if (!isPulse || rest) warhead?.setAttribute('visibility', 'hidden');
+
       chars.forEach((char, index) => {
         if (!char) return;
         const distance = anchor + index * stepSign * PULSE_STEP;
@@ -195,6 +205,15 @@ function NeuralCable({
         const jitter = Math.sin(now * 0.011 + index * 1.7 + signature.id) * 1.5;
         const x = point.x - Math.sin(angle) * jitter;
         const y = point.y + Math.cos(angle) * jitter;
+
+        if (isPulse && index === 0) {
+          // 脉冲头部 = 发光弹体：字符让位，光点取同一轨迹坐标（不参与旋转）。
+          char.setAttribute('visibility', 'hidden');
+          warhead?.setAttribute('cx', x.toFixed(2));
+          warhead?.setAttribute('cy', y.toFixed(2));
+          warhead?.setAttribute('visibility', 'visible');
+          return;
+        }
         const glyphIndex = (index + signature.staticOffset
           + ((index + mutationStep + signature.id) % 3 === 0 ? mutationStep : 0)) % signature.glyphs.length;
 
@@ -265,6 +284,7 @@ function NeuralCable({
         aria-hidden="true"
       />
       <g className="neural-cable-pulse" aria-hidden="true">
+        <circle ref={warheadRef} className="neural-cable-warhead" r="2.6" visibility="hidden" />
         {Array.from({ length: Math.max(poolSize, PULSE_TAIL_LENGTH) }, (_, index) => (
           <text
             key={index}

@@ -31,9 +31,9 @@
 
 ## 五段握手动画（仅当前会话、非 reduced-motion）
 
-- 信号字符为 SVG `<text>` 池：脉冲相只用前 4 个（`PULSE_TAIL_LENGTH=4`），回传相铺满全缆，池大小按 `ceil(路径长/8)+2` 随路径重测量动态分配（`PULSE_STEP=8px`）。字符统一 `dy="3.5"`——基线下沉半字高，神经线从字形中部穿过（删除线式居中，与静态流同款）。slot 0 恒为「亮端」：头字符近白 `#c8ffd4`（600 字重），其余 `#3dff8f`，透明度按 slot 1→0.18 梯度衰减。
+- 信号字符为 SVG `<text>` 池：脉冲相只用前 6 个（`PULSE_TAIL_LENGTH=6`），回传相铺满全缆，池大小按 `ceil(路径长/8)+2` 随路径重测量动态分配（`PULSE_STEP=8px`）。字符统一 `dy="3.5"`——基线下沉半字高，神经线从字形中部穿过（删除线式居中，与静态流同款）。slot 0 恒为「亮端」：头字符近白 `#c8ffd4`（600 字重），其余 `#3dff8f`，透明度按 slot 1→0.18 梯度衰减。
 - 一个回合 = 五段状态机（L = 路径长度）：
-  1. **脉冲出站**：4 字符短脉冲（24px），Neo → 仓体，320px/s（`PULSE_SPEED_PX_PER_SECOND`），`anchor = t·v`、slot 距离 `anchor − k·step`；
+  1. **脉冲出站**：光点弹头+5 字符尾（40px），Neo → 仓体，560px/s（`PULSE_SPEED_PX_PER_SECOND`），`anchor = t·v`、slot 距离 `anchor − k·step`。slot 0 的头部字符让位给 `.neural-cable-warhead`——r=2.6 实心圆点（`#c8ffd4` + 双层 drop-shadow 光晕），取同一轨迹坐标但不参与切线旋转，与回传的纯字符流形态区分；
   2. **回传生长**：脉冲尾端到达仓体后同帧触发——尾部锚定仓体、头部以 140px/s（`RETURN_GROW_SPEED_PX_PER_SECOND`）伸向 Neo，`anchor = L − t·v`、slot 距离 `anchor + k·step`，直至铺满全缆；
   3. **维持传输**：1s（`RETURN_HOLD_MS`）——两端锚定，字符位置固定铺满全缆，内容按 slot 异相突变（不同步，读作数据噪声）；一道连续亮度波（±40px 高斯衰减增亮至多 +0.8）在维持期内从仓体端扫到 Neo 端恰好一次，读作「一整批数据倒入 Neo」；
   4. **回传收缩**：头部锚定 Neo、尾部以 240px/s（`RETURN_SHRINK_SPEED_PX_PER_SECOND`）脱离仓体追向 Neo，可见尾界 `tailLimit = L − t·v`，长度减至 0；
