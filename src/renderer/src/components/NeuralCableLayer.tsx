@@ -270,6 +270,7 @@ function NeuralCable({
             key={index}
             ref={(node) => { pulseRefs.current[index] = node; }}
             className={index === 0 ? 'neural-cable-pulse-head' : 'neural-cable-pulse-tail'}
+            dy="3.5"
             visibility="hidden"
           />
         ))}

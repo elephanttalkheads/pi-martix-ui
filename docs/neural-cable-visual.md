@@ -31,7 +31,7 @@
 
 ## 五段握手动画（仅当前会话、非 reduced-motion）
 
-- 信号字符为 SVG `<text>` 池：脉冲相只用前 4 个（`PULSE_TAIL_LENGTH=4`），回传相铺满全缆，池大小按 `ceil(路径长/8)+2` 随路径重测量动态分配（`PULSE_STEP=8px`）。slot 0 恒为「亮端」：头字符近白 `#c8ffd4`（600 字重），其余 `#3dff8f`，透明度按 slot 1→0.18 梯度衰减。
+- 信号字符为 SVG `<text>` 池：脉冲相只用前 4 个（`PULSE_TAIL_LENGTH=4`），回传相铺满全缆，池大小按 `ceil(路径长/8)+2` 随路径重测量动态分配（`PULSE_STEP=8px`）。字符统一 `dy="3.5"`——基线下沉半字高，神经线从字形中部穿过（删除线式居中，与静态流同款）。slot 0 恒为「亮端」：头字符近白 `#c8ffd4`（600 字重），其余 `#3dff8f`，透明度按 slot 1→0.18 梯度衰减。
 - 一个回合 = 五段状态机（L = 路径长度）：
   1. **脉冲出站**：4 字符短脉冲（24px），Neo → 仓体，320px/s（`PULSE_SPEED_PX_PER_SECOND`），`anchor = t·v`、slot 距离 `anchor − k·step`；
   2. **回传生长**：脉冲尾端到达仓体后同帧触发——尾部锚定仓体、头部以 140px/s（`RETURN_GROW_SPEED_PX_PER_SECOND`）伸向 Neo，`anchor = L − t·v`、slot 距离 `anchor + k·step`，直至铺满全缆；
