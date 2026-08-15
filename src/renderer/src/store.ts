@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type { ToolExecutionStartEvent } from '@earendil-works/pi-coding-agent';
-import type { FileNode, ModalKind, SessionHistoryItem, SessionInfoLike, UiAsk, UiNotify } from '../../shared/protocol';
+import type { FileNode, ModalKind, SessionHistoryItem, SessionInfoLike, SessionMeta, UiAsk, UiNotify } from '../../shared/protocol';
 
 export type ToolStatus = 'run' | 'ok' | 'err';
 
@@ -128,6 +128,10 @@ interface FeedState {
   /** 当前项目工作目录（侧栏 Project 标题显示其目录名） */
   currentProject: string | null;
   tokenCount: number;
+  /** 会话元信息（微簇：模型/上下文窗口/思考强度；zion:session-meta，null=未知显示 --） */
+  sessionMeta: SessionMeta;
+  /** 最新 LLM turn 的 usage.input（真实上下文占用；null=未收到，微簇 ctx 显示 --） */
+  ctxInput: number | null;
   sndOn: boolean;
   /** 注入解码开关（见 CONTEXT.md「注入解码」；localStorage.zion.dec，默认开） */
   decOn: boolean;
@@ -155,8 +159,8 @@ interface FeedState {
   armTurn(): void;
   /** agent_end / agent_settled / message_end(error)：闭环当前回合并写结算行（队列化，保序） */
   closeTurn(outcome?: 'ok' | 'error'): void;
-  /** turn_end 携带的 usage.totalTokens 累积进活动回合（结算行 Σtokens + 状态栏真实计数） */
-  addUsage(tokens: number): void;
+  /** turn_end 携带的 usage.totalTokens 累积进活动回合（结算行 Σtokens + 状态栏真实计数）；input 为最新真实上下文占用 */
+  addUsage(tokens: number, input?: number): void;
   /** 中断时给活动回合打中断标记（队列化，保序） */
   markInterrupted(): void;
   toolStart(ev: Pick<ToolExecutionStartEvent, 'toolCallId' | 'toolName' | 'args'>, edit?: EditInfo): void;
@@ -177,6 +181,7 @@ interface FeedState {
   /** 打开/关闭模态弹层（开新层自动关旧层；同时收起命令面板由 InputBar 自处理） */
   openModal(kind: ModalKind | null, data?: Record<string, unknown> | null): void;
   setCurrentProject(path: string | null): void;
+  setSessionMeta(meta: SessionMeta): void;
   setTree(tree: FileNode[]): void;
   setSessions(sessions: SessionInfoLike[]): void;
   /** 仅更新当前会话显示标题（不重置 feed；重命名当前会话时用） */
@@ -203,7 +208,7 @@ type PendingOp =
   | { t: 'delta'; delta: string; kind: 'text' | 'thinking' }
   | { t: 'toolStart'; ev: Pick<ToolExecutionStartEvent, 'toolCallId' | 'toolName' | 'args'>; edit?: EditInfo }
   | { t: 'toolEnd'; toolCallId: string; isError: boolean; result?: unknown }
-  | { t: 'usage'; tokens: number }
+  | { t: 'usage'; tokens: number; input?: number }
   | { t: 'interrupt' }
   | { t: 'close'; outcome?: 'ok' | 'error' };
 
@@ -242,6 +247,8 @@ export const useFeed = create<FeedState>()((set) => ({
   sessionTitle: '…',
   currentProject: null,
   tokenCount: 0,
+  sessionMeta: { model: null, contextWindow: null, thinkingLevel: null },
+  ctxInput: null,
   sndOn: localStorage.getItem('zion.snd') !== '0',
   decOn: localStorage.getItem('zion.dec') !== '0',
   revealedEdits: {},
@@ -273,9 +280,9 @@ export const useFeed = create<FeedState>()((set) => ({
     opQueue.push({ t: 'close', outcome });
     scheduleFlush();
   },
-  addUsage(tokens) {
+  addUsage(tokens, input) {
     if (!(tokens > 0)) return;
-    opQueue.push({ t: 'usage', tokens });
+    opQueue.push({ t: 'usage', tokens, input });
     scheduleFlush();
   },
   markInterrupted() {
@@ -296,6 +303,7 @@ export const useFeed = create<FeedState>()((set) => ({
       let order = s.order;
       let activeId = s.activeTurnId;
       let tokenCount = s.tokenCount;
+      let ctxInput = s.ctxInput;
       const cloned = new Set<string>();
 
       /** 取回合的可变工作副本（首次访问时克隆换引用——回合 memo 只认新对象） */
@@ -370,6 +378,7 @@ export const useFeed = create<FeedState>()((set) => ({
               t.seenUsage = true;
             }
             tokenCount += op.tokens; // 状态栏真实 token 计数（替换原伪计数）
+            if (op.input != null) ctxInput = op.input; // 微簇 ctx：最新 turn 真实上下文占用
             break;
           }
           case 'toolStart': {
@@ -427,7 +436,7 @@ export const useFeed = create<FeedState>()((set) => ({
             break;
         }
       }
-      return { turns, order, activeTurnId: activeId, tokenCount };
+      return { turns, order, activeTurnId: activeId, tokenCount, ctxInput };
     });
   },
   setSessionState(sessionState) {
@@ -479,6 +488,7 @@ export const useFeed = create<FeedState>()((set) => ({
   setSessions(sessions) { set({ sessions }); },
   setSessionTitle(title) { set({ sessionTitle: title }); },
   setTree(tree) { set({ tree }); },
+  setSessionMeta(sessionMeta) { set({ sessionMeta }); },
   applySession(id, title, items) {
     // 历史重建：丢弃旧会话的流式队列（防跨会话污染），回合只重建文本（共识 Q12）
     opQueue.length = 0;
@@ -502,7 +512,7 @@ export const useFeed = create<FeedState>()((set) => ({
       turns[t.id] = t;
       order.push(t.id);
     }
-    set({ currentSessionId: id, sessionTitle: title, turns, order, activeTurnId: null, sessionState: 'READY', tokenCount: 0, expandedTools: {} });
+    set({ currentSessionId: id, sessionTitle: title, turns, order, activeTurnId: null, sessionState: 'READY', tokenCount: 0, ctxInput: null, expandedTools: {} });
   },
   setSndOn(sndOn) {
     localStorage.setItem('zion.snd', sndOn ? '1' : '0');
@@ -515,7 +525,7 @@ export const useFeed = create<FeedState>()((set) => ({
   reset() {
     opQueue.length = 0;
     armed = false;
-    set({ turns: {}, order: [], activeTurnId: null, sessionState: 'READY', tokenCount: 0 });
+    set({ turns: {}, order: [], activeTurnId: null, sessionState: 'READY', tokenCount: 0, ctxInput: null });
   },
 }));
 

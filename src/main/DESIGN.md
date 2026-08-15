@@ -87,7 +87,7 @@ main.mjs：ipcMain.handle ×19 + agent:event / zion:ui-ask / zion:ui-notify / zi
 
 IPC 通道全集（字面量与 handler 所在地；`protocol.ts` 头注释「完整清单」指向本节）：
 
-invoke ×19（`ipcMain.handle`）——会话管理 `zion:list-sessions` / `zion:get-current` / `zion:switch-session` / `zion:new-session` / `zion:rename-session` / `zion:delete-session`；项目 `zion:list-projects` / `zion:get-project` / `zion:browse-project` / `zion:switch-project`；其余 `zion:ping` / `zion:scan-tree` / `zion:list-commands` / `zion:run-command` / `agent:prompt` / `agent:abort` / `agent:steer` / `agent:followUp` / `zion:ui-answer`
+invoke ×20（`ipcMain.handle`）——会话管理 `zion:list-sessions` / `zion:get-current` / `zion:switch-session` / `zion:new-session` / `zion:rename-session` / `zion:delete-session`；项目 `zion:list-projects` / `zion:get-project` / `zion:browse-project` / `zion:switch-project`；其余 `zion:ping` / `zion:scan-tree` / `zion:list-commands` / `zion:run-command` / `zion:session-meta` / `agent:prompt` / `agent:abort` / `agent:steer` / `agent:followUp` / `zion:ui-answer`
 
 send ×4（`webContents.send`；preload 经 `subscribe(channel, cb)` 统一订阅）——`agent:event`（事件流）/ `zion:ui-ask`（扩展对话框）/ `zion:ui-notify`（扩展通知）/ `zion:tree-changed`（工作区文件树变化：整树 `FileNode[]` 快照，与 scan-tree 同形状）
 
@@ -100,6 +100,7 @@ send ×4（`webContents.send`；preload 经 `subscribe(channel, cb)` 统一订�
 - `zion:run-command` → `commandHandlers[name](args)`：注册表外的名字返回 `cmd('error', '未知命令 /<name>')`；handler 抛错被捕获转 `cmd('error', …)`，不 reject（各命令行为见「接口与依赖」命令执行 dispatch 节）
 - `zion:list-projects` → `listProjects()`：读 `~/.pi/agent/zion-projects.json`，缺失/损坏 → `[]`；条目依次过滤非 `string` 的 `path`、清洗控制字符（`[\u0000-\u001f\u007f]` 删除 + trim）、`fs.existsSync` 存在性过滤（清洗后为空或目录已失效的丢弃）后截 `PROJECTS_MAX`（8）条
 - `zion:get-project` → `{ path: WORKSPACE_DIR }`：只读查询当前工作目录，不创建/切换会话、不写最近清单（侧栏 Project 标题的数据源）
+- `zion:session-meta` → `SessionMeta`：`ensureCurrentSession()` 后读 `session.model`（name、contextWindow）与 `session.thinkingLevel`；会话未就绪/字段缺失 → 对应 null（渲染层微簇显示 `--`，不造假）
 - `zion:switch-project`：仅校验 `typeof dir === 'string' && dir.trim()`（否则抛 `'invalid project path'`）；目录存在性不校验、无路径白名单——不存在的目录会被 `ensureCurrentSession` 的 `mkdirSync recursive` 自建
 - `zion:browse-project`：`dialog.showOpenDialog`（`openDirectory`）取消/空选 → `null`；选中 → `switchProject`；`win` 为 null（未建/已销毁）时走无父窗重载
 - `switchProject` 同目录快速路径：不改 `WORKSPACE_DIR`、不写最近清单、不 dispose；跨目录切换写最近清单（写失败仅 warn，不阻断）

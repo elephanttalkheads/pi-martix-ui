@@ -21,6 +21,13 @@ import { SND, useSoundFx } from './components/SoundFx';
 import { useFeed, parseEditFromTool, normPath, matchTreeRow, openAncestors, deriveSessionTitle, type EditInfo } from './store';
 import { releaseWorm } from './components/SignalCanvas';
 
+/** 拉取会话元信息（模型/上下文窗口/思考强度）入店；桥未注入时静默跳过 */
+function refreshSessionMeta() {
+  window.zion?.getSessionMeta?.()
+    .then((m) => useFeed.getState().setSessionMeta(m))
+    .catch(() => {});
+}
+
 function useAgentEvents() {
   const queueDelta = useFeed((s) => s.queueDelta);
   const armTurn = useFeed((s) => s.armTurn);
@@ -104,6 +111,7 @@ function useAgentEvents() {
           setSessionState('RUNNING');
           replyScheduled = false;
           errored = false;
+          refreshSessionMeta(); // 回合开始是廉价的 meta 刷新点（模型/思考强度可能在会话外被改）
           break;
         case 'agent_end':
           closeTurn(); // 回合闭环 → 结算行（中断判定在 store 内按 interrupted 标记）
@@ -121,10 +129,11 @@ function useAgentEvents() {
           setSessionState('READY');
           break;
         case 'turn_end': {
-          // 每个 LLM turn 的 usage 累积进活动回合（结算行 Σtokens；多 turn 工具循环求和）
-          const m = ev.message as { usage?: { totalTokens?: number } } | null;
+          // 每个 LLM turn 的 usage 累积进活动回合（结算行 Σtokens；多 turn 工具循环求和）；
+          // usage.input 是真实上下文占用，入店供微簇 ctx 条
+          const m = ev.message as { usage?: { totalTokens?: number; input?: number } } | null;
           const tk = m?.usage?.totalTokens;
-          if (typeof tk === 'number') addUsage(tk);
+          if (typeof tk === 'number') addUsage(tk, m?.usage?.input);
           break;
         }
         case 'message_end': {
@@ -243,7 +252,6 @@ export default function App() {
   useSoundFx();
   useGlobalHotkeys();
   const sessionState = useFeed((s) => s.sessionState);
-  const sessionTitle = useFeed((s) => s.sessionTitle);
   const sndOn = useFeed((s) => s.sndOn);
   const setSndOn = useFeed((s) => s.setSndOn);
   const decOn = useFeed((s) => s.decOn);
@@ -344,6 +352,12 @@ export default function App() {
     };
   }, [applySession]);
 
+  // 会话元信息：启动拉取（modal 初始为 null 时 effect 首跑）+ 弹层关闭后重拉（可能刚切过模型）
+  const modal = useFeed((s) => s.modal);
+  useEffect(() => {
+    if (modal === null) refreshSessionMeta();
+  }, [modal]);
+
   // SND 开关与 store 同步：挂载时用持久化值初始化内部 enabled
   useEffect(() => {
     SND.setEnabled(useFeed.getState().sndOn);
@@ -425,15 +439,6 @@ export default function App() {
           onKeyDown={onResizeKeyDown}
         />
         <section className="console">
-          <div className="conv-head">
-            <span className="c-title">主控会话 #0047</span>
-            <span className="chip on">SESS: {sessionTitle}</span>
-            <span id="chip-state" className={`chip ${sessionState === 'READY' ? 'on' : 'warn'}`}>
-              {sessionState}
-            </span>
-            <span className="spacer" />
-            <span className="chip st-dim">上下文 12.4k / 128k</span>
-          </div>
           <Feed />
           <InputBar />
         </section>

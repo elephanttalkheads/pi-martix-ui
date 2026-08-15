@@ -72,6 +72,7 @@ notify 单向：uibridge.notify → send('zion:ui-notify') → preload onUiNotif
 | uiAnswer(id, result) | `zion:ui-answer`（invoke） | `{ ok: boolean }`（=`{ ok: handled }`，`handleAnswer` 是否命中 Promise 表）：应答扩展对话框（结果回传 uiBridge，取消传 undefined）；id 未匹配（已超时/重复应答）返回 `{ ok: false }` |
 | listProjects() | `zion:list-projects`（invoke） | `ProjectInfo[]`：最近项目（`~/.pi/agent/zion-projects.json`，上限 8，最近优先去重；坏文件/缺失 → 空数组） |
 | getProject() | `zion:get-project`（invoke） | `{ path: string }`：当前工作目录（`WORKSPACE_DIR` 现值，不读盘、不抛错） |
+| getSessionMeta() | `zion:session-meta`（invoke） | `SessionMeta`：当前模型显示名/上下文窗口/思考强度（`session.model` + `session.thinkingLevel`；会话未就绪字段为 null，渲染层显示 `--`）；微簇状态条数据源，启动/弹层关闭/agent_start 刷新 |
 | browseProject() | `zion:browse-project`（invoke） | `SwitchProjectResult \| null`：原生目录选择（`dialog.showOpenDialog`）后直接切换；取消返回 null |
 | switchProject(dir) | `zion:switch-project`（invoke） | `SwitchProjectResult`：切换工作目录 + 会话上下文重建；非字符串/空串抛 `invalid project path` |
 | onUiAsk(cb) | `zion:ui-ask`（send） | 退订函数：AskDialog 渲染对话框请求 |

@@ -70,6 +70,8 @@ export interface ZionAPI {
   uiAnswer(id: string, result: string | boolean | undefined): Promise<{ ok: boolean }>;
   /** 最近项目列表（~/.pi/agent/zion-projects.json） */
   listProjects(): Promise<ProjectInfo[]>;
+  /** 会话元信息：当前模型/上下文窗口/思考强度（启动 + 模型切换 + agent_start 时刷新） */
+  getSessionMeta(): Promise<SessionMeta>;
   /** 当前项目工作目录 */
   getProject(): Promise<{ path: string }>;
   /** 原生目录选择器：选择后直接切换项目；取消返回 null */
@@ -189,4 +191,17 @@ export interface SwitchProjectResult {
 export interface SessionPayload {
   id: string;
   items: SessionHistoryItem[];
+}
+
+/**
+ * 会话元信息（zion:session-meta）：微簇状态条数据源。
+ * 字段均可空——会话未就绪/模型未解析时对应字段为 null，渲染层显示 `--`，不造假。
+ */
+export interface SessionMeta {
+  /** 当前模型显示名（session.model 的 name/id） */
+  model: string | null;
+  /** 模型上下文窗口（session.model.contextWindow） */
+  contextWindow: number | null;
+  /** 思考强度（SDK ThinkingLevel：minimal/low/medium/high/xhigh/max） */
+  thinkingLevel: string | null;
 }

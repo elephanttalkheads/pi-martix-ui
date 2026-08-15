@@ -684,6 +684,20 @@ async function switchProject(dir) {
 ipcMain.handle('zion:list-sessions', () => listSessionInfos());
 ipcMain.handle('zion:get-project', () => ({ path: WORKSPACE_DIR }));
 ipcMain.handle('zion:list-projects', () => listProjects());
+/** 会话元信息：微簇状态条数据源（模型/上下文窗口/思考强度）；会话未就绪时字段为 null */
+ipcMain.handle('zion:session-meta', async () => {
+  /** @type {import('../shared/protocol.ts').SessionMeta} */
+  const meta = { model: null, contextWindow: null, thinkingLevel: null };
+  try {
+    const s = await ensureCurrentSession();
+    if (s.model) {
+      meta.model = s.model.name || `${s.model.provider}/${s.model.id}`;
+      meta.contextWindow = typeof s.model.contextWindow === 'number' ? s.model.contextWindow : null;
+    }
+    meta.thinkingLevel = s.thinkingLevel ?? null;
+  } catch { /* 会话未就绪 → 全 null，渲染层显示 -- */ }
+  return meta;
+});
 ipcMain.handle('zion:browse-project', async () => {
   /** @type {Electron.OpenDialogOptions} */
   const opts = {

@@ -20,6 +20,7 @@ const api = {
   runCommand: (name, args) => ipcRenderer.invoke('zion:run-command', name, args),
   listSessions: () => ipcRenderer.invoke('zion:list-sessions'),
   listProjects: () => ipcRenderer.invoke('zion:list-projects'),
+  getSessionMeta: () => ipcRenderer.invoke('zion:session-meta'),
   getProject: () => ipcRenderer.invoke('zion:get-project'),
   browseProject: () => ipcRenderer.invoke('zion:browse-project'),
   switchProject: (dir) => ipcRenderer.invoke('zion:switch-project', dir),

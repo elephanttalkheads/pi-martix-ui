@@ -19,6 +19,8 @@ export default function InputBar() {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const sessionState = useFeed((s) => s.sessionState);
   const sessionTitle = useFeed((s) => s.sessionTitle);
+  const sessionMeta = useFeed((s) => s.sessionMeta);
+  const ctxInput = useFeed((s) => s.ctxInput);
   const busy = sessionState !== 'READY';
   const cancelling = sessionState === 'CANCELLING';
   const sendDisabled = busy || text.trim() === '';
@@ -191,6 +193,11 @@ export default function InputBar() {
     }
   };
 
+  const ctxPct = ctxInput != null && sessionMeta.contextWindow
+    ? Math.min(100, Math.round((ctxInput / sessionMeta.contextWindow) * 100))
+    : null;
+  const thinkLevel = sessionMeta.thinkingLevel;
+
   return (
     <div className="inputbar">
       {open && (
@@ -217,12 +224,21 @@ export default function InputBar() {
           )}
         </div>
       )}
-      <div className="quick-cmds">
-        {QUICK_CMDS.map((c) => (
-          <button key={c} className="qcmd" onClick={() => send(c)} disabled={busy}>
-            {c}
-          </button>
-        ))}
+      <div className="micro">
+        <span className="mi-title">◆ {sessionTitle}</span>
+        <span className="mi-cluster">
+          <span className="mi-model">{sessionMeta.model ?? '--'}</span>
+          <span
+            className="ctxbar"
+            style={{ '--ctx': `${ctxPct ?? 0}%` } as React.CSSProperties}
+            title={ctxPct != null ? `上下文占用 ${ctxInput} / ${sessionMeta.contextWindow}` : '上下文占用未知'}
+          >
+            <i />
+          </span>
+          <span className="mi-ctx">{ctxPct != null ? `${ctxPct}%` : '--'}</span>
+          <span className={`mi-think${thinkLevel ? ` tl-${thinkLevel}` : ''}`}>{thinkLevel ?? '--'}</span>
+          <span className={`mi-state${sessionState !== 'READY' ? ' run' : ''}`}>{sessionState}</span>
+        </span>
       </div>
       <div className="input-row">
         <span className="prompt-sign">❯</span>
@@ -236,14 +252,22 @@ export default function InputBar() {
           disabled={cancelling}
         />
         <button
-          className={`send-btn${busy ? ' stop' : ''}`}
+          className={`go-btn${busy ? ' stop' : ''}`}
+          aria-label={busy ? '中断生成' : '发送'}
           onClick={() => (busy ? void abort() : void send())}
           disabled={!busy && sendDisabled}
         >
-          {busy ? '中断' : '发送'}
+          {busy ? '✕' : '↑'}
         </button>
       </div>
-      <div className="input-hint">Enter 发送 · 输入 / 弹出 skills+命令 · /clear 清空 · 生成中按钮切换为「中断」</div>
+      <div className="subline">
+        {QUICK_CMDS.map((c) => (
+          <button key={c} className="qcmd" onClick={() => send(c)} disabled={busy}>
+            {c}
+          </button>
+        ))}
+        <span className="hint">Enter 发送 · / 命令 · 生成中 Enter 中断</span>
+      </div>
     </div>
   );
 }

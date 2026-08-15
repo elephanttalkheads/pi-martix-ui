@@ -32,7 +32,7 @@
 |---|---|---|
 | `--bg` | `#010a04` | 全局背景（深绿黑，不是纯黑） |
 | `--surface` | `rgba(2, 18, 9, 0.92)` | 对话区底 |
-| `--surface-2` | `rgba(3, 26, 13, 0.94)` | 标题栏 / 侧栏 / 输入栏 / 日志 / 状态栏底 |
+| `--surface-2` | `rgba(3, 26, 13, 0.94)` | 标题栏 / 侧栏 / 日志 / 状态栏底（输入栏 v7 起透明底） |
 | `--text-primary` | `#3dff8f` | 主文字（磷光绿） |
 | `--text-secondary` | `#23c468` | 次级文字 |
 | `--text-tertiary` | `#1da754` | 三级文字 / 占位符 / 时间戳 |
@@ -88,14 +88,14 @@ font-family: "Share Tech Mono", ui-monospace, "Courier New", "Sarasa Term SC", "
 ┌──────────────────────────────────────────────────────┐
 │ 标题栏 36px                                           │
 ├──────────┬───────────────────────────────────────────┤
-│          │ 会话头（标题 + 芯片组）                       │
+│          │ 消息流 #feed（顶部无会话头，微簇在输入栏）     │
 │  侧栏    ├───────────────────────────────────────────┤
 │  232px   │                                           │
 │ ┌──────┐ │  消息流 #feed（flex:1, overflow-y:auto）     │
 │ │Neo   │ │  —— 回合化：OPERATOR 回合 / agent 回合容器   │
 │ │头像  │ │     （雨轨 + 正文段/思考块/工具卡/结算行）     │
 │ └──────┘ ├───────────────────────────────────────────┤
-│ 会话列表 │ 输入栏（快捷指令 + 输入行 + 提示）             │
+│ 会话列表 │ 输入栏（微簇状态条 + 发丝线输入行 + 快捷行）   │
 │ 文件树   │                                           │
 │ 底部信息 │                                           │
 ├──────────┴───────────────────────────────────────────┤
@@ -177,13 +177,16 @@ background: repeating-linear-gradient(0deg,
 - 点击文件行 = 发送 `读取 <path>` 指令给 agent（真实 prompt，非动画演示）；点击目录只展开/收起并记日志。
 - 命中闪烁态 `.breached`：文字 `--bright` + 底 0.14，`transition: none` 立即呈现，900ms 后移除 class。**文件树行是蠕虫入侵的命中目标**（§6），新文件命中前会先刷新树并展开祖先目录。
 
-### 5.5 会话头 `.conv-head`
+### 5.5 微簇状态条 `.micro`（输入栏顶部，取代旧 `.conv-head`）
 
-- 左：会话标题（13px 主绿，字距 0.12em）。
-- 芯片 `.chip`：11px，边框 1px，padding 2px 10px。
-  - `SESS: <会话标题>` —— `.on` 态：`--accent-muted` 文字 + 边框 0.35，跟随当前会话。
-  - 状态芯片 —— READY 时同 `.on`；其他状态 `.warn`：琥珀文字 + 边框 `rgba(255,204,0,0.35)`。
-  - 右侧（spacer 后）：`上下文 N / 128k`（当前为静态占位，真实上下文用量未接入）。
+- 左：`◆ <会话标题>`（`--accent`，12px；跟随当前会话 `sessionTitle`）。
+- 右侧簇（`.mi-cluster`，12px 三级绿）：
+  - 模型名 `.mi-model`（`--accent`；`zion:session-meta` 的 `session.model.name`）。
+  - **ctx 胶囊条 `.ctxbar`**：滚动条同款视觉语言——56px 宽、6px 高、3px 圆角，轨道近透明（0.08），填充 `#00ff66`，hover `#66ff99`；宽度 = 最新 turn `usage.input` / `session.model.contextWindow`。
+  - 百分比文字；**缺数据（无 usage / 无窗口值）一律 `--` 且条宽 0，不用假数据**。
+  - 思考强度 `.mi-think`：只显示等级文字（无前缀），绿色阶梯 minimal `#1da754` → low `#23c468` → medium `#3dff8f` → high `#66ff99`；xhigh/max 琥珀 `--warning`（重思考=重资源占用警示）。
+  - 状态字 `.mi-state`：READY 绿 / 其他琥珀。
+- 刷新时机：启动 + 弹层关闭后（可能刚切模型）+ 每次 `agent_start`。
 
 ### 5.6 会话流：回合（turn）结构（v5 落地，本节为全新内容）
 
@@ -232,19 +235,12 @@ feed 不再是无结构消息列表，而是**回合序列**（词汇见 CONTEXT
 - **渲染时机**：仅当 `revealedEdits[toolCallId]` 登记后渲染（蠕虫命中完成才回传，见 §6）；`tool_execution_end` 的 `result.patch/diff` 可升级行数据；行数上限 200。
 - **回传入场 `.reveal`**：`animation: glitchIn 0.5s steps(7) both`，从 `clip-path: inset(0 100% 0 0)` 到全显——7 段阶梯式从左扫入，像解密出的数据。
 
-### 5.9 输入栏 `.inputbar`
+### 5.9 输入栏 `.inputbar`（v7：透明底，无边框）
 
-- 快捷指令 `.qcmd`：普通矩形按钮（**不要切角**），12px 三级绿文字，1px 边框；hover 升主绿 + 边框 0.4 + 底 0.05。
-- 输入行：提示符 `❯`（`--accent`，15px）+ 输入框（无边框无背景，15px 主绿，光标色 `--accent`，placeholder 三级绿）。
-- **发送按钮（全屏唯一主动作，唯一切角元素）**：
-  ```css
-  clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);
-  ```
-  12px 大写字距 0.2em，`--accent` 文字 + 底 0.08 + 边框 `--accent-muted`，min 36×88px。
-  hover：反色——底变 `--accent`、文字变黑（**前景背景同一规则内互换**）。
-  生成中切换为 `中断`：红色系（文字/边框 `--danger`，底 `rgba(255,85,85,0.07)`），hover 底变 `--danger` 文字黑。
-  disabled：opacity 0.35。
-- 底部提示 11px 三级绿：`Enter 发送 · 支持 /status /trace /clear · 生成中按钮切换为「中断」`。
+- 容器：背景透明（透出数字雨）、无 `border-top`；内部结构 = 微簇（§5.5）+ 发丝线输入行 + 浅字快捷行。
+- 输入行 `.input-row`：上下 1px `--border` 发丝线夹住，`focus-within` 时底线升 `--accent`；提示符 `❯`（`--accent`，15px）+ 输入框（无边框无背景，15px 主绿，光标色 `--accent`，placeholder 三级绿）。
+- **发送按钮 `.go-btn`**：26×26 图标钮，`↑` 发送 / 生成中红 `✕` 中断（`aria-label` 保留语义）；1px `--border` 圆角 4px，hover 边框升亮 + 绿色外发光；disabled opacity 0.35。（旧切角「发送/中断」文字钮已随 v7 移除。）
+- 浅字快捷行 `.subline`：`.qcmd` 无边框 11px 三级绿文字钮（hover 升 `--accent`）+ 右侧 hint `Enter 发送 · / 命令 · 生成中 Enter 中断`。
 
 ### 5.10 日志抽屉 `.term`
 
@@ -356,10 +352,10 @@ tool_execution_start（同步路径，不依赖 React 渲染时序——bash 等
 
 `setSessionState(state)` 是**唯一状态源**，一次更新全部关联 UI：
 
-| 状态 | 状态栏文字色 | 会话头芯片 | FX.speed | FX.energy |
+| 状态 | 状态栏文字色 | 微簇状态字 | FX.speed | FX.energy |
 |---|---|---|---|---|
-| READY | 绿 | `.on` 绿 | 1 | 0.3 |
-| RUNNING / STREAMING / CANCELLING | 琥珀 | `.warn` 琥珀 | 2.2 | 0.85 |
+| READY | 绿 | 绿 | 1 | 0.3 |
+| RUNNING / STREAMING / CANCELLING | 琥珀 | 琥珀 | 2.2 | 0.85 |
 
 **派生信号 `FX = { speed, energy }`** 驱动所有环境动画：背景数字雨、凝结雨轨的下落速度都随 `FX` 变化（帧节流 `90 / FX.speed`）——**忙碌时整个界面"活"起来，这是氛围与状态绑定的关键设计，不要做成随机波动。**FX 是模块级可变对象，动画循环每帧直读，**不进 React 渲染路径**。
 
@@ -447,7 +443,7 @@ tool_execution_start（同步路径，不依赖 React 渲染时序——bash 等
         <ToolCard memo>     // .trace + 玻璃 + 收尾涟漪
           <DiffCard reveal />
         <SettleLine />      // 结算行（◆ 已结算/已中断/错误）
-    <InputBar />            // §5.9（busy 时发送钮变「中断」）
+    <InputBar />            // §5.5+§5.9（微簇状态条；busy 时 ↑ 变红 ✕ 中断）
   </Console>
   <LogDrawer open lines />  // §5.10
   <StatusBar />             // §5.11（tokens 真实 usage / SND / DEC / 状态字）

@@ -175,6 +175,7 @@ function createMock(): ZionAPI {
     },
     uiAnswer: async () => ({ ok: true }),
     listProjects: async () => MOCK_PROJECTS,
+    getSessionMeta: async () => ({ model: 'deepseek-chat', contextWindow: 128000, thinkingLevel: 'high' }),
     getProject: async () => ({ path: project }),
     browseProject: async (): Promise<SwitchProjectResult | null> => {
       // 浏览器无原生对话框：轮换到下一个 mock 项目模拟选择

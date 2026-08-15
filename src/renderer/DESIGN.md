@@ -4,7 +4,7 @@
 
 **目标**：把 pi SDK 会话事件流渲染为黑客帝国风 UI——v4 四区骨架 + v5 回合化会话区（回合聚合消息流 + 凝结雨轨 / 思考块折叠 / 结算行 / 注入解码 / 液态玻璃）+ 4 态会话状态机 + 三件装饰（单层数字雨 / 轻扫描线 / 蠕虫入侵+Neo 头像）+ 会话脑机链路 + WebAudio 程序化音效；会话列表、文件树、历史恢复、项目选择面板（最近项目 / 原生目录浏览 → 切换工作目录与会话上下文）、扩展对话框（`ctx.ui` 的 confirm/select/input → AskDialog 弹层）与扩展通知（notify → toast）、模态弹层家族（ZionModal：模型选择 / 设置 / 快捷键速查，runCommand `data.open` 数据驱动触发）走真实 IPC；纯浏览器调试桥（`mockBridge.ts`：无 preload 时注入 mock ZionAPI，prompt 经真实事件派发路径，UI 全功能可演示）。
 
-**非目标**：不定义 IPC 契约（`src/shared/protocol.ts` 类型与主进程是事实源）；不提供 Node/凭据能力（隔离在 preload 白名单之后）；不做真实 context 统计（头部「上下文 12.4k / 128k」与「主控会话 #0047」为硬编码装饰）；不实现扩展对话框的 Promise 表/超时/AbortSignal 兜底（主进程 `src/main/uibridge.mjs` 是事实源）——本模块只消费 `UiAsk`/`UiNotify` 类型与 `uiAnswer`/`onUiAsk`/`onUiNotify` 桥面；不实现项目切换的主进程语义（`WORKSPACE_DIR` 变更、旧会话 dispose、`~/.pi/agent/zion-projects.json` 持久化在 `src/main/main.mjs`）——本模块只消费 `listProjects`/`browseProject`/`switchProject` 桥面；不做完整 markdown 渲染（仅围栏 + 行内 code/高亮子集，语法边界见「正文解析」）；不实现主进程主动弹窗（弹层只经 runCommand 结果 `data.open` 打开，无独立事件通道，ADR-0005 决策 2）；AskDialog/ProjectPanel 不迁移到 ZionModal 壳（ADR-0005 决策 1，维持现状）。
+**非目标**：不定义 IPC 契约（`src/shared/protocol.ts` 类型与主进程是事实源）；不提供 Node/凭据能力（隔离在 preload 白名单之后）；不实现扩展对话框的 Promise 表/超时/AbortSignal 兜底（主进程 `src/main/uibridge.mjs` 是事实源）——本模块只消费 `UiAsk`/`UiNotify` 类型与 `uiAnswer`/`onUiAsk`/`onUiNotify` 桥面；不实现项目切换的主进程语义（`WORKSPACE_DIR` 变更、旧会话 dispose、`~/.pi/agent/zion-projects.json` 持久化在 `src/main/main.mjs`）——本模块只消费 `listProjects`/`browseProject`/`switchProject` 桥面；不做完整 markdown 渲染（仅围栏 + 行内 code/高亮子集，语法边界见「正文解析」）；不实现主进程主动弹窗（弹层只经 runCommand 结果 `data.open` 打开，无独立事件通道，ADR-0005 决策 2）；AskDialog/ProjectPanel 不迁移到 ZionModal 壳（ADR-0005 决策 1，维持现状）。
 
 **边界**：渲染层只消费 `window.zion`（ZionAPI）；事件类型源 `@earendil-works/pi-coding-agent`（经 `shared/protocol.ts` re-export）。主进程/preload 为 JS（`main.mjs`/`preload.cjs`），经 `tsconfig.node.json` checkJs 校验，IPC 通道名字面量在 main/preload 两处，本模块不持有。会话区词条（agent 回合 / 凝结雨轨 / 结算行 / 注入解码）定义以根 `CONTEXT.md` 为准，本文件只记实现语义，不重述定义。
 
@@ -14,7 +14,7 @@
 - 区1 标题栏 `.titlebar`（36px）：品牌 + 时钟
 - 区2 侧栏 `.sidebar`（`width: var(--side-w, 232px)`，默认 232，可拖拽调宽；整栏不滚动且 `position: relative; isolation: isolate` 承载共享全息层与本地动态 SVG 链路层）：`.core-wrap`（Neo 头像，固定）→ `.side-section.sessions`（高度 `clamp(244px, 36vh, 320px)`：三等高培育仓槽位 `.deck` 内部滚动）→ `.side-section.projects`（flex 3：`.side-head` 标题行 = 项目 basename（全路径在 title 属性）+「⇄ 切换项目」按钮 + 文件树 `#file-tree` 内部滚动）→ `.side-foot`（固定，workspace 文案）
 - 区2.5 `.side-resizer`（8px 拖拽热区，`margin: 0 -4px` 视觉零宽、伸出两侧各 4px 命中区，WAI-ARIA separator，机制见下「侧栏调宽」）——`.main`（flex 行）内位于 Sidebar 与 `.console` 之间
-- 区3 对话区 `.console`：`.conv-head`（状态芯片）+ `#feed` + `.inputbar`
+- 区3 对话区 `.console`：`#feed` + `.inputbar`（顶部微簇状态条 `.micro`：模型/ctx 胶囊/思考强度/状态）
 - 区4 `.term` 日志抽屉（默认 height:0，展开 150px）+ `.statusbar`（26px，SND 开关 / DEC 开关 / 日志按钮 / `tokens:` 真实 usage 计数）
 
 **侧栏调宽**（App.tsx + styles.css）：热区独立条而非 sidebar 子元素——`.sidebar` 的 `overflow: hidden` 会裁剪伸出边界的子元素，且独立条不盖内部滚动条（styles.css 注释明示）。
@@ -30,7 +30,7 @@
 - `message_update`（text_delta / thinking_delta）→ `queueDelta(delta, kind)` + STREAMING
 - `tool_execution_start` → `toolStart` 入队 + RUNNING + 编辑类调用触发蠕虫
 - `tool_execution_end` → `toolEnd`（写 dur、状态 ok/err、尝试 result.patch 升级）；闭环后到达的迟到事件倒序扫回合回退匹配；err → SND.abort，ok → SND.step
-- `turn_end` → `addUsage(usage.totalTokens)`：累积进活动回合（结算行 Σtokens）+ 状态栏真实 token 计数（替代 v4 字符数 ×2 伪计数）
+- `turn_end` → `addUsage(usage.totalTokens, usage.input)`：totalTokens 累积进活动回合（结算行 Σtokens）+ 状态栏真实 token 计数（替代 v4 字符数 ×2 伪计数）；input 存 `store.ctxInput`（微簇 ctx 条的真实上下文占用）
 - `agent_end` → `closeTurn()` + READY + SND.reply（replyScheduled 防重复）；`errored` 标记的错误回合不再补 reply 音/「回复完成」日志；`agent_settled` → `closeTurn()` + READY
 - `message_end` 中 `stopReason === 'error'` → `closeTurn('error')` + READY + SND.abort + 置 `errored` 标记（错误回合，由 `agent_end` 消费）
 - CANCELLING 由 InputBar 本地置位（中断按钮或生成中按 Enter，`setSessionState('CANCELLING')` + `markInterrupted`（入队）+ `window.zion.abort()`），非事件驱动
@@ -199,7 +199,7 @@
 - 单元测试仅覆盖纯函数层（`deriveSessionTitle`、`toolfmt`、`parseBody`（markdown.test.mjs 8 用例）、会话摘要、会话链路 hash/锚点/路径，node:test）；组件、事件管线、store 逻辑无自动化测试（含命令面板键盘交互、AskDialog 三形态与 toast 自动消失、快捷键注册；smoke 已覆盖 `.zion-modal` 打开契约与可见性、模型清单 scoped 计数，仍不查 `.palette`/`.ask-dialog`/`.neural-cables-layer`），UI 回归依赖 typecheck + smoke + e2e；链路另需人工覆盖侧栏 160/232/480、04–06 滚动换线、删除待确认开仓与 reduced-motion。
 - AskDialog.tsx 头部注释与实现不完全一致：注释声称的「Esc 取消 / select ↑↓/Enter / confirm danger 强调」实际只有 input 形态的 Esc/Enter 真实存在——select 选项纯鼠标（hover/click，`role="listbox"` 仅是标记），confirm 主按钮为 `.primary`（accent 绿）而非 danger 色；改注释或补实现前先认清现状。
 - 会话历史恢复只重建文本回合（无工具卡 / 结算行，`startedAt=0` 不计时）。
-- conv-head「上下文 12.4k / 128k」、「主控会话 #0047」、状态栏「TLS 1.3」为硬编码装饰，非真实数据。
+- 状态栏「TLS 1.3」为硬编码装饰，非真实数据（会话头 `.conv-head` 及其硬编码 ctx 已移除，由输入栏微簇 `.micro` 取代：模型/上下文窗口/思考强度取 `zion:session-meta`，ctx 占用取最新 turn 的 `usage.input`，缺数据显示 `--`，无假数据）。
 - `AgentInfo` 类型保留但 Agent 卡片已移除（侧栏改为会话列表），注释注明供未来 agent 注册表。
 - 协议提供 `steer`/`followUp`，UI 未接线；事件流中 steer 相关事件被默认分支忽略。
 - 命令面板数据仅启动预取一次（`listCommands`），运行中新增/修改 skills 或命令不刷新，需重启应用。
