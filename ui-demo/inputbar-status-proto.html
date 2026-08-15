@@ -1,0 +1,607 @@
+<!DOCTYPE html>
+<!--
+  PROTOTYPE(一次性,验证后即弃)—— 会话输入框 + 会话框上方状态栏 重设计
+  问题:状态栏(.conv-head chips)与输入框(.inputbar)该长什么样?
+  参考:ui-demo/image 两张图(CLI 状态条 / Claude Code 输入框)
+  约束:ctx 进度条采用当前滚动条样式(6px 终端绿胶囊 #00ff66 / 轨道透明 / hover #66ff99)
+  三个结构互异的变体,URL ?v=1|2|3 或底部浮条 ← → 切换:
+    v1「CLI 状态条」— 状态条贴近参考图 1 单行横排;输入框贴近参考图 2 上下双行
+    v2「融合面板」— 状态信息并入输入框面板,ctx 胶囊轨成为 feed 与输入框之间的接缝
+    v3「极简浮动」— 状态缩为右侧微型簇,输入框去边框只留底线,快捷指令收进 + 开关
+  追加(状态条紧贴输入框面板上方,而非会话区顶部):
+    v4「连体插槽」— 深色状态条带与输入框共享边框,条带=面板头部,ctx 胶囊撑满条带中段
+    v5「悬轨传奇」— ctx 胶囊条本身就是面板顶缘,状态/参数做成骑跨缘线的胶囊标签(fieldset legend 式)
+    v6「双排微条」— 无任何边框:微文字行 + 全宽 ctx 胶囊接缝 + 发丝线输入行,全部贴底堆叠
+-->
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PROTO · 输入框+状态栏</title>
+<style>
+  @font-face { font-family: 'Sarasa Term SC'; src: url('font/SarasaTermSC-Regular.ttf'); font-display: swap; }
+  :root {
+    --bg: #020604;
+    --panel: rgba(2, 14, 7, 0.85);
+    --green: #3dff8f;
+    --green-dim: #1da754;
+    --green-faint: rgba(29, 167, 84, 0.35);
+    --capsule: #00ff66;          /* 滚动条同款胶囊绿 */
+    --capsule-hi: #66ff99;       /* 滚动条 hover 绿 */
+    --amber: #ffb000;
+    --red: #ff5555;
+    --text: #b8ffd0;
+    --dim: #4d8a62;
+    --font: 'Share Tech Mono', 'Sarasa Term SC', ui-monospace, monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    background: var(--bg); color: var(--text); font-family: var(--font); font-size: 13px;
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  /* 氛围:细扫描线,帮助判断对比度(与正式 UI 的 CRT 层同语言) */
+  body::after {
+    content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 50;
+    background: repeating-linear-gradient(0deg, rgba(0,0,0,0.18) 0 1px, transparent 1px 3px);
+  }
+
+  /* ---- mock 布局:状态条 / feed 占位 / 输入框 ---- */
+  .stage { flex: 1; display: flex; flex-direction: column; max-width: 860px; width: 100%; margin: 0 auto; padding: 14px 22px 10px; }
+  .feed { flex: 1; overflow: hidden; padding: 12px 4px; color: var(--dim); line-height: 1.9; user-select: none; }
+  .feed .op { color: var(--green); }
+  .feed .dimline { opacity: 0.55; }
+
+  /* ---- 共享零件:滚动条同款 ctx 胶囊条 ---- */
+  .ctxbar {
+    position: relative; height: 6px; border-radius: 3px;
+    background: rgba(0, 255, 102, 0.08); /* 轨道:近透明 */
+    overflow: hidden;
+  }
+  .ctxbar > i {
+    position: absolute; inset: 0 auto 0 0; border-radius: 3px;
+    background: var(--capsule); width: var(--ctx, 38%);
+    transition: width 0.6s ease;
+  }
+  .ctxbar:hover > i { background: var(--capsule-hi); }
+
+  /* ================ 变体 1:CLI 状态条 ================ */
+  .v1 .stateline {
+    display: flex; align-items: center; gap: 10px;
+    background: #04120a; border: 1px solid var(--green-faint); border-radius: 4px;
+    padding: 5px 12px; white-space: nowrap;
+  }
+  .v1 .model { color: var(--amber); font-weight: 700; letter-spacing: 0.5px; }
+  .v1 .sep { color: var(--green-faint); }
+  .v1 .ctx-label { color: var(--dim); }
+  .v1 .ctxbar { width: 130px; }
+  .v1 .ctx-num { color: var(--dim); font-size: 12px; }
+  .v1 .timer { color: var(--text); font-size: 12px; }
+  .v1 .timer b { color: var(--green); font-weight: 400; }
+  .v1 .spacer { flex: 1; }
+  .v1 .state { color: var(--green); border: 1px solid var(--green-faint); padding: 0 8px; border-radius: 3px; font-size: 11px; }
+  .v1 .state.run { color: var(--amber); border-color: rgba(255, 176, 0, 0.35); }
+
+  .v1 .inbox {
+    margin-top: 10px; border: 1px solid var(--green-faint); border-radius: 6px;
+    background: var(--panel); overflow: hidden;
+  }
+  .v1 .inbox:focus-within { border-color: var(--green-dim); box-shadow: 0 0 12px rgba(61, 255, 143, 0.12); }
+  .v1 .in-top { display: flex; align-items: center; gap: 8px; padding: 10px 12px; }
+  .v1 .in-top .ps { color: var(--green); }
+  .v1 input {
+    flex: 1; background: none; border: none; outline: none;
+    color: var(--text); font-family: inherit; font-size: 13px;
+  }
+  .v1 input::placeholder { color: var(--dim); }
+  .v1 .in-tools {
+    display: flex; align-items: center; gap: 6px;
+    border-top: 1px solid rgba(29, 167, 84, 0.18); padding: 6px 10px;
+  }
+  .v1 .tico {
+    width: 24px; height: 24px; display: grid; place-items: center;
+    border: 1px solid var(--green-faint); border-radius: 4px;
+    color: var(--green-dim); background: none; cursor: pointer; font-family: inherit; font-size: 13px;
+  }
+  .v1 .tico:hover { color: var(--green); border-color: var(--green-dim); }
+  .v1 .mode { margin-left: auto; color: var(--dim); font-size: 12px; }
+  .v1 .mode b { color: var(--green-dim); font-weight: 400; }
+  .v1 .send {
+    border: none; border-radius: 4px; padding: 4px 14px; cursor: pointer;
+    background: var(--green-dim); color: #02120a; font-family: inherit; font-weight: 700;
+  }
+  .v1 .send:hover { background: var(--green); }
+  .v1 .send.stop { background: var(--red); color: #fff; }
+
+  /* ================ 变体 2:融合面板 ================ */
+  .v2 .panel {
+    margin-top: 10px; border: 1px solid var(--green-faint); border-radius: 8px 8px 4px 4px;
+    background: var(--panel);
+  }
+  .v2 .p-head {
+    display: flex; align-items: center; gap: 10px; padding: 7px 14px 6px;
+    font-size: 12px;
+  }
+  .v2 .p-title { color: var(--green); font-weight: 700; }
+  .v2 .p-model { color: var(--dim); }
+  .v2 .p-timers { color: var(--dim); margin-left: auto; }
+  .v2 .p-timers b { color: var(--text); font-weight: 400; }
+  .v2 .p-state { color: var(--green); }
+  .v2 .p-state.run { color: var(--amber); }
+  /* ctx 接缝:面板头与输入区之间的全宽胶囊轨 */
+  .v2 .ctx-seam { display: flex; align-items: center; gap: 8px; padding: 0 14px 6px; }
+  .v2 .ctx-seam .ctxbar { flex: 1; }
+  .v2 .ctx-seam span { font-size: 11px; color: var(--dim); }
+  .v2 .in-top { display: flex; align-items: center; gap: 8px; padding: 8px 14px; border-top: 1px solid rgba(29,167,84,0.18); }
+  .v2 .in-top .ps { color: var(--green); }
+  .v2 input { flex: 1; background: none; border: none; outline: none; color: var(--text); font-family: inherit; font-size: 13px; }
+  .v2 input::placeholder { color: var(--dim); }
+  .v2 .p-tools { display: flex; gap: 6px; padding: 0 14px 8px; align-items: center; }
+  .v2 .qchip {
+    border: 1px solid var(--green-faint); border-radius: 3px; background: none; cursor: pointer;
+    color: var(--green-dim); font-family: inherit; font-size: 11px; padding: 2px 8px;
+  }
+  .v2 .qchip:hover { color: var(--green); border-color: var(--green-dim); }
+  .v2 .send {
+    margin-left: auto; border: none; border-radius: 3px; cursor: pointer;
+    background: var(--green-dim); color: #02120a; font-family: inherit; font-weight: 700; padding: 3px 14px;
+  }
+  .v2 .send:hover { background: var(--green); }
+  .v2 .send.stop { background: var(--red); color: #fff; }
+
+  /* ================ 变体 3:极简浮动 ================ */
+  .v3 .microhead {
+    display: flex; align-items: baseline; gap: 10px; padding: 2px 4px 8px; font-size: 12px;
+  }
+  .v3 .m-title { color: var(--green); }
+  .v3 .m-cluster { margin-left: auto; display: flex; align-items: center; gap: 8px; color: var(--dim); }
+  .v3 .m-cluster .ctxbar { width: 56px; }
+  .v3 .m-state { color: var(--green); }
+  .v3 .m-state.run { color: var(--amber); }
+
+  .v3 .inrow {
+    display: flex; align-items: center; gap: 10px;
+    border-bottom: 1px solid var(--green-faint); padding: 8px 4px;
+  }
+  .v3 .inrow:focus-within { border-bottom-color: var(--green); }
+  .v3 .ps { color: var(--green); font-size: 15px; }
+  .v3 input { flex: 1; background: none; border: none; outline: none; color: var(--text); font-family: inherit; font-size: 14px; }
+  .v3 input::placeholder { color: var(--dim); }
+  .v3 .go {
+    width: 26px; height: 26px; border: 1px solid var(--green-faint); border-radius: 4px;
+    background: none; color: var(--green); cursor: pointer; font-size: 14px; display: grid; place-items: center;
+  }
+  .v3 .go:hover { border-color: var(--green); box-shadow: 0 0 8px rgba(61,255,143,0.25); }
+  .v3 .go.stop { color: var(--red); border-color: rgba(255,85,85,0.4); }
+  .v3 .subline { display: flex; gap: 8px; padding: 6px 4px 0; align-items: center; font-size: 11px; color: var(--dim); }
+  .v3 .plus {
+    border: 1px solid var(--green-faint); border-radius: 3px; background: none; cursor: pointer;
+    color: var(--green-dim); font-family: inherit; font-size: 11px; padding: 1px 7px;
+  }
+  .v3 .plus:hover { color: var(--green); }
+  .v3 .qhidden { display: none; gap: 6px; }
+  .v3 .qhidden.open { display: flex; }
+  .v3 .qchip {
+    border: none; background: none; cursor: pointer; color: var(--dim);
+    font-family: inherit; font-size: 11px; padding: 1px 4px;
+  }
+  .v3 .qchip:hover { color: var(--green); }
+  .v3 .hint { margin-left: auto; opacity: 0; transition: opacity 0.3s; }
+  .v3 .stage:focus-within .hint { opacity: 0.8; }
+
+  /* ================ 变体 4:连体插槽(状态条贴输入框上缘,深色条带) ================ */
+  .v4 .unit {
+    margin-top: 10px; border: 1px solid var(--green-faint); border-radius: 6px;
+    background: var(--panel); overflow: hidden;
+  }
+  .v4 .unit:focus-within { border-color: var(--green-dim); box-shadow: 0 0 12px rgba(61,255,143,0.12); }
+  .v4 .strip {
+    display: flex; align-items: center; gap: 10px;
+    background: #04120a; border-bottom: 1px solid rgba(29,167,84,0.18);
+    padding: 5px 12px; font-size: 12px; white-space: nowrap;
+  }
+  .v4 .strip .model { color: var(--green); font-weight: 700; }
+  .v4 .strip .ctxbar { flex: 1; }
+  .v4 .strip .num, .v4 .strip .tm { color: var(--dim); }
+  .v4 .strip .tm b { color: var(--text); font-weight: 400; }
+  .v4 .strip .st { color: var(--green); }
+  .v4 .strip .st.run { color: var(--amber); }
+  .v4 .u-in { display: flex; align-items: center; gap: 8px; padding: 9px 12px; }
+  .v4 .u-in .ps { color: var(--green); }
+  .v4 input { flex: 1; background: none; border: none; outline: none; color: var(--text); font-family: inherit; font-size: 13px; }
+  .v4 input::placeholder { color: var(--dim); }
+  .v4 .u-tools { display: flex; gap: 6px; align-items: center; padding: 0 12px 8px; }
+  .v4 .qchip {
+    border: 1px solid var(--green-faint); border-radius: 3px; background: none; cursor: pointer;
+    color: var(--green-dim); font-family: inherit; font-size: 11px; padding: 2px 8px;
+  }
+  .v4 .qchip:hover { color: var(--green); border-color: var(--green-dim); }
+  .v4 .send {
+    margin-left: auto; border: none; border-radius: 3px; cursor: pointer;
+    background: var(--green-dim); color: #02120a; font-family: inherit; font-weight: 700; padding: 3px 14px;
+  }
+  .v4 .send:hover { background: var(--green); }
+  .v4 .send.stop { background: var(--red); color: #fff; }
+
+  /* ================ 变体 5:悬轨传奇(ctx 条=面板顶缘,状态做成跨缘标签) ================ */
+  .v5 .ledge { margin-top: 14px; position: relative; }
+  .v5 .ledge .ctxbar { border-radius: 3px; height: 6px; }
+  .v5 .tab {
+    position: absolute; top: -7px; z-index: 2;
+    display: flex; align-items: center; gap: 6px;
+    background: var(--bg); border: 1px solid var(--green-faint); border-radius: 999px;
+    padding: 1px 10px; font-size: 11px; color: var(--dim); white-space: nowrap;
+  }
+  .v5 .tab.l { left: 12px; }
+  .v5 .tab.r { right: 12px; }
+  .v5 .tab b { color: var(--green); font-weight: 400; }
+  .v5 .tab .st { color: var(--green); }
+  .v5 .tab .st.run { color: var(--amber); }
+  .v5 .box {
+    border: 1px solid var(--green-faint); border-top: none; border-radius: 0 0 6px 6px;
+    background: var(--panel); padding-top: 4px;
+  }
+  .v5 .box:focus-within { border-color: var(--green-dim); }
+  .v5 .b-in { display: flex; align-items: center; gap: 8px; padding: 9px 12px 7px; }
+  .v5 .b-in .ps { color: var(--green); }
+  .v5 input { flex: 1; background: none; border: none; outline: none; color: var(--text); font-family: inherit; font-size: 13px; }
+  .v5 input::placeholder { color: var(--dim); }
+  .v5 .b-tools { display: flex; gap: 6px; align-items: center; padding: 0 12px 8px; }
+  .v5 .qchip {
+    border: 1px solid var(--green-faint); border-radius: 3px; background: none; cursor: pointer;
+    color: var(--green-dim); font-family: inherit; font-size: 11px; padding: 2px 8px;
+  }
+  .v5 .qchip:hover { color: var(--green); border-color: var(--green-dim); }
+  .v5 .send {
+    margin-left: auto; border: none; border-radius: 3px; cursor: pointer;
+    background: var(--green-dim); color: #02120a; font-family: inherit; font-weight: 700; padding: 3px 14px;
+  }
+  .v5 .send:hover { background: var(--green); }
+  .v5 .send.stop { background: var(--red); color: #fff; }
+
+  /* ================ 变体 6:双排微条(无框,微文字行+胶囊接缝贴输入行) ================ */
+  .v6 .duo { margin-top: 10px; }
+  .v6 .r1 {
+    display: flex; align-items: baseline; gap: 10px;
+    font-size: 11px; color: var(--dim); padding: 0 4px 5px;
+  }
+  .v6 .r1 .tt { color: var(--green); }
+  .v6 .r1 .md { color: var(--text); }
+  .v6 .r1 .right { margin-left: auto; display: flex; gap: 10px; }
+  .v6 .r1 .st { color: var(--green); }
+  .v6 .r1 .st.run { color: var(--amber); }
+  .v6 .r2 { display: flex; align-items: center; gap: 8px; padding: 0 4px 7px; }
+  .v6 .r2 .ctxbar { flex: 1; }
+  .v6 .r2 span { font-size: 11px; color: var(--dim); }
+  .v6 .inrow2 {
+    display: flex; align-items: center; gap: 10px;
+    border-top: 1px solid rgba(29,167,84,0.18); padding: 9px 4px 2px;
+  }
+  .v6 .inrow2:focus-within { border-top-color: var(--green); }
+  .v6 .inrow2 .ps { color: var(--green); font-size: 15px; }
+  .v6 input { flex: 1; background: none; border: none; outline: none; color: var(--text); font-family: inherit; font-size: 14px; }
+  .v6 input::placeholder { color: var(--dim); }
+  .v6 .go {
+    width: 26px; height: 26px; border: 1px solid var(--green-faint); border-radius: 4px;
+    background: none; color: var(--green); cursor: pointer; font-size: 14px; display: grid; place-items: center;
+  }
+  .v6 .go:hover { border-color: var(--green); box-shadow: 0 0 8px rgba(61,255,143,0.25); }
+  .v6 .go.stop { color: var(--red); border-color: rgba(255,85,85,0.4); }
+  .v6 .subline { display: flex; gap: 8px; padding: 6px 4px 0; align-items: center; font-size: 11px; color: var(--dim); }
+  .v6 .qchip {
+    border: none; background: none; cursor: pointer; color: var(--dim);
+    font-family: inherit; font-size: 11px; padding: 1px 4px;
+  }
+  .v6 .qchip:hover { color: var(--green); }
+
+  /* ================ 变体 7:微簇+发丝输入(v3 状态簇 × v6 输入框,贴输入框上方) ================ */
+  .v7 .micro {
+    display: flex; align-items: center; gap: 10px;
+    padding: 2px 4px 7px; font-size: 12px;
+  }
+  .v7 .micro .tt { color: var(--green); }
+  .v7 .micro .cluster { margin-left: auto; display: flex; align-items: center; gap: 8px; color: var(--dim); }
+  .v7 .micro .ctxbar { width: 56px; }
+  .v7 .micro .st { color: var(--green); }
+  .v7 .micro .st.run { color: var(--amber); }
+  .v7 .inrow {
+    display: flex; align-items: center; gap: 10px;
+    border-top: 1px solid rgba(29,167,84,0.18);
+    border-bottom: 1px solid var(--green-faint); padding: 9px 4px;
+  }
+  .v7 .inrow:focus-within { border-bottom-color: var(--green); }
+  .v7 .inrow .ps { color: var(--green); font-size: 15px; }
+  .v7 input { flex: 1; background: none; border: none; outline: none; color: var(--text); font-family: inherit; font-size: 14px; }
+  .v7 input::placeholder { color: var(--dim); }
+  .v7 .go {
+    width: 26px; height: 26px; border: 1px solid var(--green-faint); border-radius: 4px;
+    background: none; color: var(--green); cursor: pointer; font-size: 14px; display: grid; place-items: center;
+  }
+  .v7 .go:hover { border-color: var(--green); box-shadow: 0 0 8px rgba(61,255,143,0.25); }
+  .v7 .go.stop { color: var(--red); border-color: rgba(255,85,85,0.4); }
+  .v7 .subline { display: flex; gap: 8px; padding: 6px 4px 0; align-items: center; font-size: 11px; color: var(--dim); }
+  .v7 .qchip {
+    border: none; background: none; cursor: pointer; color: var(--dim);
+    font-family: inherit; font-size: 11px; padding: 1px 4px;
+  }
+  .v7 .qchip:hover { color: var(--green); }
+
+  /* ---- 浮条切换器(非设计对象) ---- */
+  #switcher {
+    position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%); z-index: 99;
+    display: flex; align-items: center; gap: 12px;
+    background: #101010; border: 1px solid #444; border-radius: 999px;
+    color: #eee; padding: 7px 16px; font-family: ui-monospace, monospace; font-size: 12px;
+    box-shadow: 0 4px 18px rgba(0,0,0,0.6);
+  }
+  #switcher button {
+    background: #222; color: #eee; border: 1px solid #555; border-radius: 50%;
+    width: 24px; height: 24px; cursor: pointer; font-size: 13px; line-height: 1;
+  }
+  #switcher button:hover { background: #333; }
+  #switcher .vlabel { min-width: 180px; text-align: center; }
+  #switcher .tag { color: #777; font-size: 10px; }
+</style>
+</head>
+<body>
+<div class="stage" id="stage"></div>
+
+<div id="switcher">
+  <span class="tag">PROTO</span>
+  <button id="prev" title="←">‹</button>
+  <span class="vlabel" id="vlabel"></span>
+  <button id="next" title="→">›</button>
+</div>
+
+<script>
+  // ---- mock 数据(原型不碰真实 store) ----
+  const MOCK = {
+    title: '主控会话 #0047',
+    model: 'deepseek-chat',
+    ctxUsed: '12.4k', ctxTotal: '128k', ctxPct: 38,
+    turnTime: '8s', totalTime: '0s',
+    state: 'READY',
+    quick: ['/status 系统状态', '/trace 回放链路', '检索记忆库', '扫描项目风险'],
+    feed: [
+      ['op', '◆ 文件内容如下(共 68 行,定义 3 个 DTO):'],
+      ['', "  import { Type } from 'class-transformer';"],
+      ['', "  import { IsArray, IsDateString, IsEnum } from 'class-validator';"],
+      ['dimline', '  …'],
+      ['op', '◆ 已写入 src/backend/dto/palette.dto.ts(+15 −4)'],
+      ['dimline', '  工具链 · 2 步 · 完成 · 1.2s'],
+    ],
+  };
+
+  const VARIANTS = {
+    1: 'CLI 状态条',
+    2: '融合面板',
+    3: '极简浮动',
+    4: '连体插槽',
+    5: '悬轨传奇',
+    6: '双排微条',
+    7: '微簇+发丝输入',
+  };
+  const KEYS = Object.keys(VARIANTS);
+
+  const ctxBar = (cls = '') =>
+    `<div class="ctxbar ${cls}" style="--ctx:${MOCK.ctxPct}%"><i></i></div>`;
+
+  const feedHtml = MOCK.feed.map(([cls, line]) =>
+    `<div class="${cls}">${line || '&nbsp;'}</div>`).join('');
+
+  function render(v) {
+    const stage = document.getElementById('stage');
+    stage.className = `stage v${v}`;
+
+    if (v === '1') {
+      stage.innerHTML = `
+        <div class="stateline">
+          <span class="model">⚡ ${MOCK.model}</span>
+          <span class="sep">|</span>
+          <span class="ctx-label">ctx</span>
+          ${ctxBar()}
+          <span class="ctx-num">${MOCK.ctxUsed} / ${MOCK.ctxTotal}</span>
+          <span class="sep">|</span>
+          <span class="timer">⏱ <b>${MOCK.turnTime}</b></span>
+          <span class="timer">◷ <b>${MOCK.totalTime}</b></span>
+          <span class="spacer"></span>
+          <span class="state" data-state>${MOCK.state}</span>
+        </div>
+        <div class="feed">${feedHtml}</div>
+        <div class="inbox">
+          <div class="in-top">
+            <span class="ps">❯</span>
+            <input placeholder="指令给 ${MOCK.title} …(输入 / 弹出 skills+命令)">
+          </div>
+          <div class="in-tools">
+            <button class="tico" title="新建">＋</button>
+            <button class="tico" title="快捷指令">⌘</button>
+            <button class="tico" title="附件">⌗</button>
+            <span class="mode"><b>&lt;/&gt;</b> 自动编辑</span>
+            <button class="send" data-send>发送</button>
+          </div>
+        </div>`;
+    } else if (v === '2') {
+      stage.innerHTML = `
+        <div class="feed">${feedHtml}</div>
+        <div class="panel">
+          <div class="p-head">
+            <span class="p-title">${MOCK.title}</span>
+            <span class="p-model">⚡ ${MOCK.model}</span>
+            <span class="p-timers">⏱ <b>${MOCK.turnTime}</b> · ◷ <b>${MOCK.totalTime}</b></span>
+            <span class="p-state" data-state>${MOCK.state}</span>
+          </div>
+          <div class="ctx-seam">
+            <span>ctx</span>
+            ${ctxBar()}
+            <span>${MOCK.ctxUsed} / ${MOCK.ctxTotal} · ${MOCK.ctxPct}%</span>
+          </div>
+          <div class="in-top">
+            <span class="ps">❯</span>
+            <input placeholder="指令给 ${MOCK.title} …(输入 / 弹出 skills+命令)">
+          </div>
+          <div class="p-tools">
+            ${MOCK.quick.map(q => `<button class="qchip">${q}</button>`).join('')}
+            <button class="send" data-send>发送</button>
+          </div>
+        </div>`;
+    } else if (v === '3') {
+      stage.innerHTML = `
+        <div class="microhead">
+          <span class="m-title">◆ ${MOCK.title}</span>
+          <span class="m-cluster">
+            <span>${MOCK.model}</span>
+            ${ctxBar()}
+            <span>${MOCK.ctxPct}%</span>
+            <span class="m-state" data-state>${MOCK.state}</span>
+          </span>
+        </div>
+        <div class="feed">${feedHtml}</div>
+        <div class="inrow">
+          <span class="ps">❯</span>
+          <input placeholder="输入指令 …">
+          <button class="go" data-send title="发送">↑</button>
+        </div>
+        <div class="subline">
+          <button class="plus" id="qtoggle">＋ 快捷</button>
+          <span class="qhidden" id="qrow">
+            ${MOCK.quick.map(q => `<button class="qchip">${q}</button>`).join('')}
+          </span>
+          <span class="hint">Enter 发送 · / 命令 · 生成中 Enter 中断</span>
+        </div>`;
+      document.getElementById('qtoggle').onclick = () =>
+        document.getElementById('qrow').classList.toggle('open');
+    } else if (v === '4') {
+      stage.innerHTML = `
+        <div class="feed">${feedHtml}</div>
+        <div class="unit">
+          <div class="strip">
+            <span class="model">⚡ ${MOCK.model}</span>
+            ${ctxBar()}
+            <span class="num">${MOCK.ctxUsed} / ${MOCK.ctxTotal}</span>
+            <span class="tm">⏱ <b>${MOCK.turnTime}</b> · ◷ <b>${MOCK.totalTime}</b></span>
+            <span class="st" data-state>${MOCK.state}</span>
+          </div>
+          <div class="u-in">
+            <span class="ps">❯</span>
+            <input placeholder="指令给 ${MOCK.title} …(输入 / 弹出 skills+命令)">
+          </div>
+          <div class="u-tools">
+            ${MOCK.quick.map(q => `<button class="qchip">${q}</button>`).join('')}
+            <button class="send" data-send>发送</button>
+          </div>
+        </div>`;
+    } else if (v === '5') {
+      stage.innerHTML = `
+        <div class="feed">${feedHtml}</div>
+        <div class="ledge">
+          ${ctxBar()}
+          <span class="tab l"><b>⚡ ${MOCK.model}</b> · <span class="st" data-state>${MOCK.state}</span></span>
+          <span class="tab r">ctx ${MOCK.ctxUsed} / ${MOCK.ctxTotal} · ${MOCK.ctxPct}% · ⏱ ${MOCK.turnTime}</span>
+        </div>
+        <div class="box">
+          <div class="b-in">
+            <span class="ps">❯</span>
+            <input placeholder="指令给 ${MOCK.title} …(输入 / 弹出 skills+命令)">
+          </div>
+          <div class="b-tools">
+            ${MOCK.quick.map(q => `<button class="qchip">${q}</button>`).join('')}
+            <button class="send" data-send>发送</button>
+          </div>
+        </div>`;
+    } else if (v === '7') {
+      stage.innerHTML = `
+        <div class="feed">${feedHtml}</div>
+        <div class="micro">
+          <span class="tt">◆ ${MOCK.title}</span>
+          <span class="cluster">
+            <span>${MOCK.model}</span>
+            ${ctxBar()}
+            <span>${MOCK.ctxPct}%</span>
+            <span>⏱ ${MOCK.turnTime}</span>
+            <span class="st" data-state>${MOCK.state}</span>
+          </span>
+        </div>
+        <div class="inrow">
+          <span class="ps">❯</span>
+          <input placeholder="输入指令 …">
+          <button class="go" data-send title="发送">↑</button>
+        </div>
+        <div class="subline">
+          ${MOCK.quick.map(q => `<button class="qchip">${q}</button>`).join('')}
+          <span style="margin-left:auto">Enter 发送 · / 命令 · 生成中 Enter 中断</span>
+        </div>`;
+    } else {
+      stage.innerHTML = `
+        <div class="feed">${feedHtml}</div>
+        <div class="duo">
+          <div class="r1">
+            <span class="tt">◆ ${MOCK.title}</span>
+            <span class="md">⚡ ${MOCK.model}</span>
+            <span class="right">
+              <span>⏱ ${MOCK.turnTime} · ◷ ${MOCK.totalTime}</span>
+              <span class="st" data-state>${MOCK.state}</span>
+            </span>
+          </div>
+          <div class="r2">
+            <span>ctx</span>
+            ${ctxBar()}
+            <span>${MOCK.ctxUsed} / ${MOCK.ctxTotal} · ${MOCK.ctxPct}%</span>
+          </div>
+          <div class="inrow2">
+            <span class="ps">❯</span>
+            <input placeholder="输入指令 …">
+            <button class="go" data-send title="发送">↑</button>
+          </div>
+          <div class="subline">
+            ${MOCK.quick.map(q => `<button class="qchip">${q}</button>`).join('')}
+            <span style="margin-left:auto">Enter 发送 · / 命令 · 生成中 Enter 中断</span>
+          </div>
+        </div>`;
+    }
+
+    // 状态/发送按钮 mock 交互:READY ↔ RUNNING
+    const stateEl = stage.querySelector('[data-state]');
+    const sendEl = stage.querySelector('[data-send]');
+    let running = false;
+    const applyState = () => {
+      if (stateEl) {
+        stateEl.textContent = running ? 'RUNNING' : 'READY';
+        stateEl.classList.toggle('run', running);
+      }
+      if (sendEl) {
+        if (sendEl.classList.contains('go')) { sendEl.textContent = running ? '✕' : '↑'; }
+        else sendEl.textContent = running ? '中断' : '发送';
+        sendEl.classList.toggle('stop', running);
+      }
+    };
+    if (sendEl) sendEl.onclick = () => { running = !running; applyState(); };
+  }
+
+  // ---- 变体切换(URL ?v= + 浮条 + 方向键) ----
+  const params = new URLSearchParams(location.search);
+  let current = KEYS.includes(params.get('v')) ? params.get('v') : '1';
+
+  function go(v) {
+    current = v;
+    const url = new URL(location.href);
+    url.searchParams.set('v', v);
+    history.replaceState(null, '', url);
+    document.getElementById('vlabel').textContent = `v${v} — ${VARIANTS[v]}`;
+    render(v);
+  }
+  const cycle = (d) => go(KEYS[(KEYS.indexOf(current) + d + KEYS.length) % KEYS.length]);
+
+  document.getElementById('prev').onclick = () => cycle(-1);
+  document.getElementById('next').onclick = () => cycle(1);
+  window.addEventListener('keydown', (e) => {
+    const tag = document.activeElement?.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+    if (e.key === 'ArrowLeft') cycle(-1);
+    if (e.key === 'ArrowRight') cycle(1);
+  });
+
+  go(current);
+</script>
+</body>
+</html>
