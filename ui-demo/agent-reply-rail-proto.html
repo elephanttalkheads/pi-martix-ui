@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<!--
+  PROTOTYPE(一次性,验证后即弃)—— agent 回复 UI 逐块重构 · 第 6 块:凝结雨轨 .rail
+  依据:ui-demo/agent-reply-ui-handoff.md §3.6 + 根 DESIGN.md(生物机械链路:呼吸/传导/沉降)
+  主导隐喻:回合进行中,左侧轨道是这个回合的「生命体征记录仪」
+  三个结构互异变体(?variant=A|B|C,浮条 ←→ 切换;每版左右并置 活动态/闭环态):
+    A「心电图轨」— 字符雨换成纵向生命迹线:随机蠕动 + 周期性尖峰脉冲;闭环→拉直成平线凝 ◆
+    B「蓄水槽」— 字形落下汇入底部水位(水位=回合内容量),闭环→整柱冻结凝 ◆
+    C「磁带纹」— 短划纹持续上行(磁带嘶声),偶发高亮簇;闭环→纹带定格凝 ◆
+  保留底线:26px 左轨 + 1px 边线、pointer-events:none、闭环即停帧零开销、reduced-motion 静态帧
+-->
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PROTO · 雨轨</title>
+<style>
+  @font-face { font-family: 'Sarasa Term SC'; src: url('font/SarasaTermSC-Regular.ttf'); font-display: swap; }
+  @font-face { font-family: 'Matrix Code'; src: url('font/Matrix-Code.ttf'); font-display: swap; }
+  :root {
+    --text-tertiary: #1da754;
+    --accent-muted: #14b850;
+    --border: rgba(61, 255, 143, 0.18);
+    --font: 'Share Tech Mono', 'Sarasa Term SC', ui-monospace, monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  body { background: #010a04; color: #23c468; font-family: var(--font); overflow: hidden; }
+  body::after {
+    content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 50;
+    background: repeating-linear-gradient(0deg, rgba(0,0,0,0.16) 0 1px, transparent 1px 3px);
+  }
+  .stage { max-width: 780px; margin: 0 auto; padding: 40px 28px; display: flex; gap: 60px; }
+  .case { display: flex; gap: 12px; align-items: flex-start; }
+  .case .lab { writing-mode: vertical-rl; font-size: 11px; letter-spacing: 0.3em; color: var(--text-tertiary); padding-top: 4px; }
+  .rail { width: 26px; height: 340px; border-left: 1px solid var(--border); position: relative; }
+  .rail canvas { position: absolute; inset: 0; }
+  .rail .seal {
+    position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+    color: var(--accent-muted); font-size: 13px;
+    animation: sealIn 0.5s ease-out both;
+  }
+  @keyframes sealIn { from { opacity: 0; transform: translate(-50%, -30%); } to { opacity: 1; transform: translate(-50%, -50%); } }
+
+  /* ---------- 浮条(非设计对象) ---------- */
+  #switcher {
+    position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%); z-index: 99;
+    display: flex; align-items: center; gap: 12px;
+    background: #101010; border: 1px solid #444; border-radius: 999px;
+    color: #eee; padding: 7px 16px; font-family: ui-monospace, monospace; font-size: 12px;
+    box-shadow: 0 4px 18px rgba(0, 0, 0, 0.6);
+  }
+  #switcher button {
+    background: #222; color: #eee; border: 1px solid #555; border-radius: 50%;
+    width: 24px; height: 24px; cursor: pointer; font-size: 13px; line-height: 1;
+  }
+  #switcher button:hover { background: #333; }
+  #switcher .vlabel { min-width: 150px; text-align: center; }
+  #switcher .tag { color: #777; font-size: 10px; }
+</style>
+</head>
+<body>
+<div class="stage" id="stage"></div>
+
+<div id="switcher">
+  <span class="tag">PROTO · 3.6 雨轨</span>
+  <button id="prev" title="←">‹</button>
+  <span class="vlabel" id="vlabel"></span>
+  <button id="next" title="→">›</button>
+</div>
+
+<script>
+  const VARIANTS = { A: '心电图轨', B: '蓄水槽', C: '磁带纹' };
+  const KEYS = Object.keys(VARIANTS);
+  const GLYPHS = 'アィウェオカキクケコサシスセソタチツテトナニヌネノ012345789*+<>:|';
+  const W = 26, H = 340;
+  const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  function makeCanvas() {
+    const c = document.createElement('canvas');
+    c.width = W; c.height = H;
+    return c;
+  }
+
+  /* ---------- A:心电图轨 ---------- */
+  function startECG(cv) {
+    const ctx = cv.getContext('2d');
+    ctx.lineWidth = 1.4;
+    ctx.shadowColor = 'rgba(0,255,65,0.6)';
+    ctx.shadowBlur = 4;
+    let y = 0, spikeIn = 18, prevX = W / 2;
+    const step = () => {
+      ctx.globalCompositeOperation = 'destination-out';
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = 'rgba(0,0,0,0.03)';
+      ctx.fillRect(0, 0, W, H);
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.shadowBlur = 4;
+      let x = W / 2 + Math.sin(y * 0.11) * 3 + (Math.random() - 0.5) * 2;
+      spikeIn -= 1;
+      if (spikeIn <= 0) { x = W / 2 + (Math.random() < 0.5 ? -7 : 7); spikeIn = 14 + Math.random() * 22; }
+      ctx.strokeStyle = spikeIn > 20 ? 'rgba(194,255,217,0.95)' : 'rgba(0,255,65,0.7)';
+      ctx.beginPath(); ctx.moveTo(prevX, y - 2); ctx.lineTo(x, y); ctx.stroke();
+      prevX = x; y += 2;
+      if (y > H) { y = 0; prevX = W / 2; }
+    };
+    if (REDUCED) { for (let i = 0; i < H / 2; i++) step(); return () => {}; }
+    const t = setInterval(step, 45);
+    return () => clearInterval(t);
+  }
+  function sealECG(cv) {
+    const ctx = cv.getContext('2d');
+    ctx.strokeStyle = 'rgba(20,184,80,0.5)';
+    ctx.beginPath(); ctx.moveTo(2, H / 2 + 18); ctx.lineTo(W - 2, H / 2 + 18); ctx.stroke();
+  }
+
+  /* ---------- B:蓄水槽 ---------- */
+  function startTank(cv) {
+    const ctx = cv.getContext('2d');
+    ctx.font = '11px "Matrix Code", monospace';
+    let level = H; // 水位(从满到空反向:回合内容累积 → 水位上升)
+    let fill = 0.12; // 起始水位 12%
+    const drops = [];
+    const step = () => {
+      ctx.globalCompositeOperation = 'destination-out';
+      ctx.fillStyle = 'rgba(0,0,0,0.14)';
+      ctx.fillRect(0, 0, W, H);
+      ctx.globalCompositeOperation = 'source-over';
+      // 下落字形
+      if (Math.random() < 0.22) drops.push({ x: Math.random() < 0.5 ? 4 : 14, y: -10, ch: GLYPHS[Math.random() * GLYPHS.length | 0] });
+      const surface = H - fill * H;
+      for (const d of drops) {
+        d.y += 7;
+        if (d.y >= surface) { d.splash = 1; d.y = surface; }
+        ctx.fillStyle = d.splash ? 'rgba(194,255,217,0.85)' : 'rgba(0,255,65,0.55)';
+        ctx.fillText(d.ch, d.x, d.y);
+      }
+      for (let i = drops.length - 1; i >= 0; i--) if (drops[i].splash) drops.splice(i, 1);
+      // 水位缓涨(回合内容越多越高)+ 水面亮线
+      fill = Math.min(0.7, fill + 0.0012);
+      ctx.fillStyle = 'rgba(0,255,65,0.07)';
+      ctx.fillRect(1, H - fill * H, W - 2, fill * H);
+      ctx.fillStyle = 'rgba(194,255,217,0.5)';
+      ctx.fillRect(1, H - fill * H, W - 2, 1);
+    };
+    if (REDUCED) { for (let i = 0; i < 40; i++) step(); return () => {}; }
+    const t = setInterval(step, 90);
+    return () => clearInterval(t);
+  }
+  function sealTank(cv) {
+    const ctx = cv.getContext('2d');
+    ctx.font = '11px "Matrix Code", monospace';
+    // 冻结柱:静态低亮字形堆 + 无动画
+    for (let y = H - 60; y < H; y += 11) {
+      ctx.fillStyle = 'rgba(20,184,80,0.3)';
+      ctx.fillText(GLYPHS[Math.random() * GLYPHS.length | 0], 4, y);
+      ctx.fillText(GLYPHS[Math.random() * GLYPHS.length | 0], 14, y);
+    }
+  }
+
+  /* ---------- C:磁带纹 ---------- */
+  function startTape(cv) {
+    const ctx = cv.getContext('2d');
+    const rows = [];
+    for (let y = 0; y < H; y += 5) rows.push({ y, len: 3 + Math.random() * 8, x: 3 + Math.random() * 8, hot: Math.random() < 0.06 });
+    const step = () => {
+      ctx.globalCompositeOperation = 'destination-out';
+      ctx.fillStyle = 'rgba(0,0,0,0.10)';
+      ctx.fillRect(0, 0, W, H);
+      ctx.globalCompositeOperation = 'source-over';
+      for (const r of rows) {
+        r.y -= 2.2;
+        if (r.y < -4) { r.y = H + 4; r.len = 3 + Math.random() * 8; r.x = 3 + Math.random() * 8; r.hot = Math.random() < 0.06; }
+        ctx.fillStyle = r.hot ? 'rgba(194,255,217,0.8)' : 'rgba(0,255,65,0.4)';
+        ctx.fillRect(r.x, r.y, r.len, 1.4);
+      }
+    };
+    if (REDUCED) { for (let i = 0; i < 30; i++) step(); return () => {}; }
+    const t = setInterval(step, 60);
+    return () => clearInterval(t);
+  }
+  function sealTape(cv) {
+    const ctx = cv.getContext('2d');
+    for (let y = 0; y < H; y += 5) {
+      ctx.fillStyle = 'rgba(20,184,80,0.28)';
+      ctx.fillRect(3 + Math.random() * 8, y, 3 + Math.random() * 8, 1.4);
+    }
+  }
+
+  const START = { A: startECG, B: startTank, C: startTape };
+  const SEAL = { A: sealECG, B: sealTank, C: sealTape };
+
+  const params = new URLSearchParams(location.search);
+  let current = KEYS.includes(params.get('variant')) ? params.get('variant') : 'A';
+  let stopActive = null;
+
+  function go(v) {
+    current = v;
+    const url = new URL(location.href);
+    url.searchParams.set('variant', v);
+    history.replaceState(null, '', url);
+    document.getElementById('vlabel').textContent = `${v} — ${VARIANTS[v]}`;
+    if (stopActive) stopActive();
+    const stage = document.getElementById('stage');
+    stage.innerHTML = `
+      <div class="case"><div class="rail" id="live"></div><span class="lab">活动回合</span></div>
+      <div class="case"><div class="rail" id="done"><span class="seal">◆</span></div><span class="lab">闭环 · 凝印</span></div>`;
+    const live = makeCanvas();
+    document.getElementById('live').appendChild(live);
+    stopActive = START[v](live);
+    const done = makeCanvas();
+    document.getElementById('done').insertBefore(done, document.getElementById('done').firstChild);
+    SEAL[v](done.getContext('2d') ? done : done); // 静态帧
+  }
+  const cycle = (d) => go(KEYS[(KEYS.indexOf(current) + d + KEYS.length) % KEYS.length]);
+
+  document.getElementById('prev').onclick = () => cycle(-1);
+  document.getElementById('next').onclick = () => cycle(1);
+  window.addEventListener('keydown', (e) => {
+    const tag = document.activeElement?.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+    if (e.key === 'ArrowLeft') cycle(-1);
+    if (e.key === 'ArrowRight') cycle(1);
+  });
+
+  go(current);
+</script>
+</body>
+</html>

@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<!--
+  PROTOTYPE(一次性,验证后即弃)—— agent 回复 UI 逐块重构 · 第 3 块:工具链块 .trace
+  依据:ui-demo/agent-reply-ui-handoff.md §3.3 + 根 DESIGN.md(TOOL START=能量选择真实路径;TOOL END=写入冲击/校验环闭合)
+  主导隐喻:工具调用不是日志行,而是「能量被导入一个真实模块」的过程
+  三个结构互异变体(?variant=A|B|C,浮条 ←→ 切换,↻ 重播):
+    A「脉冲导管」— 无卡片:左侧导管,run 时脉冲流入,ok 导管封口固化,err 导管断裂
+    B「探针取样」— 取样玻片:run 时扫描条往复,ok 凝为结果读数线
+    C「机械继电器」— DIN 导轨上的继电器单元:触点 LED(琥珀呼吸/绿/红)+ 数码管耗时
+  保留底线:保序、状态三色(执行中琥珀/失败红/完成柔绿)、点击展开参数、真实耗时、收尾反馈
+-->
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PROTO · 工具链块</title>
+<style>
+  @font-face { font-family: 'Sarasa Term SC'; src: url('font/SarasaTermSC-Regular.ttf'); font-display: swap; }
+  :root {
+    --text-primary: #3dff8f;
+    --text-secondary: #23c468;
+    --text-tertiary: #1da754;
+    --accent: #00ff41;
+    --accent-muted: #14b850;
+    --bright: #c2ffd9;
+    --warning: #ffb000;
+    --danger: #ff5555;
+    --border: rgba(61, 255, 143, 0.18);
+    --font: 'Share Tech Mono', 'Sarasa Term SC', ui-monospace, monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  body { background: #010a04; color: var(--text-primary); font-family: var(--font); font-size: 15px; overflow: hidden; }
+  body::after {
+    content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 50;
+    background: repeating-linear-gradient(0deg, rgba(0,0,0,0.16) 0 1px, transparent 1px 3px);
+  }
+  .stage { max-width: 780px; margin: 0 auto; padding: 44px 28px; }
+  .thead { font-size: 12px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--text-tertiary); margin-bottom: 8px; }
+  .tname { color: var(--text-primary); }
+  .desc { color: var(--text-secondary); font-size: 13px; }
+  .params {
+    font-size: 13px; white-space: pre-wrap; color: var(--text-tertiary);
+    max-height: 120px; overflow: hidden; line-height: 1.6;
+  }
+
+  /* ================ A:脉冲导管(无卡片) ================ */
+  .vA .tool { display: grid; grid-template-columns: 18px 1fr; column-gap: 12px; margin-bottom: 14px; }
+  .vA .duct { border-left: 2px solid var(--border); position: relative; }
+  /* run:脉冲流入;ok:整管固化柔绿;err:断裂(中段缺口+红) */
+  .vA .run .duct { border-left-color: rgba(255, 176, 0, 0.4); }
+  .vA .run .duct::after {
+    content: ''; position: absolute; left: -3px; top: 0; width: 4px; height: 26px;
+    background: linear-gradient(180deg, var(--bright), var(--warning));
+    border-radius: 2px; animation: influx 0.9s cubic-bezier(0.4, 0, 0.7, 0.4) infinite;
+  }
+  @keyframes influx { from { top: -26px; } to { top: 100%; } }
+  .vA .ok .duct { border-left-color: var(--accent-muted); box-shadow: -1px 0 8px rgba(20, 184, 80, 0.35); animation: seal 0.6s ease-out 1; }
+  @keyframes seal { 0% { box-shadow: -2px 0 18px rgba(194, 255, 217, 0.9); } 100% { box-shadow: -1px 0 8px rgba(20, 184, 80, 0.35); } }
+  .vA .err .duct { border-left-color: transparent; background: repeating-linear-gradient(180deg, var(--danger) 0 6px, transparent 6px 12px); width: 2px; }
+  .vA .tbody { padding: 2px 0; }
+  .vA .srow { display: flex; align-items: baseline; gap: 8px; }
+  .vA .st { margin-left: auto; font-size: 12px; }
+  .vA .run .st { color: var(--warning); }
+  .vA .ok .st { color: var(--accent-muted); }
+  .vA .err .st { color: var(--danger); }
+  .vA .params { border-left: 1px dashed var(--border); padding-left: 10px; margin-top: 8px; }
+
+  /* ================ B:探针取样(玻片) ================ */
+  .vB .tool {
+    position: relative; border: 1px solid var(--border); margin-bottom: 14px;
+    background: linear-gradient(160deg, rgba(61, 255, 143, 0.04), transparent 50%); overflow: hidden;
+  }
+  .vB .sweep {
+    position: absolute; left: 0; right: 0; height: 22px; top: -22px;
+    background: linear-gradient(180deg, transparent, rgba(194, 255, 217, 0.10), transparent);
+  }
+  .vB .run .sweep { animation: probe 1.6s ease-in-out infinite; }
+  @keyframes probe { 0% { top: -22px; } 50% { top: 100%; } 100% { top: -22px; } }
+  .vB .shead { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-bottom: 1px solid var(--border); }
+  .vB .shead .etched { font-size: 11px; letter-spacing: 0.22em; color: var(--text-tertiary); }
+  /* 读数线:ok 时亮起的结果刻度 */
+  .vB .gauge { margin-left: auto; display: flex; align-items: center; gap: 8px; font-size: 12px; }
+  .vB .gauge .gline { width: 64px; height: 3px; background: rgba(61, 255, 143, 0.10); position: relative; }
+  .vB .gauge .gline::after { content: ''; position: absolute; inset: 0 auto 0 0; width: 0; background: var(--accent-muted); }
+  .vB .ok .gauge .gline::after { width: var(--dur-w, 60%); transition: width 0.5s ease-out; }
+  .vB .run .gauge .gline::after { width: 100%; background: var(--warning); animation: breathe2 1.2s ease-in-out infinite; }
+  @keyframes breathe2 { 0%, 100% { opacity: 0.35; } 50% { opacity: 1; } }
+  .vB .run .gnum { color: var(--warning); }
+  .vB .ok .gnum { color: var(--accent-muted); }
+  .vB .err .gnum { color: var(--danger); }
+  .vB .err .gauge .gline::after { width: 100%; background: var(--danger); }
+  .vB .sbody { padding: 8px 12px; }
+  .vB .params { margin-top: 8px; border-top: 1px dashed var(--border); padding-top: 8px; }
+
+  /* ================ C:机械继电器(DIN 导轨) ================ */
+  .vC .track {
+    border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
+    background: repeating-linear-gradient(90deg, transparent 0 34px, rgba(61, 255, 143, 0.05) 34px 35px);
+    padding: 4px 0;
+  }
+  .vC .unit { display: flex; align-items: center; gap: 12px; padding: 7px 10px; }
+  .vC .unit + .unit { border-top: 1px dashed rgba(61, 255, 143, 0.10); }
+  /* 触点 LED:run 琥珀呼吸 / ok 绿(带一次 clack 闪) / err 红 */
+  .vC .contact { width: 10px; height: 10px; flex: none; border: 1px solid var(--text-tertiary); }
+  .vC .run .contact { background: var(--warning); border-color: var(--warning); animation: coil 0.8s ease-in-out infinite; }
+  @keyframes coil { 0%, 100% { opacity: 0.35; } 50% { opacity: 1; box-shadow: 0 0 8px rgba(255, 176, 0, 0.7); } }
+  .vC .ok .contact { background: var(--accent); border-color: var(--accent); animation: clack 0.3s ease-out 1; }
+  @keyframes clack { 0% { box-shadow: 0 0 0 0 rgba(0, 255, 65, 0.9); } 100% { box-shadow: 0 0 0 9px rgba(0, 255, 65, 0); } }
+  .vC .err .contact { background: var(--danger); border-color: var(--danger); }
+  .vC .urest { flex: 1; display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+  /* 数码管耗时读数 */
+  .vC .dur {
+    font-size: 12px; letter-spacing: 0.12em; padding: 1px 6px;
+    border: 1px solid var(--border); background: rgba(2, 14, 7, 0.8); color: var(--text-tertiary);
+  }
+  .vC .ok .dur { color: var(--accent-muted); }
+  .vC .run .dur { color: var(--warning); }
+  .vC .err .dur { color: var(--danger); }
+  .vC .udrawer { flex-basis: 100%; }
+  .vC .unit { flex-wrap: wrap; }
+  .vC .params { border: 1px solid var(--border); margin: 4px 0 4px 22px; padding: 8px 10px; position: relative; }
+  .vC .params::before, .vC .params::after {
+    content: ''; position: absolute; width: 4px; height: 4px; border-radius: 50%;
+    border: 1px solid var(--accent-muted); top: 3px;
+  }
+  .vC .params::before { left: 3px; }
+  .vC .params::after { right: 3px; }
+
+  /* ---------- 浮条(非设计对象) ---------- */
+  #switcher {
+    position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%); z-index: 99;
+    display: flex; align-items: center; gap: 12px;
+    background: #101010; border: 1px solid #444; border-radius: 999px;
+    color: #eee; padding: 7px 16px; font-family: ui-monospace, monospace; font-size: 12px;
+    box-shadow: 0 4px 18px rgba(0, 0, 0, 0.6);
+  }
+  #switcher button {
+    background: #222; color: #eee; border: 1px solid #555; border-radius: 50%;
+    width: 24px; height: 24px; cursor: pointer; font-size: 13px; line-height: 1;
+  }
+  #switcher button:hover { background: #333; }
+  #switcher .vlabel { min-width: 150px; text-align: center; }
+  #switcher .tag { color: #777; font-size: 10px; }
+  #replay { border-radius: 12px !important; width: auto !important; padding: 0 10px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+  }
+</style>
+</head>
+<body>
+<div class="stage" id="stage"></div>
+
+<div id="switcher">
+  <span class="tag">PROTO · 3.3 工具链块</span>
+  <button id="prev" title="←">‹</button>
+  <span class="vlabel" id="vlabel"></span>
+  <button id="next" title="→">›</button>
+  <button id="replay" title="重播入场">↻</button>
+</div>
+
+<script>
+  // mock:一次完成调用 + 一次进行中调用(handoff §3.3 的真实数据形状)
+  const TOOLS = [
+    { name: 'read', desc: 'backend/src/dto/palette.dto.ts', status: 'ok', dur: '0.3s', durW: '22%',
+      params: '{ "path": "backend/src/dto/palette.dto.ts",\n  "offset": 0, "limit": 68 }' },
+    { name: 'edit', desc: 'palette.dto.ts · +6 −0', status: 'run', dur: '执行中…',
+      params: '{ "path": "backend/src/dto/palette.dto.ts",\n  "edits": [{ "oldText": "height: number", … }] }' },
+  ];
+  const VARIANTS = { A: '脉冲导管', B: '探针取样', C: '机械继电器' };
+  const KEYS = Object.keys(VARIANTS);
+
+  function renderA() {
+    return TOOLS.map(t => `
+      <div class="tool ${t.status}">
+        <div class="duct"></div>
+        <div class="tbody">
+          <div class="srow">
+            <span class="tname">[${t.name}]</span><span class="desc">${t.desc}</span>
+            <span class="st">${t.status === 'ok' ? `完成 · ${t.dur}` : t.dur}</span>
+          </div>
+          ${t.status === 'ok' ? `<div class="params">${t.params}</div>` : ''}
+        </div>
+      </div>`).join('');
+  }
+  function renderB() {
+    return TOOLS.map(t => `
+      <div class="tool ${t.status}">
+        <span class="sweep"></span>
+        <div class="shead">
+          <span class="etched">SAMPLE · ${t.name.toUpperCase()}</span>
+          <span class="gauge"><span class="gline" style="--dur-w:${t.durW ?? '100%'}"></span><span class="gnum">${t.status === 'ok' ? `完成 · ${t.dur}` : t.dur}</span></span>
+        </div>
+        <div class="sbody">
+          <span class="desc">${t.desc}</span>
+          ${t.status === 'ok' ? `<div class="params">${t.params}</div>` : ''}
+        </div>
+      </div>`).join('');
+  }
+  function renderC() {
+    return `<div class="track">` + TOOLS.map(t => `
+      <div class="unit ${t.status}">
+        <span class="contact"></span>
+        <span class="urest"><span class="tname">[${t.name}]</span><span class="desc">${t.desc}</span></span>
+        <span class="dur">${t.status === 'ok' ? t.dur : t.dur}</span>
+        ${t.status === 'ok' ? `<div class="udrawer"><div class="params">${t.params}</div></div>` : ''}
+      </div>`).join('') + `</div>`;
+  }
+  const RENDER = { A: renderA, B: renderB, C: renderC };
+
+  const params = new URLSearchParams(location.search);
+  let current = KEYS.includes(params.get('variant')) ? params.get('variant') : 'A';
+
+  function go(v) {
+    current = v;
+    const url = new URL(location.href);
+    url.searchParams.set('variant', v);
+    history.replaceState(null, '', url);
+    document.getElementById('vlabel').textContent = `${v} — ${VARIANTS[v]}`;
+    const stage = document.getElementById('stage');
+    stage.className = `stage v${v}`;
+    stage.innerHTML = `<div class="thead">工具链 · 2 步</div>` + RENDER[v]();
+  }
+  const cycle = (d) => go(KEYS[(KEYS.indexOf(current) + d + KEYS.length) % KEYS.length]);
+
+  document.getElementById('prev').onclick = () => cycle(-1);
+  document.getElementById('next').onclick = () => cycle(1);
+  document.getElementById('replay').onclick = () => go(current);
+  window.addEventListener('keydown', (e) => {
+    const tag = document.activeElement?.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+    if (e.key === 'ArrowLeft') cycle(-1);
+    if (e.key === 'ArrowRight') cycle(1);
+  });
+
+  go(current);
+</script>
+</body>
+</html>

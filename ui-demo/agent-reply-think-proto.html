@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<!--
+  PROTOTYPE(一次性,验证后即弃)—— agent 回复 UI 逐块重构 · 第 2 块:思考块 .think
+  依据:ui-demo/agent-reply-ui-handoff.md §3.2 + 根 DESIGN.md 视觉宪章(THINKING=深层波纹/聚能)
+  主导隐喻:思维链不是折叠注释,而是「正在发生的认知过程」
+  三个结构互异变体(?variant=A|B|C,浮条 ←→ 切换,↻ 重播,◉ 切流式态):
+    A「脑波褶」— streaming 时 summary 旁一条活体脑波,展开体越新越亮(思维向深处沉降)
+    B「蒸馏柱」— 左侧细竖管内亮点循环滴落;展开行自上而下冷凝(blur→清晰)
+    C「折扇」— 展开像扇面逐行展开(rotateX 阶梯),「思路」文字自身呼吸=思考中
+  保留底线:<details> 默认折叠、summary 12px、展开体 13px 三级绿、streaming「· 思考中…」
+-->
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PROTO · 思考块</title>
+<style>
+  @font-face { font-family: 'Sarasa Term SC'; src: url('font/SarasaTermSC-Regular.ttf'); font-display: swap; }
+  :root {
+    --text-primary: #3dff8f;
+    --text-secondary: #23c468;
+    --text-tertiary: #1da754;
+    --accent: #00ff41;
+    --bright: #c2ffd9;
+    --border: rgba(61, 255, 143, 0.18);
+    --font: 'Share Tech Mono', 'Sarasa Term SC', ui-monospace, monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  body { background: #010a04; color: var(--text-primary); font-family: var(--font); font-size: 15px; overflow: hidden; }
+  body::after {
+    content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 50;
+    background: repeating-linear-gradient(0deg, rgba(0,0,0,0.16) 0 1px, transparent 1px 3px);
+  }
+  .stage { max-width: 780px; margin: 0 auto; padding: 48px 28px; }
+
+  /* 共享:summary 基线(handoff §3.2:无默认 marker,::before 三角) */
+  .think summary {
+    list-style: none; cursor: pointer; font-size: 12px; letter-spacing: 0.14em;
+    color: var(--text-tertiary); text-transform: uppercase; user-select: none;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .think summary::-webkit-details-marker { display: none; }
+  .think summary::before { content: '▸'; font-size: 13px; transition: transform 0.15s; }
+  .think[open] summary::before { transform: rotate(90deg); }
+  .think-body { font-size: 13px; line-height: 1.7; color: var(--text-tertiary); }
+
+  /* ================ A:脑波褶 ================ */
+  .vA .eeg { width: 72px; height: 14px; overflow: visible; }
+  .vA .eeg path { fill: none; stroke: var(--text-tertiary); stroke-width: 1; }
+  .vA.streaming .eeg path { stroke: var(--accent); stroke-dasharray: 6 4; animation: eegflow 0.8s linear infinite; }
+  @keyframes eegflow { to { stroke-dashoffset: -10; } }
+  /* streaming 时波幅起伏(CSS 变量驱动 scaleY 脉动) */
+  .vA.streaming .eeg { animation: eegamp 1.6s ease-in-out infinite; transform-origin: left center; }
+  @keyframes eegamp { 0%, 100% { transform: scaleY(0.4); } 50% { transform: scaleY(1); } }
+  .vA .st-tag { color: var(--accent-muted, #14b850); letter-spacing: 0.1em; }
+  .vA .think-body { margin-top: 8px; border-left: 1px dashed var(--border); padding-left: 12px; }
+  /* 思维向深处沉降:行越新越亮(自下而上衰减) */
+  .vA .think-body .tl { display: block; animation: surface 0.5s ease-out both; }
+  .vA .think-body .tl:nth-child(1) { opacity: 0.38; }
+  .vA .think-body .tl:nth-child(2) { opacity: 0.55; }
+  .vA .think-body .tl:nth-child(3) { opacity: 0.72; }
+  .vA .think-body .tl:nth-child(4) { opacity: 0.86; }
+  .vA .think-body .tl:nth-child(5) { opacity: 1; color: var(--text-secondary); }
+  @keyframes surface { from { opacity: 0; transform: translateY(4px); } }
+
+  /* ================ B:蒸馏柱 ================ */
+  .vB .think { position: relative; padding-left: 26px; }
+  .vB .col { position: absolute; left: 8px; top: 2px; bottom: 2px; border-left: 1px solid var(--border); }
+  /* 蒸馏滴:streaming 时管内亮点循环下落,静止时停在底部 */
+  .vB .drip {
+    position: absolute; left: -2px; bottom: 0; width: 3px; height: 10px;
+    background: var(--text-tertiary); border-radius: 2px; opacity: 0.6;
+  }
+  .vB.streaming .drip { background: var(--accent); opacity: 1; box-shadow: 0 0 8px rgba(0, 255, 65, 0.7); animation: drip 1.4s cubic-bezier(0.5, 0, 0.8, 0.4) infinite; }
+  @keyframes drip { from { top: 0; bottom: auto; } to { top: calc(100% - 10px); bottom: auto; } }
+  .vB .think-body { margin-top: 8px; }
+  /* 冷凝:行自上而下 blur→清晰,带馏分刻度 */
+  .vB .think-body .tl { display: block; position: relative; padding-left: 16px; animation: condense 0.7s ease-out both; }
+  .vB .think-body .tl::before {
+    content: ''; position: absolute; left: 0; top: 0.62em; width: 8px; height: 1px; background: var(--text-tertiary); opacity: 0.6;
+  }
+  @keyframes condense { from { opacity: 0; filter: blur(3px); } to { opacity: 1; filter: blur(0); } }
+
+  /* ================ C:折扇 ================ */
+  /* 「思路」文字自身呼吸 = 思考中(不另加元素) */
+  .vC.streaming summary .t-label { animation: breathe 1.5s ease-in-out infinite; }
+  @keyframes breathe { 0%, 100% { color: var(--text-tertiary); text-shadow: none; } 50% { color: var(--bright); text-shadow: 0 0 10px rgba(194, 255, 217, 0.5); } }
+  .vC .think-body { margin-top: 8px; perspective: 600px; }
+  /* 扇面展开:每行绕顶边 rotateX 阶梯打开 */
+  .vC .think-body .tl {
+    display: block; transform-origin: top center;
+    border-left: 1px dashed var(--border); padding-left: 12px;
+  }
+  .vC[open] .think-body .tl, .vC .think[open] .think-body .tl { animation: fan 0.45s cubic-bezier(0.2, 0.8, 0.3, 1.1) both; }
+  @keyframes fan { from { opacity: 0; transform: rotateX(-72deg); } to { opacity: 1; transform: none; } }
+
+  /* ---------- 浮条(非设计对象) ---------- */
+  #switcher {
+    position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%); z-index: 99;
+    display: flex; align-items: center; gap: 12px;
+    background: #101010; border: 1px solid #444; border-radius: 999px;
+    color: #eee; padding: 7px 16px; font-family: ui-monospace, monospace; font-size: 12px;
+    box-shadow: 0 4px 18px rgba(0, 0, 0, 0.6);
+  }
+  #switcher button {
+    background: #222; color: #eee; border: 1px solid #555; border-radius: 50%;
+    width: 24px; height: 24px; cursor: pointer; font-size: 13px; line-height: 1;
+  }
+  #switcher button:hover { background: #333; }
+  #switcher .vlabel { min-width: 150px; text-align: center; }
+  #switcher .tag { color: #777; font-size: 10px; }
+  #replay, #stream { border-radius: 12px !important; width: auto !important; padding: 0 10px; }
+  #stream.on { background: #0a3d1f; border-color: #3dff8f; color: #3dff8f; }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+    .vA .think-body .tl { opacity: 1; }
+  }
+</style>
+</head>
+<body>
+<div class="stage" id="stage"></div>
+
+<div id="switcher">
+  <span class="tag">PROTO · 3.2 思考块</span>
+  <button id="prev" title="←">‹</button>
+  <span class="vlabel" id="vlabel"></span>
+  <button id="next" title="→">›</button>
+  <button id="replay" title="重播入场">↻</button>
+  <button id="stream" title="切换流式态">◉ stream</button>
+</div>
+
+<script>
+  // mock 思维链(真实结构:一个 thinking 段;streaming 且为末段 → 「· 思考中…」)
+  const LINES = [
+    '用户要 BMI 工具的 DTO 校验——先确认字段边界',
+    'height/weight 都是 int,业务合理域 50–280 / 10–500',
+    'class-validator 用 @IsInt + @Min/@Max 组合即可',
+    '不引入自定义 pipe,保持与现有 DTO 风格一致',
+    '给出补丁,不改 calcBMI 逻辑本身',
+  ];
+  const VARIANTS = { A: '脑波褶', B: '蒸馏柱', C: '折扇' };
+  const KEYS = Object.keys(VARIANTS);
+
+  const EEG_PATH = 'M0,7 L8,7 L11,2 L14,12 L17,7 L26,7 L30,4 L33,10 L36,7 L46,7 L49,1 L53,13 L56,7 L72,7';
+
+  function summaryInner(streaming) {
+    return `<span class="t-label">思路</span>${streaming ? '<span class="st-tag">· 思考中…</span>' : ''}`;
+  }
+
+  function render(v, streaming) {
+    if (v === 'A') return `
+      <details class="think" open>
+        <summary>${summaryInner(streaming)}
+          <svg class="eeg" viewBox="0 0 72 14" aria-hidden="true"><path d="${EEG_PATH}"/></svg>
+        </summary>
+        <div class="think-body">${LINES.map(l => `<span class="tl">${l}</span>`).join('')}</div>
+      </details>`;
+    if (v === 'B') return `
+      <details class="think" open>
+        <summary>${summaryInner(streaming)}</summary>
+        <div class="col"><span class="drip"></span></div>
+        <div class="think-body">${LINES.map((l, i) => `<span class="tl" style="animation-delay:${i * 0.16}s">${l}</span>`).join('')}</div>
+      </details>`;
+    return `
+      <details class="think" open>
+        <summary>${summaryInner(streaming)}</summary>
+        <div class="think-body">${LINES.map((l, i) => `<span class="tl" style="animation-delay:${i * 0.09}s">${l}</span>`).join('')}</div>
+      </details>`;
+  }
+
+  const params = new URLSearchParams(location.search);
+  let current = KEYS.includes(params.get('variant')) ? params.get('variant') : 'A';
+  let streaming = params.get('stream') !== '0'; // 默认流式态(展示思考中)
+
+  function go(v) {
+    current = v;
+    const url = new URL(location.href);
+    url.searchParams.set('variant', v);
+    history.replaceState(null, '', url);
+    document.getElementById('vlabel').textContent = `${v} — ${VARIANTS[v]}`;
+    document.getElementById('stream').classList.toggle('on', streaming);
+    const stage = document.getElementById('stage');
+    stage.className = `stage v${v}${streaming ? ' streaming' : ''}`;
+    stage.innerHTML = render(v, streaming);
+  }
+  const cycle = (d) => go(KEYS[(KEYS.indexOf(current) + d + KEYS.length) % KEYS.length]);
+
+  document.getElementById('prev').onclick = () => cycle(-1);
+  document.getElementById('next').onclick = () => cycle(1);
+  document.getElementById('replay').onclick = () => go(current);
+  document.getElementById('stream').onclick = () => { streaming = !streaming; go(current); };
+  window.addEventListener('keydown', (e) => {
+    const tag = document.activeElement?.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+    if (e.key === 'ArrowLeft') cycle(-1);
+    if (e.key === 'ArrowRight') cycle(1);
+  });
+
+  go(current);
+</script>
+</body>
+</html>

@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<!--
+  PROTOTYPE(一次性,验证后即弃)—— agent 回复 UI 逐块重构 · 第 5 块:结算行 .settle
+  依据:ui-demo/agent-reply-ui-handoff.md §3.5 + 根 DESIGN.md(SETTLED=沉降与可读余辉)
+  主导隐喻:回合闭环不是一行日志,而是「给这次执行盖上封印」
+  三个结构互异变体(?variant=A|B|C,浮条 ←→ 切换,↻ 重播;每版含 ok + interrupted 双样):
+    A「压印」— ◆ 从 140% 压下带冲击波,文字字距从压缩弹回,发线自绘向右
+    B「沉降」— 统计组件带模糊各自飘落落位,◆ 最后落下轻弹,发线=落点地面
+    C「封存带」— 封存带自 ◆ 锚点向右展开;中断版带尾呈撕裂锯齿(而非整齐边)
+  保留底线:◆ 封印 + 已结算/已中断/错误文案 + tools/tok/dur 统计 + 12px 三级绿 + 红色变体
+-->
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PROTO · 结算行</title>
+<style>
+  @font-face { font-family: 'Sarasa Term SC'; src: url('font/SarasaTermSC-Regular.ttf'); font-display: swap; }
+  :root {
+    --text-tertiary: #1da754;
+    --text-secondary: #23c468;
+    --accent: #00ff41;
+    --accent-muted: #14b850;
+    --bright: #c2ffd9;
+    --danger: #ff5555;
+    --border: rgba(61, 255, 143, 0.18);
+    --font: 'Share Tech Mono', 'Sarasa Term SC', ui-monospace, monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  body { background: #010a04; color: var(--text-secondary); font-family: var(--font); font-size: 15px; overflow: hidden; }
+  body::after {
+    content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 50;
+    background: repeating-linear-gradient(0deg, rgba(0,0,0,0.16) 0 1px, transparent 1px 3px);
+  }
+  .stage { max-width: 780px; margin: 0 auto; padding: 60px 28px; }
+  .settle { display: flex; align-items: baseline; gap: 8px; font-size: 12px; letter-spacing: 0.1em; color: var(--text-tertiary); margin-bottom: 34px; }
+  .settle.bad { color: var(--danger); }
+  .seal { color: var(--accent-muted); }
+  .bad .seal { color: var(--danger); }
+
+  /* ================ A:压印 ================ */
+  .vA .seal { display: inline-block; animation: stamp 0.45s cubic-bezier(0.2, 1.4, 0.4, 1) both; }
+  @keyframes stamp {
+    0% { transform: scale(1.5); opacity: 0; }
+    55% { transform: scale(0.94); opacity: 1; text-shadow: 0 0 14px currentColor; }
+    100% { transform: scale(1); text-shadow: none; }
+  }
+  /* 压印冲击波 */
+  .vA .seal-wrap { position: relative; display: inline-block; }
+  .vA .seal-wrap::after {
+    content: ''; position: absolute; inset: -5px; border: 1px solid currentColor; border-radius: 50%;
+    opacity: 0; animation: shock 0.5s ease-out 0.18s 1 both;
+  }
+  @keyframes shock { 0% { opacity: 0.8; transform: scale(0.4); } 100% { opacity: 0; transform: scale(1.6); } }
+  .vA .words { display: inline-block; animation: unspace 0.6s ease-out 0.1s both; }
+  @keyframes unspace { from { letter-spacing: 0.5em; opacity: 0; } to { letter-spacing: 0.1em; opacity: 1; } }
+  .vA .tail { flex: 1; height: 1px; background: currentColor; opacity: 0.35; transform-origin: left; animation: drawline 0.7s ease-out 0.5s both; }
+  @keyframes drawline { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+
+  /* ================ B:沉降 ================ */
+  .vB .settle { align-items: flex-end; }
+  .vB .part { display: inline-block; animation: settle 0.55s cubic-bezier(0.25, 0.9, 0.35, 1.15) both; }
+  @keyframes settle {
+    0% { transform: translateY(-14px); filter: blur(3px); opacity: 0; }
+    70% { transform: translateY(1px); filter: blur(0); opacity: 1; }
+    100% { transform: translateY(0); }
+  }
+  .vB .seal { animation: sealdrop 0.5s cubic-bezier(0.3, 1.3, 0.5, 1) both; }
+  @keyframes sealdrop {
+    0% { transform: translateY(-20px) scale(1.2); opacity: 0; }
+    60% { transform: translateY(2px) scale(1); opacity: 1; }
+    100% { transform: translateY(0); }
+  }
+  .vB .tail { flex: 1; height: 1px; background: currentColor; opacity: 0.35; animation: ground 0.6s ease-out 0.7s both; }
+  @keyframes ground { from { opacity: 0; } to { opacity: 0.35; } }
+
+  /* ================ C:封存带 ================ */
+  .vC .settle { align-items: center; }
+  .vC .seal { flex: none; }
+  /* 带体:自左向右展开(clip-path);中断版右缘撕裂锯齿 */
+  .vC .tape {
+    display: inline-flex; align-items: center; gap: 8px;
+    border-top: 1px solid currentColor; border-bottom: 1px solid currentColor;
+    padding: 2px 10px 2px 8px; opacity: 0.85;
+    animation: unroll 0.65s cubic-bezier(0.3, 0, 0.2, 1) 0.1s both;
+  }
+  @keyframes unroll {
+    from { clip-path: inset(0 100% 0 0); }
+    to { clip-path: inset(0 0 0 0); }
+  }
+  .vC .bad .tape {
+    /* 撕裂尾缘:锯齿 clip */
+    clip-path: none;
+    animation: unroll-tear 0.65s cubic-bezier(0.3, 0, 0.2, 1) 0.1s both;
+  }
+  @keyframes unroll-tear {
+    from { clip-path: polygon(0 0, 0 0, 0 100%, 0 100%); }
+    to {
+      clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 20%, calc(100% - 8px) 40%, 100% 60%, calc(100% - 12px) 80%, calc(100% - 4px) 100%, 0 100%);
+    }
+  }
+  .vC .bad .tape { border-right: none; }
+  .vC .eol { flex: none; width: 8px; height: 12px; background: currentColor; animation: eolblink 0.9s steps(2) 0.8s 2; opacity: 0; }
+  @keyframes eolblink { 0%, 100% { opacity: 0; } 50% { opacity: 0.9; } }
+  .vC .bad .eol { display: none; }
+
+  /* ---------- 浮条(非设计对象) ---------- */
+  #switcher {
+    position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%); z-index: 99;
+    display: flex; align-items: center; gap: 12px;
+    background: #101010; border: 1px solid #444; border-radius: 999px;
+    color: #eee; padding: 7px 16px; font-family: ui-monospace, monospace; font-size: 12px;
+    box-shadow: 0 4px 18px rgba(0, 0, 0, 0.6);
+  }
+  #switcher button {
+    background: #222; color: #eee; border: 1px solid #555; border-radius: 50%;
+    width: 24px; height: 24px; cursor: pointer; font-size: 13px; line-height: 1;
+  }
+  #switcher button:hover { background: #333; }
+  #switcher .vlabel { min-width: 150px; text-align: center; }
+  #switcher .tag { color: #777; font-size: 10px; }
+  #replay { border-radius: 12px !important; width: auto !important; padding: 0 10px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+    .vC .eol { opacity: 0.9; }
+    .vB .part, .vB .seal { transform: none; filter: none; opacity: 1; }
+    .vC .bad .tape { clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 20%, calc(100% - 8px) 40%, 100% 60%, calc(100% - 12px) 80%, calc(100% - 4px) 100%, 0 100%); }
+  }
+</style>
+</head>
+<body>
+<div class="stage" id="stage"></div>
+
+<div id="switcher">
+  <span class="tag">PROTO · 3.5 结算行</span>
+  <button id="prev" title="←">‹</button>
+  <span class="vlabel" id="vlabel"></span>
+  <button id="next" title="→">›</button>
+  <button id="replay" title="重播入场">↻</button>
+</div>
+
+<script>
+  // mock:一个正常闭环 + 一个中断闭环(handoff §3.5 的真实文案与统计)
+  const OK = { text: '已结算 · 2 tools · 1832 tok · 4.1s', bad: false };
+  const INT = { text: '已中断 · 1 tools · 640 tok · 1.7s', bad: true };
+  const VARIANTS = { A: '压印', B: '沉降', C: '封存带' };
+  const KEYS = Object.keys(VARIANTS);
+
+  function renderA(s) {
+    return `<div class="settle${s.bad ? ' bad' : ''}">
+      <span class="seal-wrap"><span class="seal">◆</span></span>
+      <span class="words">${s.text}</span><span class="tail"></span>
+    </div>`;
+  }
+  function renderB(s) {
+    // 统计拆成独立「沉降件」,逐一落位
+    const parts = s.text.split(' · ');
+    return `<div class="settle${s.bad ? ' bad' : ''}">
+      <span class="seal" style="animation-delay:0.55s">◆</span>
+      ${parts.map((p, i) => `<span class="part" style="animation-delay:${i * 0.12}s">${p}${i < parts.length - 1 ? ' ·' : ''}</span>`).join('')}
+      <span class="tail"></span>
+    </div>`;
+  }
+  function renderC(s) {
+    return `<div class="settle${s.bad ? ' bad' : ''}">
+      <span class="seal">◆</span><span class="tape">${s.text}</span><span class="eol"></span>
+    </div>`;
+  }
+  const RENDER = { A: renderA, B: renderB, C: renderC };
+
+  const params = new URLSearchParams(location.search);
+  let current = KEYS.includes(params.get('variant')) ? params.get('variant') : 'A';
+
+  function go(v) {
+    current = v;
+    const url = new URL(location.href);
+    url.searchParams.set('variant', v);
+    history.replaceState(null, '', url);
+    document.getElementById('vlabel').textContent = `${v} — ${VARIANTS[v]}`;
+    const stage = document.getElementById('stage');
+    stage.className = `stage v${v}`;
+    stage.innerHTML = RENDER[v](OK) + RENDER[v](INT);
+  }
+  const cycle = (d) => go(KEYS[(KEYS.indexOf(current) + d + KEYS.length) % KEYS.length]);
+
+  document.getElementById('prev').onclick = () => cycle(-1);
+  document.getElementById('next').onclick = () => cycle(1);
+  document.getElementById('replay').onclick = () => go(current);
+  window.addEventListener('keydown', (e) => {
+    const tag = document.activeElement?.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+    if (e.key === 'ArrowLeft') cycle(-1);
+    if (e.key === 'ArrowRight') cycle(1);
+  });
+
+  go(current);
+</script>
+</body>
+</html>

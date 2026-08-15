@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<!--
+  PROTOTYPE(一次性,验证后即弃)—— agent 回复 UI 逐块重构 · 第 7 块:流式光标 .caret + 中断标记 .aborted
+  依据:ui-demo/agent-reply-ui-handoff.md §3.7 + 根 DESIGN.md(STREAMING=局部显影;CANCELLING=能量抽离)
+  主导隐喻:光标是「写入头」——它活着,文本就在生长;它被掐灭,就是中断
+  三个结构互异变体(?variant=A|B|C,浮条 ←→ 切换,◉ 切 流式/中断 场景):
+    A「彗尾写入头」— 竖条带左拖彗尾,脉动呼吸;中断=彗尾倒吸归零 + 中断文一次 glitch 切片
+    B「字形蛾」— 光标是持续翻滚的 Matrix 字形(非实色块);中断文从乱码逐位锁定(注入解码同语言)
+    C「光标即状态」— 中断时光标本身红闪坍缩成 ✕ 并「长成」中断标记(光标变成了标记)
+  保留底线:光标仅末段、闪烁安全(低频)、中断文 --danger、reduced-motion 静态
+-->
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PROTO · 光标与中断</title>
+<style>
+  @font-face { font-family: 'Sarasa Term SC'; src: url('font/SarasaTermSC-Regular.ttf'); font-display: swap; }
+  @font-face { font-family: 'Matrix Code'; src: url('font/Matrix-Code.ttf'); font-display: swap; }
+  :root {
+    --text-primary: #3dff8f;
+    --accent: #00ff41;
+    --bright: #c2ffd9;
+    --danger: #ff5555;
+    --border: rgba(61, 255, 143, 0.18);
+    --font: 'Share Tech Mono', 'Sarasa Term SC', ui-monospace, monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  body { background: #010a04; color: var(--text-primary); font-family: var(--font); font-size: 15px; overflow: hidden; }
+  body::after {
+    content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 50;
+    background: repeating-linear-gradient(0deg, rgba(0,0,0,0.16) 0 1px, transparent 1px 3px);
+  }
+  .stage { max-width: 780px; margin: 0 auto; padding: 60px 28px; }
+  .msg-body { font-size: 15px; line-height: 1.8; }
+  .aborted { color: var(--danger); }
+
+  /* ================ A:彗尾写入头 ================ */
+  .vA .caret {
+    display: inline-block; width: 2px; height: 1.05em; vertical-align: -0.15em;
+    background: var(--bright);
+    box-shadow: -3px 0 6px rgba(0, 255, 65, 0.55), -8px 0 14px rgba(0, 255, 65, 0.22);
+    animation: comet 1.1s ease-in-out infinite;
+  }
+  @keyframes comet {
+    0%, 100% { box-shadow: -3px 0 6px rgba(0,255,65,0.55), -8px 0 14px rgba(0,255,65,0.22); opacity: 1; }
+    50% { box-shadow: -1px 0 2px rgba(0,255,65,0.2), -3px 0 6px rgba(0,255,65,0.08); opacity: 0.55; }
+  }
+  /* 中断:彗尾倒吸归零 + 文字 glitch 切片一次 */
+  .vA .caret.die { animation: suck 0.35s cubic-bezier(0.6, 0, 0.9, 0.4) both; }
+  @keyframes suck {
+    from { width: 2px; box-shadow: -3px 0 6px rgba(255,85,85,0.7), -8px 0 14px rgba(255,85,85,0.3); background: var(--danger); opacity: 1; }
+    to { width: 0; box-shadow: none; opacity: 0; }
+  }
+  .vA .aborted { position: relative; animation: glitchslice 0.4s steps(3) 0.3s 1; }
+  @keyframes glitchslice {
+    0% { transform: translateX(0); opacity: 0.4; }
+    33% { transform: translateX(-2px); }
+    66% { transform: translateX(2px); opacity: 1; }
+    100% { transform: translateX(0); }
+  }
+
+  /* ================ B:字形蛾 ================ */
+  .vB .caret {
+    display: inline-block; min-width: 9px; text-align: center;
+    font-family: 'Matrix Code', var(--font); font-size: 13px; color: var(--bright);
+    vertical-align: -0.1em; animation: mothblink 1.1s ease-in-out infinite;
+  }
+  @keyframes mothblink { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+  /* 中断文逐位锁定(.locking 期内每字符 Matrix 乱码帧,JS 驱动) */
+  .vB .aborted .lk { font-family: 'Matrix Code', var(--font); color: rgba(255, 85, 85, 0.6); }
+  .vB .aborted .done { font-family: var(--font); color: var(--danger); }
+
+  /* ================ C:光标即状态 ================ */
+  .vC .caret {
+    display: inline-block; width: 8px; height: 1.05em; vertical-align: -0.15em;
+    background: var(--accent); animation: blink 0.9s step-end infinite;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+  /* 坍缩:光标红闪后压扁成 ✕(标记的第一个字符) */
+  .vC .caret.collapse { animation: collapse 0.5s cubic-bezier(0.5, 0, 0.8, 0.3) both; }
+  @keyframes collapse {
+    0% { background: var(--accent); opacity: 1; }
+    25% { background: var(--danger); opacity: 1; }
+    60% { transform: scaleY(1); opacity: 1; background: var(--danger); }
+    100% { transform: scaleY(0.12); opacity: 0; background: var(--danger); }
+  }
+  .vC .aborted { animation: grow 0.4s ease-out 0.45s both; display: inline-block; transform-origin: left center; }
+  @keyframes grow { from { opacity: 0; transform: scaleX(0.3); } to { opacity: 1; transform: none; } }
+
+  /* ---------- 浮条(非设计对象) ---------- */
+  #switcher {
+    position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%); z-index: 99;
+    display: flex; align-items: center; gap: 12px;
+    background: #101010; border: 1px solid #444; border-radius: 999px;
+    color: #eee; padding: 7px 16px; font-family: ui-monospace, monospace; font-size: 12px;
+    box-shadow: 0 4px 18px rgba(0, 0, 0, 0.6);
+  }
+  #switcher button {
+    background: #222; color: #eee; border: 1px solid #555; border-radius: 50%;
+    width: 24px; height: 24px; cursor: pointer; font-size: 13px; line-height: 1;
+  }
+  #switcher button:hover { background: #333; }
+  #switcher .vlabel { min-width: 150px; text-align: center; }
+  #switcher .tag { color: #777; font-size: 10px; }
+  #scene { border-radius: 12px !important; width: auto !important; padding: 0 10px; }
+  #scene.int { background: #3d0f0f; border-color: #ff5555; color: #ff5555; }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+    .vA .caret, .vB .caret { opacity: 1; }
+    .vC .caret.collapse, .vA .caret.die { display: none; }
+    .vC .aborted, .vA .aborted { opacity: 1; transform: none; }
+  }
+</style>
+</head>
+<body>
+<div class="stage" id="stage"></div>
+
+<div id="switcher">
+  <span class="tag">PROTO · 3.7 光标/中断</span>
+  <button id="prev" title="←">‹</button>
+  <span class="vlabel" id="vlabel"></span>
+  <button id="next" title="→">›</button>
+  <button id="scene" title="切换场景">◉ 中断场景</button>
+</div>
+
+<script>
+  const VARIANTS = { A: '彗尾写入头', B: '字形蛾', C: '光标即状态' };
+  const KEYS = Object.keys(VARIANTS);
+  const TEXT = '补丁已写入,字段校验现在覆盖';
+  const ABORT = ' [已被操作员中断]';
+  const MOTH = 'アィウェオカキクケコサシスセソタチツテト012345789*+<>:|';
+
+  let mothTimer = null, lockTimer = null;
+
+  function renderA(interrupted) {
+    return `<div class="msg-body">${TEXT}<span class="caret${interrupted ? ' die' : ''}"></span>${interrupted ? `<span class="aborted">${ABORT}</span>` : ''}</div>`;
+  }
+  function renderB(interrupted) {
+    if (interrupted) {
+      // 中断文逐位锁定:初始全部乱码帧,JS 逐位换成真字
+      const spans = [...ABORT].map(ch => ch === ' ' ? ' ' : `<span class="lk" data-final="${ch}">${MOTH[Math.random() * MOTH.length | 0]}</span>`).join('');
+      return `<div class="msg-body">${TEXT}<span class="aborted">${spans}</span></div>`;
+    }
+    return `<div class="msg-body">${TEXT}<span class="caret" id="moth">${MOTH[0]}</span></div>`;
+  }
+  function renderC(interrupted) {
+    return `<div class="msg-body">${TEXT}<span class="caret${interrupted ? ' collapse' : ''}"></span>${interrupted ? `<span class="aborted">${ABORT}</span>` : ''}</div>`;
+  }
+  const RENDER = { A: renderA, B: renderB, C: renderC };
+
+  const params = new URLSearchParams(location.search);
+  let current = KEYS.includes(params.get('variant')) ? params.get('variant') : 'A';
+  let interrupted = params.get('int') === '1';
+
+  function go(v) {
+    current = v;
+    const url = new URL(location.href);
+    url.searchParams.set('variant', v);
+    history.replaceState(null, '', url);
+    document.getElementById('vlabel').textContent = `${v} — ${VARIANTS[v]}`;
+    document.getElementById('scene').classList.toggle('int', interrupted);
+    if (mothTimer) { clearInterval(mothTimer); mothTimer = null; }
+    if (lockTimer) { clearInterval(lockTimer); lockTimer = null; }
+    const stage = document.getElementById('stage');
+    stage.className = `stage v${v}`;
+    stage.innerHTML = RENDER[v](interrupted);
+
+    // B:字形蛾翻滚 / 中断文逐位锁定
+    if (v === 'B' && !interrupted) {
+      const moth = document.getElementById('moth');
+      mothTimer = setInterval(() => { moth.textContent = MOTH[Math.random() * MOTH.length | 0]; }, 120);
+    }
+    if (v === 'B' && interrupted) {
+      const lks = [...stage.querySelectorAll('.lk')];
+      let i = 0;
+      lockTimer = setInterval(() => {
+        // 未锁定字符继续翻滚;每 90ms 锁定一位
+        lks.forEach((s, j) => { if (j > i) s.textContent = MOTH[Math.random() * MOTH.length | 0]; });
+        if (i < lks.length) {
+          const s = lks[i];
+          s.textContent = s.dataset.final;
+          s.classList.remove('lk'); s.classList.add('done');
+          i++;
+        } else clearInterval(lockTimer);
+      }, 90);
+    }
+  }
+  const cycle = (d) => go(KEYS[(KEYS.indexOf(current) + d + KEYS.length) % KEYS.length]);
+
+  document.getElementById('prev').onclick = () => cycle(-1);
+  document.getElementById('next').onclick = () => cycle(1);
+  document.getElementById('scene').onclick = () => { interrupted = !interrupted; go(current); };
+  window.addEventListener('keydown', (e) => {
+    const tag = document.activeElement?.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+    if (e.key === 'ArrowLeft') cycle(-1);
+    if (e.key === 'ArrowRight') cycle(1);
+  });
+
+  go(current);
+</script>
+</body>
+</html>

@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<!--
+  PROTOTYPE(一次性,验证后即弃)—— agent 回复 UI 逐块重构 · 第 1 块:消息块 .msg
+  依据:ui-demo/agent-reply-ui-handoff.md §3.1 + 根 DESIGN.md 视觉宪章
+  主导隐喻:回复不是聊天泡泡,而是从模拟层显影出来的「传输件」
+  三个结构互异变体(?variant=A|B|C,浮条/←→切换,↻ 重播入场):
+    A「亮度波显影」— 字形先就位,亮度波逐行扫过(Rezmason 原则:移动的是亮度不是字形)
+    B「电报穿孔带」— 左侧穿孔轨与正文逐行耦合,hover 行点亮对应孔位
+    C「全息水印版」— 巨型描边标题水印 + 竖排时间戳,正文悬浮于全息印版之上
+  保留底线:正文 15px/1.8、头部 12px、.hl/行内 code/.msg-code 齐全、无假数据
+-->
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PROTO · agent 消息块</title>
+<style>
+  @font-face { font-family: 'Sarasa Term SC'; src: url('font/SarasaTermSC-Regular.ttf'); font-display: swap; }
+  :root {
+    --surface: rgba(2, 18, 9, 0.92);
+    --text-primary: #3dff8f;
+    --text-secondary: #23c468;
+    --text-tertiary: #1da754;
+    --accent: #00ff41;
+    --accent-muted: #14b850;
+    --bright: #c2ffd9;
+    --warning: #ffb000;
+    --danger: #ff5555;
+    --border: rgba(61, 255, 143, 0.18);
+    --font: 'Share Tech Mono', 'Sarasa Term SC', ui-monospace, monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    background: #010a04; color: var(--text-primary);
+    font-family: var(--font); font-size: 15px; overflow: hidden;
+  }
+  /* 氛围:淡扫描线,辅助判断可读性 */
+  body::after {
+    content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 50;
+    background: repeating-linear-gradient(0deg, rgba(0,0,0,0.16) 0 1px, transparent 1px 3px);
+  }
+  .stage { max-width: 780px; margin: 0 auto; padding: 48px 28px; }
+
+  /* ---------- 共享零件(handoff §3.1 子元素) ---------- */
+  .hl { color: var(--bright); }
+  code {
+    font-size: 13px; background: rgba(61, 255, 143, 0.08);
+    border: 1px solid var(--border); padding: 0 4px;
+  }
+  .msg-code {
+    font-size: 13px; line-height: 1.55; white-space: pre;
+    border-left: 1px solid var(--border); padding-left: 12px; margin-top: 10px;
+    color: var(--text-secondary);
+  }
+  .msg-head { font-size: 12px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--text-tertiary); }
+  .msg-body { font-size: 15px; line-height: 1.8; white-space: pre-wrap; }
+
+  /* ================ A:亮度波显影 ================ */
+  .vA .msg-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+  .vA .origin {
+    width: 7px; height: 7px; background: var(--accent); transform: rotate(45deg);
+    animation: ping 0.9s ease-out 1;
+  }
+  @keyframes ping {
+    0% { box-shadow: 0 0 0 0 rgba(0, 255, 65, 0.8); }
+    100% { box-shadow: 0 0 0 14px rgba(0, 255, 65, 0); }
+  }
+  .vA .msg-head .m-time { margin-left: auto; }
+  .vA .msg-head::after {
+    content: ''; height: 1px; background: var(--border);
+    flex: 0 1 120px; margin-left: 12px;
+    animation: growX 0.7s ease-out both;
+  }
+  @keyframes growX { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+  /* 逐行显影:先暗+微糊,波峰近白,落定磷光绿 */
+  .vA .ln { display: block; opacity: 0.1; filter: blur(2px); color: var(--text-tertiary); animation: develop 0.85s ease-out forwards; }
+  @keyframes develop {
+    0% { opacity: 0.1; filter: blur(2px); color: var(--text-tertiary); text-shadow: none; }
+    55% { opacity: 1; filter: blur(0); color: var(--bright); text-shadow: 0 0 12px rgba(194, 255, 217, 0.55); }
+    100% { opacity: 1; filter: blur(0); color: inherit; text-shadow: none; }
+  }
+  .vA .msg-code .ln { animation-duration: 1.1s; }
+
+  /* ================ B:电报穿孔带 ================ */
+  .vB .msg { display: grid; grid-template-columns: 14px 1fr; column-gap: 10px; }
+  .vB .rail { border-left: 1px solid var(--border); position: relative; }
+  .vB .msg-head { grid-column: 2; display: flex; align-items: baseline; gap: 8px; margin-bottom: 8px; }
+  .vB .msg-head .leader { flex: 1; border-bottom: 1px dotted rgba(29, 167, 84, 0.4); transform: translateY(-3px); }
+  .vB .rows { grid-column: 1 / -1; display: grid; grid-template-columns: 14px 1fr; column-gap: 10px; }
+  /* 每一行 = 一个孔位 + 一行内容;hover 行 → 孔位点亮 */
+  .vB .tick { border-left: 1px solid var(--border); position: relative; }
+  .vB .tick::after {
+    content: ''; position: absolute; left: -2.5px; top: 9px;
+    width: 4px; height: 4px; background: var(--text-tertiary); opacity: 0.5;
+    transition: opacity 0.15s, background 0.15s, box-shadow 0.15s;
+  }
+  .vB .row:hover .tick::after { opacity: 1; background: var(--accent); box-shadow: 0 0 7px rgba(0, 255, 65, 0.8); }
+  .vB .row:hover .cell { background: rgba(61, 255, 143, 0.04); }
+  .vB .cell { padding: 0 6px; transition: background 0.15s; }
+  /* 代码块 = 证物板:角钉 + 入场一次扫描 */
+  .vB .plate { position: relative; border: 1px solid var(--border); margin: 8px 6px; padding: 10px 12px 10px 14px; overflow: hidden; }
+  .vB .plate::before, .vB .plate::after {
+    content: ''; position: absolute; width: 8px; height: 8px; border: 1px solid var(--accent-muted);
+  }
+  .vB .plate::before { top: -1px; left: -1px; border-right: none; border-bottom: none; }
+  .vB .plate::after { bottom: -1px; right: -1px; border-left: none; border-top: none; }
+  .vB .plate .scan {
+    position: absolute; left: 0; right: 0; top: 0; height: 2px;
+    background: linear-gradient(90deg, transparent, rgba(194, 255, 217, 0.65), transparent);
+    animation: sweep 1s ease-in-out 0.2s 1 both;
+  }
+  @keyframes sweep { from { top: 0; opacity: 1; } to { top: 100%; opacity: 0; } }
+  .vB .plate-tag { font-size: 11px; letter-spacing: 0.2em; color: var(--text-tertiary); margin-bottom: 6px; }
+
+  /* ================ C:全息水印版 ================ */
+  .vC .msg { position: relative; padding: 18px 22px; animation: settle 0.7s ease-out both; }
+  @keyframes settle {
+    from { opacity: 0; transform: perspective(900px) rotateX(6deg) translateY(10px); }
+    to { opacity: 1; transform: none; }
+  }
+  /* 巨型描边标题水印(叙事字形层) */
+  .vC .watermark {
+    position: absolute; top: -6px; left: 8px; z-index: 0; pointer-events: none; user-select: none;
+    font-size: 74px; letter-spacing: 0.06em; line-height: 1;
+    color: transparent; -webkit-text-stroke: 1px rgba(61, 255, 143, 0.10);
+  }
+  .vC .msg-head { position: relative; z-index: 1; display: flex; margin-bottom: 12px; }
+  /* 竖排时间戳(右缘) */
+  .vC .m-time {
+    margin-left: auto; writing-mode: vertical-rl; letter-spacing: 0.3em; font-size: 11px;
+    color: var(--text-tertiary); border-right: 1px solid var(--border); padding-right: 6px;
+  }
+  .vC .msg-body { position: relative; z-index: 1; text-shadow: 0 1px 8px rgba(1, 10, 4, 0.9); }
+  /* 高亮词:入场 glitch 闪两下 */
+  .vC .hl { animation: flick 1.1s steps(2) 0.4s 2; }
+  @keyframes flick { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }
+  /* 代码块:全息片——角括 + 顶部 CODE 签 */
+  .vC .msg-code {
+    border-left: none; padding: 10px 12px; margin-top: 14px;
+    border: 1px solid var(--border); position: relative;
+    background: linear-gradient(160deg, rgba(61, 255, 143, 0.05), transparent 45%);
+    box-shadow: 0 0 22px rgba(0, 255, 65, 0.05);
+  }
+  .vC .msg-code::before {
+    content: 'CODE'; position: absolute; top: -7px; left: 10px;
+    background: #010a04; padding: 0 6px; font-size: 10px; letter-spacing: 0.3em; color: var(--text-tertiary);
+  }
+
+  /* ---------- 浮条(非设计对象) ---------- */
+  #switcher {
+    position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%); z-index: 99;
+    display: flex; align-items: center; gap: 12px;
+    background: #101010; border: 1px solid #444; border-radius: 999px;
+    color: #eee; padding: 7px 16px; font-family: ui-monospace, monospace; font-size: 12px;
+    box-shadow: 0 4px 18px rgba(0, 0, 0, 0.6);
+  }
+  #switcher button {
+    background: #222; color: #eee; border: 1px solid #555; border-radius: 50%;
+    width: 24px; height: 24px; cursor: pointer; font-size: 13px; line-height: 1;
+  }
+  #switcher button:hover { background: #333; }
+  #switcher .vlabel { min-width: 170px; text-align: center; }
+  #switcher .tag { color: #777; font-size: 10px; }
+  #replay { border-radius: 12px !important; width: auto !important; padding: 0 10px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+    .vA .ln { opacity: 1; filter: none; color: inherit; }
+  }
+</style>
+</head>
+<body>
+<div class="stage" id="stage"></div>
+
+<div id="switcher">
+  <span class="tag">PROTO · 3.1 消息块</span>
+  <button id="prev" title="←">‹</button>
+  <span class="vlabel" id="vlabel"></span>
+  <button id="next" title="→">›</button>
+  <button id="replay" title="重播入场">↻</button>
+</div>
+
+<script>
+  // mock 内容(handoff §3.1 的真实数据结构:text 段 + hl + 行内 code + 围栏代码块)
+  const TITLE = 'zion-core';
+  const TIME = '15:42:07';
+  const PARA_1 = '已读取 `palette.dto.ts`(68 行)。三个 DTO 结构完整,但【字段校验缺失】:`height` 与 `weight` 没有下限约束,负数会直接进入 `calcBMI()`。';
+  const PARA_2 = '建议补【边界校验】后再入库,示例:';
+  const CODE = `@IsInt() @Min(50) @Max(280)
+height: number;
+
+@IsInt() @Min(10) @Max(500)
+weight: number;`;
+
+  const VARIANTS = { A: '亮度波显影', B: '电报穿孔带', C: '全息水印版' };
+  const KEYS = Object.keys(VARIANTS);
+
+  // 把段落按句切成行(A 的逐行显影用),其余变体用整段
+  const para1Lines = ['已读取 <code>palette.dto.ts</code>(68 行)。三个 DTO 结构完整,',
+    '但<span class="hl">【字段校验缺失】</span>:<code>height</code> 与 <code>weight</code> 没有下限约束,',
+    '负数会直接进入 <code>calcBMI()</code>。'];
+
+  function renderA() {
+    const codeLines = CODE.split('\n');
+    return `
+      <div class="msg">
+        <div class="msg-head"><span class="origin"></span>${TITLE}<span class="m-time">${TIME}</span></div>
+        <div class="msg-body">
+          ${para1Lines.map((l, i) => `<span class="ln" style="animation-delay:${0.15 + i * 0.14}s">${l}</span>`).join('')}
+          <span class="ln" style="animation-delay:${0.15 + para1Lines.length * 0.14}s">${PARA_2.replace('【边界校验】', '<span class="hl">【边界校验】</span>')}</span>
+          <div class="msg-code">${codeLines.map((l, i) => `<span class="ln" style="animation-delay:${0.7 + i * 0.12}s">${l || ' '}</span>`).join('')}</div>
+        </div>
+      </div>`;
+  }
+
+  function renderB() {
+    const rows = [
+      `已读取 <code>palette.dto.ts</code>(68 行)。三个 DTO 结构完整,但<span class="hl">【字段校验缺失】</span>:`,
+      `<code>height</code> 与 <code>weight</code> 没有下限约束,负数会直接进入 <code>calcBMI()</code>。`,
+      `建议补<span class="hl">【边界校验】</span>后再入库,示例:`,
+    ];
+    return `
+      <div class="msg">
+        <div class="rail"></div>
+        <div class="msg-head">${TITLE}<span class="leader"></span><span class="m-time">${TIME}</span></div>
+        <div class="rows">
+          ${rows.map(r => `<div class="row" style="display:contents"><span class="tick"></span><div class="cell msg-body">${r}</div></div>`).join('')}
+          <div class="row" style="display:contents"><span class="tick"></span><div class="cell">
+            <div class="plate"><span class="scan"></span><div class="plate-tag">SPECIMEN · DTO</div><div class="msg-code" style="border:none;padding:0;margin:0">${CODE}</div></div>
+          </div></div>
+        </div>
+      </div>`;
+  }
+
+  function renderC() {
+    return `
+      <div class="msg">
+        <span class="watermark">${TITLE}</span>
+        <div class="msg-head">${TITLE}<span class="m-time">${TIME}</span></div>
+        <div class="msg-body">${PARA_1
+            .replace('【字段校验缺失】', '<span class="hl">【字段校验缺失】</span>')}
+
+${PARA_2.replace('【边界校验】', '<span class="hl">【边界校验】</span>')}
+          <div class="msg-code">${CODE}</div>
+        </div>
+      </div>`;
+  }
+
+  const RENDER = { A: renderA, B: renderB, C: renderC };
+
+  const params = new URLSearchParams(location.search);
+  let current = KEYS.includes(params.get('variant')) ? params.get('variant') : 'A';
+
+  function go(v) {
+    current = v;
+    const url = new URL(location.href);
+    url.searchParams.set('variant', v);
+    history.replaceState(null, '', url);
+    document.getElementById('vlabel').textContent = `${v} — ${VARIANTS[v]}`;
+    const stage = document.getElementById('stage');
+    stage.className = `stage v${v}`;
+    stage.innerHTML = RENDER[v]();
+  }
+  const cycle = (d) => go(KEYS[(KEYS.indexOf(current) + d + KEYS.length) % KEYS.length]);
+
+  document.getElementById('prev').onclick = () => cycle(-1);
+  document.getElementById('next').onclick = () => cycle(1);
+  document.getElementById('replay').onclick = () => go(current); // 重挂载 = 重播入场
+  window.addEventListener('keydown', (e) => {
+    const tag = document.activeElement?.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+    if (e.key === 'ArrowLeft') cycle(-1);
+    if (e.key === 'ArrowRight') cycle(1);
+  });
+
+  go(current);
+</script>
+</body>
+</html>
