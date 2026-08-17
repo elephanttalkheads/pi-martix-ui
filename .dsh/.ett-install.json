@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 4,
+  "layout": "flat",
+  "packageName": "@elephantalker/claude-code-toolkit",
+  "pluginName": "ett",
+  "version": "0.22.0",
+  "skills": [
+    "project-docs"
+  ],
+  "agents": [
+    "deepseek-harness"
+  ],
+  "sourceBaselines": {},
+  "roots": [
+    {
+      "path": ".dsh/skills/ett-doc-update",
+      "managedFiles": {
+        "SKILL.md": "76c126b93bc3a461238ca1f04ef668762118a547799a91e248b3f11d1f66587e"
+      }
+    },
+    {
+      "path": ".dsh/skills/ett-doc-update-lite",
+      "managedFiles": {
+        "SKILL.md": "449e935336ada4f7ac0b43ce847134cf3b95362250356fadab815f6682713959"
+      }
+    },
+    {
+      "path": ".dsh/skills/ett-init",
+      "managedFiles": {
+        "SKILL.md": "0099959d5c8ff7d12bd2f0f8558bd224df3c446de4cd49ccd833d5a20aae56d2"
+      }
+    },
+    {
+      "path": "eccToolkit",
+      "managedFiles": {
+        "LICENSE": "fba3397bb675f6bf0802870108c926e2fd6536b505b1482e48c6b72942d58640",
+        "references/project-docs.md": "d8e22719f15795f41f5e660b6e1b2cc32d7f8a59366c926524352089a5df369d",
+        "references/quality-criteria.md": "cacfbab689c292acb90dc0f547225a571ae85bd6b68fc9d36217abb31955aa8f",
+        "runtime/docs.mjs": "b517ada25b79602e0e1ec929745198da518f8ddf54b2e5080f8200ab3dd70a68",
+        "templates/module-AGENTS.md": "471bbc5bab815360d4eab4d2063aa9d108d84391fc3568bbedf393a6c52a84e6",
+        "templates/module-DESIGN.md": "a202a8a45b2957e1e0be40928fb3fcaa62978a8432bbce962082865eae7b1eff"
+      }
+    }
+  ]
+}

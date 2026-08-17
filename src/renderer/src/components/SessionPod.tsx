@@ -2,7 +2,7 @@ import { useEffect, useRef, type FocusEvent, type KeyboardEvent, type PointerEve
 import type { SessionInfoLike } from '../../../shared/protocol';
 import type { PodCableTarget } from '../neuralCable';
 import podClosed from '../assets/session-pod-horizontal-closed.png';
-import podOpen from '../assets/session-pod-horizontal-open.png';
+import podDamaged from '../assets/session-pod-horizontal-damaged.png';
 
 type SessionPodProps = {
   session: SessionInfoLike;
@@ -89,7 +89,7 @@ export default function SessionPod({
     >
       <span className="pod-visual" aria-hidden="true">
         <img ref={closedImageRef} className="pod-frame pod-frame-closed" src={podClosed} alt="" draggable={false} />
-        <img ref={openImageRef} className="pod-frame pod-frame-open" src={podOpen} alt="" draggable={false} />
+        <img ref={openImageRef} className="pod-frame pod-frame-open" src={podDamaged} alt="" draggable={false} />
       </span>
 
       <span className="pod-nameplate">
