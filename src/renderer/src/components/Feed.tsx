@@ -202,7 +202,6 @@ const TurnView = memo(function TurnView({
   streaming: boolean;
 }) {
   const turn = useFeed((s) => s.turns[id]);
-  const sessionTitle = useFeed((s) => s.sessionTitle);
   if (!turn) return null;
 
   if (turn.kind === 'operator') {
@@ -255,12 +254,8 @@ const TurnView = memo(function TurnView({
         }
         return (
           <div key={entry.id} className="msg agent">
-            <div className="msg-head">
-              <span className="origin" aria-hidden="true" />
-              <span>{sessionTitle}</span>
-              <span className="m-time">{entry.time}</span>
-            </div>
-            {/* 亮度波显影（3.1A）：段 mount 时播一次（流式追加直出，写入头叙事归字形蛾） */}
+            {/* 亮度波显影（3.1A）：段 mount 时播一次（流式追加直出，写入头叙事归字形蛾）；
+                agent 段无 msg-head——会话名只在输入框上方微簇显示（◆ 标题），不逐段重复 */}
             <div className={`msg-body${turn.historical ? '' : ' develop'}`}>
               <Body text={entry.text} />
               {turn.interrupted && entry.id === lastTextId && <AbortedMark />}

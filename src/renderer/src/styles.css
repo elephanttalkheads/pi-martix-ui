@@ -499,19 +499,8 @@ body {
   font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase;
   margin-bottom: 6px; color: var(--text-tertiary);
 }
-/* 信号源菱形（3.1A）：段入场时 ping 一圈——回复是从模拟层显影出来的「传输件」 */
-.msg-head .origin {
-  flex: none; width: 7px; height: 7px;
-  background: var(--accent); transform: rotate(45deg);
-  animation: originPing 0.9s ease-out 1;
-}
-@keyframes originPing {
-  0% { box-shadow: 0 0 0 0 rgba(0, 255, 65, 0.8); }
-  100% { box-shadow: 0 0 0 14px rgba(0, 255, 65, 0); }
-}
 .msg.user { margin-left: auto; }
 .msg.user .msg-head { justify-content: flex-end; }
-.msg.agent .msg-head { color: var(--accent-muted); }
 .msg-head .m-time { margin-left: auto; letter-spacing: 0.05em; text-transform: none; color: var(--text-tertiary); }
 .msg-body { font-size: 15px; line-height: 1.8; white-space: pre-wrap; word-break: break-word; color: var(--text-primary); }
 /* 亮度波显影（3.1A）：段 mount 播一次——暗+微糊就位 → 波峰近白 → 落定磷光绿；
@@ -834,7 +823,7 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .msg, .msg-body.develop, .msg-head .origin, .trace, .diff, .settle, .settle .tape, .rail .seal,
+  .msg, .msg-body.develop, .trace, .diff, .settle, .settle .tape, .rail .seal,
   .dl, .dl .ln-code, .caret, .think.streaming .eeg, .think.streaming .eeg path { animation: none; }
   /* 无动画时的终态补偿：校验环直接闭合、EOL 常亮、焦化删行保持余烬 */
   .diff .ring rect { stroke-dashoffset: 0; animation: none; }

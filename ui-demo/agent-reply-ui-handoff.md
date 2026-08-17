@@ -76,10 +76,10 @@ agent 回合数据形状（store.ts）：
 | 项 | 值 |
 |---|---|
 | 代码 | Feed.tsx（agent text 分支）；样式 styles.css `.msg` 段 |
-| 出现时机 | agent 回合内**每个 text 段**一条（左对齐，头部显示 `sessionTitle`） |
-| 内容 | 头部（`.msg-head`：信号源菱形 `.origin` + label + `.m-time` 时间戳 HH:MM）+ 正文（`.msg-body`） |
-| 样式 | `.msg` margin-bottom 20px、max-width 820px、`blockIn` 入场；`.msg-head` 12px uppercase 0.14em 字距；`.msg-body` **15px**、行高 1.8、pre-wrap |
-| 显影 | 段 mount 播一次亮度波显影（`.develop` 0.85s：暗+微糊就位 → 55% 波峰近白 → 落定磷光绿）；**流式追加不重播**（元素持久，动画只跑一次）；`.origin` 菱形 ping 0.9s 一圈。历史回合（`.turn-agent.historical`）不播 |
+| 出现时机 | agent 回合内**每个 text 段**一条（左对齐） |
+| 内容 | 纯正文（`.msg-body`）——**无 msg-head**：会话名只在输入框上方微簇（`.mi-title` ◆ 标题）显示，不逐段重复 |
+| 样式 | `.msg` margin-bottom 20px、max-width 820px、`blockIn` 入场；`.msg-body` **15px**、行高 1.8、pre-wrap |
+| 显影 | 段 mount 播一次亮度波显影（`.develop` 0.85s：暗+微糊就位 → 55% 波峰近白 → 落定磷光绿）；**流式追加不重播**（元素持久，动画只跑一次）。历史回合（`.turn-agent.historical`）不播 |
 | 子元素 | `.hl`（【高亮词】→ `--bright`）、行内 `code`（13px、`rgba(61,255,143,0.08)` 底 + 1px border）、`.msg-code`（``` 围栏代码块：13px、左侧 1px 弱线、无背景无边框） |
 
 ### 3.2 思考块 `.think`（agent 思维链）—— 脑波褶（3.2A，已落地）
