@@ -95,10 +95,37 @@ const MOCK_COMMANDS: CommandItem[] = [
 ];
 
 /** mock 回复：按输入生成一句话 + 一个工具动作 */
-function mockReply(text: string): { text: string; tool: { name: string; args: Record<string, unknown>; result: string } } {
+function mockReply(text: string): {
+  text: string;
+  think?: string;
+  tool: { name: string; args: Record<string, unknown>; result: unknown };
+} {
   const t0 = text.trim();
+  if (t0.startsWith('改') || t0.includes('edit') || t0.includes('修改')) {
+    // 编辑场景：edit 工具 + edits[]（触发蠕虫 → 命中 → 烧录显影 diff 卡全链验证）
+    return {
+      think: '用户要给 main.ts 补校验——先确认字段边界\nheight/weight 都是 int，业务合理域 50–280 / 10–500\n用现成的 clamp 组合即可，不引入新依赖\n保持与现有代码风格一致\n给出补丁，不改核心逻辑本身',
+      text: '已读取 `src/main.ts`（68 行）。结构完整，但【字段校验缺失】：`height` 与 `weight` 没有下限约束。补丁已写入：\n\n```ts\nconst height = clamp(raw.height, 50, 280);\nconst weight = clamp(raw.weight, 10, 500);\n```\n\n共 +5 −4。',
+      tool: {
+        name: 'edit',
+        args: {
+          file: 'src/main.ts',
+          edits: [
+            {
+              oldText: 'height: number;\n\nweight: number;',
+              newText: '@IsInt() @Min(50) @Max(280)\nheight: number;\n\n@IsInt() @Min(10) @Max(500)\nweight: number;',
+            },
+          ],
+        },
+        result: {
+          patch: '@@ -41,4 +41,6 @@\n height: number;\n-\n-weight: number;\n+@IsInt() @Min(50) @Max(280)\n+height: number;\n+\n+@IsInt() @Min(10) @Max(500)\n+weight: number;',
+        },
+      },
+    };
+  }
   if (t0.startsWith('读取') || t0.includes('.txt') || t0.includes('.html') || t0.startsWith('read')) {
     return {
+      think: '先定位文件再读全文\n核对色值逐行比对',
       text: '已读取文件内容（mock 演示数据）：\n\n```html\n<!DOCTYPE html>\n<html lang="zh-CN">\n<head>\n  <meta charset="UTF-8">\n  <title>01.html</title>\n</head>\n<body>\n  <h1>Hello Matrix</h1>\n</body>\n</html>\n```\n\n共 11 行。',
       tool: { name: 'read', args: { file: 'D:/zion-workspace/palette-verify.txt' }, result: 'line-one\nPALETTE-VERIFY-2\nNEW-LINE-3\n绕口令：四是四，十是十，十四是十四，四十是四十。\n吃葡萄不吐葡萄皮，不吃葡萄倒吐葡萄皮。' },
     };
@@ -130,13 +157,28 @@ function createMock(): ZionAPI {
     aborted = false;
     const reply = mockReply(text);
     const toolId = `mock-tool-${t()}`;
+    let at = 0;
     push(ev('agent_start'));
-    after(120, () => push(ev('tool_execution_start', { toolCallId: toolId, toolName: reply.tool.name, args: reply.tool.args })));
-    after(260, () => push(ev('message_update', { message: { id: `mock-msg-${t()}` }, assistantMessageEvent: { type: 'text_delta', delta: reply.text } })));
-    after(620, () => push(ev('tool_execution_end', { toolCallId: toolId, toolName: reply.tool.name, isError: false, result: reply.tool.result })));
-    after(760, () => push(ev('message_end', { message: { id: `mock-msg-${t()}`, role: 'assistant', stopReason: 'ok' } })));
-    after(800, () => push(ev('agent_end')));
-    after(840, () => push(ev('agent_settled')));
+    // 思考段（脑波褶验证）：thinking_delta 先行
+    if (reply.think) {
+      at += 100;
+      after(at, () => push(ev('message_update', { message: { id: `mock-msg-${t()}` }, assistantMessageEvent: { type: 'thinking_delta', delta: reply.think } })));
+    }
+    at += 120;
+    after(at, () => push(ev('tool_execution_start', { toolCallId: toolId, toolName: reply.tool.name, args: reply.tool.args })));
+    at += 140;
+    after(at, () => push(ev('message_update', { message: { id: `mock-msg-${t()}` }, assistantMessageEvent: { type: 'text_delta', delta: reply.text } })));
+    at += 500;
+    after(at, () => push(ev('tool_execution_end', { toolCallId: toolId, toolName: reply.tool.name, isError: false, result: reply.tool.result })));
+    at += 120;
+    // usage（结算行 tok + 微簇 ctx 条）
+    after(at, () => push(ev('turn_end', { message: { usage: { totalTokens: 1832, input: 12400 } } })));
+    at += 40;
+    after(at, () => push(ev('message_end', { message: { id: `mock-msg-${t()}`, role: 'assistant', stopReason: 'ok' } })));
+    at += 40;
+    after(at, () => push(ev('agent_end')));
+    at += 40;
+    after(at, () => push(ev('agent_settled')));
   };
 
   const itemsFor = (id: string): SessionHistoryItem[] => MOCK_ITEMS[id] ?? [];

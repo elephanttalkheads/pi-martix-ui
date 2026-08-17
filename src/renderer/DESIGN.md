@@ -2,7 +2,7 @@
 
 ## 目标与非目标
 
-**目标**：把 pi SDK 会话事件流渲染为黑客帝国风 UI——v4 四区骨架 + v5 回合化会话区（回合聚合消息流 + 凝结雨轨 / 思考块折叠 / 结算行 / 注入解码 / 液态玻璃）+ 4 态会话状态机 + 三件装饰（单层数字雨 / 轻扫描线 / 蠕虫入侵+Neo 头像）+ 会话脑机链路 + WebAudio 程序化音效；会话列表、文件树、历史恢复、项目选择面板（最近项目 / 原生目录浏览 → 切换工作目录与会话上下文）、扩展对话框（`ctx.ui` 的 confirm/select/input → AskDialog 弹层）与扩展通知（notify → toast）、模态弹层家族（ZionModal：模型选择 / 设置 / 快捷键速查，runCommand `data.open` 数据驱动触发）走真实 IPC；纯浏览器调试桥（`mockBridge.ts`：无 preload 时注入 mock ZionAPI，prompt 经真实事件派发路径，UI 全功能可演示）。
+**目标**：把 pi SDK 会话事件流渲染为黑客帝国风 UI——v4 四区骨架 + 回合化会话区（回合聚合消息流 + agent 回复重构：亮度波显影 / 脑波褶 / 机械继电器 / 烧录显影 / 封存带 / 字形蛾，选型见 `ui-demo/plan/ui-proto-variants.md`；雨轨维持凝结数字雨）+ 4 态会话状态机 + 三件装饰（单层数字雨 / 轻扫描线 / 蠕虫入侵+Neo 头像）+ 会话脑机链路 + WebAudio 程序化音效；会话列表、文件树、历史恢复、项目选择面板（最近项目 / 原生目录浏览 → 切换工作目录与会话上下文）、扩展对话框（`ctx.ui` 的 confirm/select/input → AskDialog 弹层）与扩展通知（notify → toast）、模态弹层家族（ZionModal：模型选择 / 设置 / 快捷键速查，runCommand `data.open` 数据驱动触发）走真实 IPC；纯浏览器调试桥（`mockBridge.ts`：无 preload 时注入 mock ZionAPI，prompt 经真实事件派发路径，UI 全功能可演示）。
 
 **非目标**：不定义 IPC 契约（`src/shared/protocol.ts` 类型与主进程是事实源）；不提供 Node/凭据能力（隔离在 preload 白名单之后）；不实现扩展对话框的 Promise 表/超时/AbortSignal 兜底（主进程 `src/main/uibridge.mjs` 是事实源）——本模块只消费 `UiAsk`/`UiNotify` 类型与 `uiAnswer`/`onUiAsk`/`onUiNotify` 桥面；不实现项目切换的主进程语义（`WORKSPACE_DIR` 变更、旧会话 dispose、`~/.pi/agent/zion-projects.json` 持久化在 `src/main/main.mjs`）——本模块只消费 `listProjects`/`browseProject`/`switchProject` 桥面；不做完整 markdown 渲染（仅围栏 + 行内 code/高亮子集，语法边界见「正文解析」）；不实现主进程主动弹窗（弹层只经 runCommand 结果 `data.open` 打开，无独立事件通道，ADR-0005 决策 2）；AskDialog/ProjectPanel 不迁移到 ZionModal 壳（ADR-0005 决策 1，维持现状）。
 
@@ -14,7 +14,7 @@
 - 区1 标题栏 `.titlebar`（36px）：品牌 + 时钟
 - 区2 侧栏 `.sidebar`（`width: var(--side-w, 232px)`，默认 232，可拖拽调宽；整栏不滚动且 `position: relative; isolation: isolate` 承载共享全息层与本地动态 SVG 链路层）：`.core-wrap`（Neo 头像，固定）→ `.side-section.sessions`（高度 `clamp(244px, 36vh, 320px)`：三等高培育仓槽位 `.deck` 内部滚动）→ `.side-section.projects`（flex 3：`.side-head` 标题行 = 项目 basename（全路径在 title 属性）+「⇄ 切换项目」按钮 + 文件树 `#file-tree` 内部滚动）→ `.side-foot`（固定，workspace 文案）
 - 区2.5 `.side-resizer`（8px 拖拽热区，`margin: 0 -4px` 视觉零宽、伸出两侧各 4px 命中区，WAI-ARIA separator，机制见下「侧栏调宽」）——`.main`（flex 行）内位于 Sidebar 与 `.console` 之间
-- 区3 对话区 `.console`：`#feed` + `.inputbar`（顶部微簇状态条 `.micro`：模型/ctx 胶囊/思考强度/状态）
+- 区3 对话区 `.console`：`#feed` + `.inputbar`（顶部微簇状态条 `.micro`：◆ 会话标题 + 模型 / ctx 占用条+百分比 / 思考强度 / 状态，缺数据显示 `--`）
 - 区4 `.term` 日志抽屉（默认 height:0，展开 150px）+ `.statusbar`（26px，SND 开关 / DEC 开关 / 日志按钮 / `tokens:` 真实 usage 计数）
 
 **侧栏调宽**（App.tsx + styles.css）：热区独立条而非 sidebar 子元素——`.sidebar` 的 `overflow: hidden` 会裁剪伸出边界的子元素，且独立条不盖内部滚动条（styles.css 注释明示）。
@@ -26,7 +26,7 @@
 **文件树实时监听**（Sidebar + store.ts）：mount 时除初始 `scanTree`/`listSessions` 外订阅 `onTreeChanged`（主进程 fs.watch 防抖重扫后推送整树快照，未订阅则消息丢弃——watcher 机制属 src/main 模块，此处只记消费侧）。收到推送 `setTree(mergeTreeOpen(旧树, 新树))`：`mergeTreeOpen` 是 store 纯函数，新树中同路径目录若旧树 `open` → 保持展开，其余以新树为准——实时推送不重置用户展开态；卸载时退订（`offTree?.()`）。
 
 **事件→状态管线**（`useAgentEvents`，App.tsx 单一订阅点；退订函数在 effect cleanup 调用；所有 store 写入经队列 API 入队，见「回合聚合模型与渲染队列」）：
-- `agent_start` → `armTurn`（回合起点，队列化保序）+ RUNNING（重置 replyScheduled/errored）
+- `agent_start` → `armTurn`（回合起点，队列化保序）+ RUNNING（重置 replyScheduled/errored）+ `refreshSessionMeta`（微簇 meta 廉价刷新点；启动与弹层关闭亦刷新，App 模块级函数，桥未注入静默跳过）
 - `message_update`（text_delta / thinking_delta）→ `queueDelta(delta, kind)` + STREAMING
 - `tool_execution_start` → `toolStart` 入队 + RUNNING + 编辑类调用触发蠕虫
 - `tool_execution_end` → `toolEnd`（写 dur、状态 ok/err、尝试 result.patch 升级）；闭环后到达的迟到事件倒序扫回合回退匹配；err → SND.abort，ok → SND.step
@@ -37,21 +37,21 @@
 
 **回合聚合模型与渲染队列**（store.ts）：feed 数据不再是平铺 FeedItem 数组，而是 `turns`（id→Turn）+ `order`（渲染序）+ `activeTurnId`。Turn 分两类：`operator`（一次用户输入）与 `agent`（agent_start→闭环的执行周期）；agent 回合的 `content` 按到达顺序保序存放内容段（`text`/`thinking`）与工具条目（`tool`）。agent 事件经 IPC 逐条到达（每条一个宏任务），store 把它们攒进模块级 op 队列（`arm`/`delta`/`toolStart`/`toolEnd`/`usage`/`interrupt`/`close`），rAF 时 `_flush` 一次应用：每帧至多一次 `set()`，且只替换活动回合对象（`edit()` 首次访问克隆换引用，`ensureTurn()` 在 armed 或无活动回合时新建）——这是 TurnView 回合级 memo 的前提，历史回合零重渲染。`pushUser` 先同步 `flushNow`（OPERATOR 回合落在正确位置）；`applySession`/`reset` 清队防跨会话污染。
 
-**回合内容与结算行**（Feed.tsx TurnView）：`order.map` 渲染 TurnView（memo），`active`/`streaming` 只对活动回合为真。operator 回合右对齐（OPERATOR 头 + 注入解码）；agent 回合 `.turn-agent`：`TurnRail` + content 逐条渲染——`tool` → ToolCard（工具链块 + diff 卡，revealedEdits 门控）、`thinking` → `<details class="think">` 默认折叠（「思路」摘要，流式中显示「· 思考中…」）、`text` → `.msg.agent`（Body 解析，语法见「正文解析」；中断标记 `[已被操作员中断]` 落最后一个 text 段；caret 落末 entry）。闭环写结算行 `.settle`：`◆ 已结算/已中断/错误 · N tools · Σtokens · 耗时`——tokens 为回合内各 turn_end usage 求和（`seenUsage=false` 时显示 null），耗时为 `agent_start`→闭环的渲染层实测（performance.now，非 SDK 计时）；outcome 判定：`closeTurn('error')` → error，有 `interrupted` 标记 → interrupted，否则 ok；`!cur.settle` 守卫保证每回合至多一条。
+**回合内容与结算行**（Feed.tsx TurnView）：`order.map` 渲染 TurnView（memo），`active`/`streaming` 只对活动回合为真。operator 回合右对齐（OPERATOR 头 + 注入解码）；agent 回合 `.turn-agent`：`TurnRail` + content 逐条渲染——`tool` → ToolCard（机械继电器导轨 + diff 卡，revealedEdits 门控）、`thinking` → `<details class="think">` 默认折叠（脑波褶：summary 旁 EEG 折线，streaming 末段流动 + 「· 思考中…」；思考体按行切片，末 5 行 1→0.38 反向沉降梯度）、`text` → `.msg.agent`（Body 解析，语法见「正文解析」；段 mount 播一次亮度波显影 `.develop`，流式追加直出；中断标记 `[已被操作员中断]` 乱码逐位锁定入场、落最后一个 text 段；流式光标 = 字形蛾 MothCaret，落末 entry）。闭环写结算行 `.settle`（封存带）：`◆ + 封存带（已结算/已中断/错误 · N tools · Σtokens · 耗时）+ EOL 方块`——tokens 为回合内各 turn_end usage 求和（`seenUsage=false` 时显示 null），耗时为 `agent_start`→闭环的渲染层实测（performance.now，非 SDK 计时）；outcome 判定：`closeTurn('error')` → error，有 `interrupted` 标记 → interrupted，否则 ok；`!cur.settle` 守卫保证每回合至多一条。中断/错误版带尾撕裂锯齿、无 EOL。历史重建回合（`turn.historical`，applySession 标记）经 `.turn-agent.historical` CSS 压掉全部入场编舞，直接终态。
 
 **正文解析**（markdown.ts `parseBody` 纯函数，Feed Body / OperatorBody 解码完成后共用）：```（或 ~~~）围栏代码块 + 行内 `code` /【高亮词】；围栏开行可带语言标签（`lang` 只解析不展示）、未闭合宽容到文末、代码块内不做行内解析。代码块渲染为 `.msg-code` `<pre>`——简约样式（无边框无背景，唯一锚点是左侧 1px 弱线，与正文区分但保持密度）；markdown.test.mjs 覆盖 8 用例。
 
-**凝结雨轨**（TurnRail.tsx）：活动回合左侧 `.rail`（`pointer-events: none`——纯装饰轨道，不拦截拖选/点击）内 2 列迷你数字雨 canvas，帧节流 `90/fx.speed`（与背景雨同一折算，直接读 `fx`）；回合闭环后组件卸载 canvas、凝为 ◆（`.seal`，rAF 立即停——长会话零常驻开销）；reduced-motion 只画一帧静态雨；`aria-hidden`，纯装饰不承载业务（见 CONTEXT.md「凝结雨轨」）。
+**凝结雨轨**（TurnRail.tsx）：活动回合左侧 `.rail`（`pointer-events: none`——纯装饰轨道，不拦截拖选/点击）内 2 列迷你数字雨 canvas，帧节流 `90/fx.speed`（与背景雨同一折算，直接读 `fx`）；回合闭环后组件卸载 canvas、凝为 ◆（`.seal`，rAF 立即停——长会话零常驻开销）；reduced-motion 只画一帧静态雨；`aria-hidden`，纯装饰不承载业务（见 CONTEXT.md「凝结雨轨」）。（3.6C 磁带纹变体曾落地，已退回本形态——原型存档 `ui-demo/agent-reply-rail-proto.html`。）
 
 **注入解码**（Feed.tsx OperatorBody）：OPERATOR 消息入场时假名乱码逐位还原（时长 `min(700, 240+字符数*6)`ms，空格/换行保留；解码期间纯文本渲染，完成后交 Body 做 code/高亮/围栏解析）；只入场播一次（text/decOn 变化不重播）；DEC 关闭或 reduced-motion 直接 Body；开关 `decOn` 持久化 `zion.dec`（见 CONTEXT.md「注入解码」）。
 
-**液态玻璃分级**（styles.css）：工具卡/diff 卡为「agent 凝结出的实体」——静态态半透明磷光底 + 顶边镜面高光/底边折射暗线（无 blur 开销）；`backdrop-filter: blur(9px) saturate(1.25) brightness(1.05)` 只开 `.turn-agent.is-active` 内的卡（性能分级：长会话任意时刻 blur 卡数 ≤ 活动回合卡数）；工具收尾（run→ok/err）挂载 `.ripple` 凝结涟漪（0.7s 一次性动画，reduced-motion 关闭）。
+**机械继电器与烧录显影**（styles.css）：工具卡为 DIN 导轨（`.trace.track`，上下缘线 + 34px 凹槽纹理）上的继电器单元（`.unit`）——触点 LED 三态（run 琥珀线圈呼吸 `coil` / ok 绿 + `clack` 冲击波 / err 红）+ 数码管耗时读数（`.dur`），点击展开铆钉参数抽屉（`.trace-expand` 参数全文）；diff 卡为烧录显影——新增行逐行白热闪光冷却成绿（`burn`/`cool`，90ms 阶梯、封顶 30 行）、删除行焦化红闪落 45% 余烬（`char`），全部落定后 `.ring` 校验环自绘一周（SVG `pathLength=400` + `vector-effect` 与像素尺寸解耦，delay 由封顶行数推导）。所有入场动画基态 = 终态：`.turn-agent.historical`（历史重建）与 reduced-motion 压掉动画即为最终呈现，无需补偿帧。旧液态玻璃/`.corner`（trace/diff 上）/`.ripple` 涟漪已退役（`.corner` 仍供 AskDialog/ProjectPanel 等弹层使用）。
 
 **FX 派生**：`setSessionState` 同步 `Object.assign` 到模块级 `fx` 对象（READY `{speed:1, energy:0.3}` / 忙碌 `{speed:2.2, energy:0.85}`）；RainCanvas 与 TurnRail（均 `90/fx.speed` 帧节流）直接读取，不触发 React 渲染。侧栏顶部为 Vite import 的透明 Neo 双帧 PNG（120×120，容器无底板/描边）；张嘴仅由蠕虫释放驱动（store `wormActive` 计数 > 0，`releaseWorm` 开始 +1、done -1），CSS 以 300ms `steps(1,end)` 在闭嘴/张嘴间切换，释放瞬间附带 700ms 缩放脉冲，reduced-motion 下停在静态张嘴帧且不脉冲。
 
 **启动恢复**（App useEffect，`window.zion?.getCurrentSession` 守卫——桥未注入直接 return 优雅降级）：`getCurrentSession` → `listSessions` → 标题经 `deriveSessionTitle`（title.ts 纯函数，规则见「设计决策与权衡」）→ `applySession(id, title, items)` 以历史重建回合 feed（仅文本段：user→operator 回合、assistant→agent 回合单 text 段；回合 time 取 `h.ts` 经 `fmtTime` 格式化（HH:MM，无 ts 回落当前时刻）——与实时回合 `msgTime` 同一格式化；无工具卡/结算行，`startedAt=0` 不计时）+ `setSessions` + `getProject` → `setCurrentProject`（侧栏 Project 标题）→ `listProjects` 判空：无最近项目 → `setProjectOpen(true)` 自动打开项目选择面板（启动引导，ADR-0003 决策 3）。
 
-**浏览器调试桥**（mockBridge.ts + main.tsx）：`installMockBridge()` 在 `window.zion` 缺失时（浏览器直开 vite dev、无 Electron preload）注入 mock ZionAPI，有桥（Electron 打包）检测后直接跳过，不影响生产。mock 数据按项目维度写死（`MOCK_SESSIONS`/`MOCK_ITEMS`/`MOCK_TREE`/`MOCK_PROJECTS`/`MOCK_COMMANDS`）；`prompt` 按输入生成模板回复，经 setTimeout 按真实时序派发 `agent_start → tool_execution_start → message_update(text_delta) → tool_execution_end → message_end → agent_end → agent_settled`（`abort` 置位后未触发的派发全部取消）——事件经 `onAgentEvent` 真实派发路径，feed 流式渲染与事件管线零改动。`browseProject` 浏览器无原生对话框，轮换到下一个 mock 项目模拟选择；`runCommand` 为 no-op（日志 + info toast，返回 `{ok:true, kind:'info'}`——`MOCK_COMMANDS` 已对齐真实内置命令清单，但命令不真正执行；弹层类命令 model/settings/hotkeys 额外 `openModal(open)`（无载荷），浏览器调试可验证弹层交互流）；`onUiAsk`/`onUiNotify` 为空实现（无扩展弹层演示数据）。
+**浏览器调试桥**（mockBridge.ts + main.tsx）：`installMockBridge()` 在 `window.zion` 缺失时（浏览器直开 vite dev、无 Electron preload）注入 mock ZionAPI，有桥（Electron 打包）检测后直接跳过，不影响生产。mock 数据按项目维度写死（`MOCK_SESSIONS`/`MOCK_ITEMS`/`MOCK_TREE`/`MOCK_PROJECTS`/`MOCK_COMMANDS`）；`prompt` 按输入生成模板回复（编辑/读取场景另带 `think` 思考段；编辑场景带 `edits[]` + `result.patch`，蠕虫→烧录显影全链可验证），经 setTimeout 按真实时序派发 `agent_start → message_update(thinking_delta，可选) → tool_execution_start → message_update(text_delta) → tool_execution_end → turn_end(usage 1832 / input 12400) → message_end → agent_end → agent_settled`（`abort` 置位后未触发的派发全部取消）——事件经 `onAgentEvent` 真实派发路径，feed 流式渲染与事件管线零改动。`getSessionMeta` 返回固定 meta（deepseek-chat / 128000 / high，微簇演示）；`browseProject` 浏览器无原生对话框，轮换到下一个 mock 项目模拟选择；`runCommand` 为 no-op（日志 + info toast，返回 `{ok:true, kind:'info'}`——`MOCK_COMMANDS` 已对齐真实内置命令清单，但命令不真正执行；弹层类命令 model/settings/hotkeys 额外 `openModal(open)`（无载荷），浏览器调试可验证弹层交互流）；`onUiAsk`/`onUiNotify` 为空实现（无扩展弹层演示数据）。
 
 **会话切换/新建/重命名/删除**（Sidebar + SessionPod）：`.deck` 固定三等高槽并按槽吸附滚动；每仓保留 `.scard` 查询类，外层 `role="button"`，点击/Enter/Space 调 `selectSession` → `switchSession`（主进程懒创建实例，可能秒级；`switching` 锁防并发）→ `applySession`；`newSession` 同理；失败走 `log('err')`。中央名称牌常驻，标题统一走 `deriveSessionTitle`，编号为列表索引 + 1；只有名称牌 hover/focus 时展示等高的重命名/删除按钮。Sidebar 持有唯一 `preview`，仓 hover/focus 时按 anchor/sidebar rect 测量共享 `.session-hologram-layer`，显示标题与 `firstMessage` 第一条非空行（无内容显示「尚无会话内容」）；离开/真正离焦/列表滚动立即隐藏。重命名：`startRename` 以当前显示标题为草稿，名称牌中央替换为 `.s-title-edit`，Enter/blur 提交 `commitRename`、Esc 取消；`renameSession` → `setSessions`，当前会话另 `setSessionTitle(name)`（只改标题，不重置 feed）。删除：`askDelete` 两段确认——首击进入待确认态（2.5s 自动复位），此时才由 closed 帧切到 open 帧；再击先清待确认态再 `doDelete` → `deleteSession`（软删，移入 `.trash` 可恢复）→ `setSessions`；删除的是当前会话时主进程指针已落最近会话，`getCurrentSession` 重拉 + `applySession`（标题取新列表匹配，兜底短码）。点文件树行 → `pushUser` + `window.zion.prompt('读取 <path>')`（真实 prompt，无假动画）。
 
@@ -92,7 +92,7 @@
 - `tool_execution_start` → `parseEditFromTool`：编辑工具集合 `edit/apply_patch/write/multi_edit/patch/batch_execute`；bash 走写操作启发式（echo/printf 提取文本；目标按重定向 `>>`/`>`（排除 2>&1）→ `sed -i` → `tee` → `cp` → `mv` → `touch` 顺序取，`/dev/null`、`nul` 排除）；`batch_execute` 取首个可解析命令。
 - 触发链：`triggerWorm`（同步路径，`wormedRef` 按 toolCallId 去重）→ `normPath`（`\`→`/`、去盘符）→ `matchTreeRow`（`.ft-row[data-path]` 精确或互为后缀）→ 未命中则 `scanTree` 刷新 → `openAncestors` 展开祖先 → 双 rAF 等渲染完成后重试 → 兜底 `.trace[data-toolcall=<id>]` 块行。
 - 动画（`releaseWorm`）：Neo 头像嘴部（`.neo-avatar` rect × `MOUTH_X/MOUTH_Y` 比例点）→ L 形路径（先垂直后水平，8px 采样）→ TAIL=18 字符尾随（head 每帧 +3，尾节 35% 概率突变 + 抖动）；目标行可视区外先滚动侧栏居中；开始/结束各调一次 `wormStart`/`wormDone`（含提前返回路径），释放期间 Neo 张嘴。命中 `intrudeRow`：`.breached` 类 900ms 闪烁 + 文件名扰码 620ms 逐字符还原（`.` 不动）；done 回调 → SND.breach + 日志 + `revealEdit(toolCallId)`。
-- **diff 卡 reveal-after-hit**：Feed ToolCard 的 DiffCard 渲染受 `revealedEdits` 门控（完整渲染条件见 AGENTS.md 硬约束 3），`glitchIn 0.5s steps(7)` 扫入——语义为"入侵成功后才解密显示"。
+- **diff 卡 reveal-after-hit**：Feed ToolCard 的 DiffCard 渲染受 `revealedEdits` 门控（完整渲染条件见 AGENTS.md 硬约束 3），命中后烧录显影（逐行 `burn`/`char` 阶梯 + 落定校验环）——语义为"入侵成功后才显影写入痕迹"。
 - REDUCED：`releaseWorm` 直接命中，跳过动画，done 仍回调。
 
 **diff 数据管线**（store.ts 纯函数）：
@@ -106,7 +106,7 @@
 
 ## 接口与依赖
 
-**对外消费**（`window.zion`，ZionAPI，env.d.ts 声明）：`ping` / `prompt`（从不抛错，resolve 为 stopReason）/ `abort` / `steer` / `followUp` / `scanTree` / `listCommands`（命令面板数据，`CommandItem[]`）/ `runCommand`（执行 slash 命令，返回 `RunCommandResult`{ok, message, kind, data}；会话切换类命令经 `{id, items}` 载荷触发 feed 重建，弹层类命令经 `data.open`（`ModalKind`）+ `models`/`currentModel`/`providers` 载荷打开对应弹层）/ `listSessions` / `getCurrentSession` / `switchSession` / `newSession` / `listProjects`（最近项目 `ProjectInfo[]`）/ `getProject`（当前项目工作目录，`{ path: string }`）/ `browseProject`（原生目录选择，取消返回 null）/ `switchProject`（切换工作目录+会话上下文，返回 `SwitchProjectResult`{path, id, items}）/ `uiAnswer`（扩展对话框应答，取消传 undefined）/ `onUiAsk` / `onUiNotify`（订阅扩展对话框与通知，返回退订函数）/ `renameSession` / `deleteSession`（rename/delete 均返回刷新后的完整会话列表）/ `onAgentEvent`（返回退订函数）/ `onTreeChanged`（工作区文件树变化订阅，Sidebar 经 `mergeTreeOpen` 实时合并展开态）。
+**对外消费**（`window.zion`，ZionAPI，env.d.ts 声明）：`ping` / `prompt`（从不抛错，resolve 为 stopReason）/ `abort` / `steer` / `followUp` / `scanTree` / `listCommands`（命令面板数据，`CommandItem[]`）/ `runCommand`（执行 slash 命令，返回 `RunCommandResult`{ok, message, kind, data}；会话切换类命令经 `{id, items}` 载荷触发 feed 重建，弹层类命令经 `data.open`（`ModalKind`）+ `models`/`currentModel`/`providers` 载荷打开对应弹层）/ `listSessions` / `getCurrentSession` / `switchSession` / `newSession` / `listProjects`（最近项目 `ProjectInfo[]`）/ `getSessionMeta`（会话元信息 `SessionMeta`{model, contextWindow, thinkingLevel}，字段可空→微簇显示 `--`；刷新时机见「事件→状态管线」）/ `getProject`（当前项目工作目录，`{ path: string }`）/ `browseProject`（原生目录选择，取消返回 null）/ `switchProject`（切换工作目录+会话上下文，返回 `SwitchProjectResult`{path, id, items}）/ `uiAnswer`（扩展对话框应答，取消传 undefined）/ `onUiAsk` / `onUiNotify`（订阅扩展对话框与通知，返回退订函数）/ `renameSession` / `deleteSession`（rename/delete 均返回刷新后的完整会话列表）/ `onAgentEvent`（返回退订函数）/ `onTreeChanged`（工作区文件树变化订阅，Sidebar 经 `mergeTreeOpen` 实时合并展开态）。
 
 **对外不提供**：无公共导出——本模块是终端 UI。
 
@@ -142,7 +142,7 @@
 - **结算行照常结算**：中断/错误回合也写结算行（标「已中断」/「错误」）——结算行是回合闭环的固定仪式，即使无工具调用/usage 也显示（tokens 显示 null）。
 - **thinking 默认折叠**：`<details>` 原生折叠不引入额外状态；「思考中…」由 streaming + 末 entry 判定。
 - **注入解码入场一次**：`useEffect` 空依赖（eslint-disable）保证只播一次，OPERATOR 文本更新不重播；DEC 开关与 reduced-motion 都直出原文。
-- **液态玻璃分级**：backdrop-filter 昂贵，只开活动回合的卡；历史回合卡静态半透明——长会话 blur 卡数有上界（≤ 活动回合卡数）。
+- **入场动画基态即终态**：烧录/显影/封存带等入场编舞只播"增量"（白热闪光、亮度波、clip-path 展开），元素基态已是最终视觉——历史重建（`.turn-agent.historical`）与 reduced-motion 用 `animation: none` 压平即终态，不积累补偿样式（唯二例外：校验环 `stroke-dashoffset` 与 EOL 透明度需显式补终态）。
 - **凝结雨轨零常驻**：闭环即卸载 canvas、停 rAF，长会话不叠加常驻动画开销；◆ 是卸载后的静态替身。
 - **tool_end 迟到回退**：回合闭环后可能仍有迟到 `tool_execution_end`（SDK 时序），`_flush` 在活动回合找不到 run 态 toolCallId 时倒序扫全部回合回退匹配；仍无匹配则丢弃。
 - **弹层应答成对（uiAnswer + setUiAsk(null)）**：主进程 `handleAnswer` 按 id 在 Promise 表查找，只关弹层不应答会让扩展阻塞到超时兜底（undefined）才继续——`answer()` 封装了这一对操作，勿拆开。
@@ -192,7 +192,7 @@
 - `zion.sidebar-w` 读回非数字（`Number.isFinite` 守卫）忽略、回落默认；越界值经 `clampSide` 收敛到区间；拖拽松手在窗口外——监听挂在 window 上，正常收尾持久化。
 - 本地字体加载失败：styles.css 顶部 `@font-face` 引用的 `assets/fonts/ShareTechMono-Regular.woff2` 缺失/损坏时，按 `--font` 回退链走 ui-monospace/Courier New；字体声明只在 styles.css 一处，组件一律 `var(--font)`。
 - 会话仓 effect 锚点尚未注册：初始化观察/测量会从同一 `.session-pod` 与双帧图片 DOM 只读收集兜底；若图片/Sidebar rect 仍为 0，本帧跳过该仓或整次测量，等待 targetVersion、图片 load 或 ResizeObserver 的后续重测，不绘制猜测线路。连续滚动中只保留最新待应用布局，防止过时槽位在滚动停止后回跳。
-- 弹层自拉失败：ModelPicker/SettingsPanel 无载荷自拉 `runCommand` 时 reject 被 `.catch(() => {})` 静默吞掉（或 `ok:false` 无 message）——模型选择器停留「加载模型清单…」，设置面板停留空值（'—'）；关闭弹层重开可重试。
+- 弹层自拉失败：ModelPicker/SettingsPanel 无载荷自拉 `runCommand` 时 reject 被 `.catch(() => {})` 静默吞掉（或 `ok:false` 无 message）——模型选择器停留「加载模型清单…」，设置面板停留空值（'—'）；关闭弹层重开可重试。`getSessionMeta` 拉取失败同样静默——微簇保持旧值或 `--`，不重试直到下个刷新点。
 
 ## 已知限制与技术债
 

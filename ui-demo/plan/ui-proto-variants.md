@@ -99,5 +99,6 @@
 ## 采用状态汇总
 
 - ✅ 已落地：输入框+状态条 v7(commit c0667e4)
-- ❌ 已否决：消息块 A（亮度波显影）
-- 已选定组合：3.1A 亮度波显影 / 3.2A 脑波褶 / 3.3C 机械继电器 / 3.4A 烧录显影 / 3.5C 封存带 / 3.6C 磁带纹 / 3.7B 字形蛾（组合验证 demo：agent-reply-combo-proto.html）；待逐块落地（落地=重写进真组件，原型代码不进 main 逻辑，仅存档）
+- ✅ 已落地：agent 回复重构六块（2026-08-17；落地=重写进真组件 Feed/DiffCard/styles.css，原型代码仅存档）——3.1A 亮度波显影 / 3.2A 脑波褶 / 3.3C 机械继电器 / 3.4A 烧录显影 / 3.5C 封存带 / 3.7B 字形蛾；落地决策（流式语义化/中断变体/历史回合跳过编舞/30 行封顶等）见 `ui-demo/agent-reply-ui-handoff.md` §3 各块与 CONTEXT.md 新词条；回归 typecheck+node:test+smoke+e2e 通过，真实 Electron 视觉验证经 `scripts/e2e-visual.mjs`（CDP 截图）确认
+- ↩️ 落地后退回：3.6C 磁带纹（雨轨恢复迷你数字雨形态，闭环凝 ◆；原型仍存档 agent-reply-rail-proto.html）
+- 已否决单块：消息块 A 之外的未选定变体（见各表「状态」列）

@@ -7,7 +7,7 @@
       "agents": "src/main/AGENTS.md",
       "design": "src/main/DESIGN.md",
       "synced": "pending",
-      "pendingParent": "2216231dae53b8a1b22ce689d19291449b8d3f11"
+      "pendingParent": "b988662ff1e4f5f9d137ca4100511f56502a6d2a"
     },
     {
       "path": "src/renderer",
@@ -15,7 +15,7 @@
       "agents": "src/renderer/AGENTS.md",
       "design": "src/renderer/DESIGN.md",
       "synced": "pending",
-      "pendingParent": "2216231dae53b8a1b22ce689d19291449b8d3f11"
+      "pendingParent": "b988662ff1e4f5f9d137ca4100511f56502a6d2a"
     },
     {
       "path": "src/shared",
@@ -23,7 +23,7 @@
       "agents": "src/shared/AGENTS.md",
       "design": "src/shared/DESIGN.md",
       "synced": "pending",
-      "pendingParent": "2216231dae53b8a1b22ce689d19291449b8d3f11"
+      "pendingParent": "b988662ff1e4f5f9d137ca4100511f56502a6d2a"
     }
   ]
 }

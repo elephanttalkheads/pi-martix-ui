@@ -8,7 +8,7 @@
 
 ## 关键入口
 
-- `src/main/main.mjs` —— 主进程全部逻辑：`sessions` Map + `currentSession` 指针、`ensureCurrentSession`/`ensureSessionFor`（会话创建后 `bindExtensions({ uiContext })` 注入 UI 桥；init 45s 超时，败北后迟到的初始化 `dispose()` 丢弃、不 set 不接管）、`listSessionInfos`（磁盘列表 + 内存未落盘会话合并，见 [DESIGN.md](DESIGN.md) 接口节）、19 组 `ipcMain.handle` + 4 条 send 转发（`wireSession` / `dispatchUi` / `onTreeChange`；通道全集见 [DESIGN.md](DESIGN.md)「接口与依赖」节）、`commandHandlers` 命令 dispatch 注册表（`zion:run-command` 路由；`cmd()` 结果工厂 + `withWin()` 对话框辅助，机制见 [DESIGN.md](DESIGN.md) 架构节）、`listProjects`/`saveProject`/`switchProject`（项目切换：dispose 旧会话 + 重建）、启动恢复（模块加载期读 `zion-projects.json` 首位重置 `WORKSPACE_DIR`）、`historyFromSession`、`scanDir`、`watchWorkspaceTree`/`unwatchWorkspaceTree`/`onTreeChange`（文件树实时监听：fs.watch + 防抖重扫 + 变化推送，机制见 [DESIGN.md](DESIGN.md) 架构节）
+- `src/main/main.mjs` —— 主进程全部逻辑：`sessions` Map + `currentSession` 指针、`ensureCurrentSession`/`ensureSessionFor`（会话创建后 `bindExtensions({ uiContext })` 注入 UI 桥；init 45s 超时，败北后迟到的初始化 `dispose()` 丢弃、不 set 不接管）、`listSessionInfos`（磁盘列表 + 内存未落盘会话合并，见 [DESIGN.md](DESIGN.md) 接口节）、20 组 `ipcMain.handle`（含 `zion:session-meta` 会话元信息，渲染层微簇状态条数据源）+ 4 条 send 转发（`wireSession` / `dispatchUi` / `onTreeChange`；通道全集见 [DESIGN.md](DESIGN.md)「接口与依赖」节）、`commandHandlers` 命令 dispatch 注册表（`zion:run-command` 路由；`cmd()` 结果工厂 + `withWin()` 对话框辅助，机制见 [DESIGN.md](DESIGN.md) 架构节）、`listProjects`/`saveProject`/`switchProject`（项目切换：dispose 旧会话 + 重建）、启动恢复（模块加载期读 `zion-projects.json` 首位重置 `WORKSPACE_DIR`）、`historyFromSession`、`scanDir`、`watchWorkspaceTree`/`unwatchWorkspaceTree`/`onTreeChange`（文件树实时监听：fs.watch + 防抖重扫 + 变化推送，机制见 [DESIGN.md](DESIGN.md) 架构节）
 - `src/main/uibridge.mjs` —— 扩展 UI 桥（纯 Node、无 electron 依赖）：`createUiBridge` 把 `select`/`confirm`/`input` 挂 Promise 表 → 经注入的 `dispatch` 派发 renderer；timeout/AbortSignal 兜底 resolve `undefined`；`notify` 单向派发；`handleAnswer` 回传应答；其余 `ExtensionUIContext` 方法为 TUI no-op 桩
 - `src/main/skillscan.mjs` —— 命令面板数据源（纯 Node、无 electron 依赖）：`parseSkillFrontmatter`/`scanSkillsDir`/`collectCommands` + `BUILTIN_COMMANDS`/`EXTENSION_COMMANDS`（命令清单维护规则见「本模块硬约束」）
 - `scripts/build-main.mjs` —— main/preload 产物构建脚本（构建管线/产物布局见 [DESIGN.md](DESIGN.md) 启动节）
@@ -22,7 +22,7 @@
 
 - `npm run build:main` —— 构建 main/preload 产物（dev/smoke/e2e 会自动先跑，`npm start` 不会；管线见 [DESIGN.md](DESIGN.md) 启动节）
 - `npm run smoke` —— 构建 renderer + main 产物 + CDP 冒烟：验证 `window.zion` 注入、`zion:ping`、渲染基线、run-command 契约（未知命令错误路径 + settings/model 弹层 `data.open` 契约 + 模型清单与 settings.enabledModels 数量对照 + 真实输入路径弹层 DOM，`scripts/smoke-cdp.mjs`）
-- `npm run e2e` —— 构建 + 真实 prompt 回归：`window.zion.prompt(...)` → deepseek → 事件流 → feed（`scripts/e2e-prompt.mjs`，约 12s）
+- `npm run e2e` —— 构建 + 真实 prompt 回归：`window.zion.prompt(...)` → 当前模型 → 事件流 → feed（`scripts/e2e-prompt.mjs`）
 - `node --test scripts/skillscan.test.mjs` —— skillscan 单测（frontmatter 解析/目录扫描/聚合去重/内置清单完整性，6 用例；不依赖 Electron，改 skillscan.mjs 后跑）
 - `node --test scripts/uibridge.test.mjs` —— uiBridge 单测（Promise 回传/超时/signal/notify/重复应答，7 用例；不依赖 Electron，改 uibridge.mjs 后跑）
 - `npm run dev` —— build:main + vite + electron；main 以 `--dev` 参数加载 `http://127.0.0.1:5173`

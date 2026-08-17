@@ -51,9 +51,9 @@ notify 单向：uibridge.notify → send('zion:ui-notify') → preload onUiNotif
 
 ## 接口与依赖
 
-### ZionAPI（23 个方法）
+### ZionAPI（24 个方法）
 
-通道全集以本表为准：`protocol.ts` 头注释只列示例通道并指向 `src/main/DESIGN.md`「接口」节，后者同样指回本表（完整清单唯一落点）。
+分工：通道名全集在 `src/main/DESIGN.md`「接口」节（`protocol.ts` 头注释只列示例通道并指向彼处）；各方法的返回形状与失败语义以本表为唯一落点（`src/main/DESIGN.md` 接口节指回本表）。
 
 | 方法 | 通道 | 返回 |
 |---|---|---|
@@ -72,7 +72,7 @@ notify 单向：uibridge.notify → send('zion:ui-notify') → preload onUiNotif
 | uiAnswer(id, result) | `zion:ui-answer`（invoke） | `{ ok: boolean }`（=`{ ok: handled }`，`handleAnswer` 是否命中 Promise 表）：应答扩展对话框（结果回传 uiBridge，取消传 undefined）；id 未匹配（已超时/重复应答）返回 `{ ok: false }` |
 | listProjects() | `zion:list-projects`（invoke） | `ProjectInfo[]`：最近项目（`~/.pi/agent/zion-projects.json`，上限 8，最近优先去重；坏文件/缺失 → 空数组） |
 | getProject() | `zion:get-project`（invoke） | `{ path: string }`：当前工作目录（`WORKSPACE_DIR` 现值，不读盘、不抛错） |
-| getSessionMeta() | `zion:session-meta`（invoke） | `SessionMeta`：当前模型显示名/上下文窗口/思考强度（`session.model` + `session.thinkingLevel`；会话未就绪字段为 null，渲染层显示 `--`）；微簇状态条数据源，启动/弹层关闭/agent_start 刷新 |
+| getSessionMeta() | `zion:session-meta`（invoke） | `SessionMeta`：当前模型显示名/上下文窗口/思考强度（`session.model` + `session.thinkingLevel`；会话未就绪字段为 null，渲染层显示 `--`）；微簇状态条数据源，启动（App.tsx modal effect 首跑）、弹层关闭、agent_start 时刷新 |
 | browseProject() | `zion:browse-project`（invoke） | `SwitchProjectResult \| null`：原生目录选择（`dialog.showOpenDialog`）后直接切换；取消返回 null |
 | switchProject(dir) | `zion:switch-project`（invoke） | `SwitchProjectResult`：切换工作目录 + 会话上下文重建；非字符串/空串抛 `invalid project path` |
 | onUiAsk(cb) | `zion:ui-ask`（send） | 退订函数：AskDialog 渲染对话框请求 |
@@ -99,6 +99,7 @@ notify 单向：uibridge.notify → send('zion:ui-notify') → preload onUiNotif
 - `RunCommandResult`：`ok` / `message`（展示文案，写日志或 toast）/ `kind?: 'info' | 'ok' | 'error'`（渲染分级：info=仅日志、ok=成功、error=失败）/ `data?`（命令专属载荷，类型化对象 + `[key: string]: unknown` 索引签名兜底：`open?: ModalKind`（弹层类命令指示弹层类型，ADR-0005）、`models?: ModelOption[]`（model-picker 清单）、`currentModel?`（settings 展示当前模型）、`providers?`（settings 展示已认证 provider）、`id`+`items`（会话切换类，同 `SessionPayload` 形状）、`path?`（导出路径等））
 - `ModalKind`：`'model-picker' | 'settings' | 'hotkeys'`（弹层类命令 `data.open` 的值域，见 ADR-0005）
 - `ModelOption`：`providerId` / `modelId` / `label` / `current?`（模型选择器清单项；main 侧 /model 生成——scoped `enabledModels` 优先、无配置回退全量已认证）
+- `SessionMeta`：`model: string | null` / `contextWindow: number | null` / `thinkingLevel: string | null` **三字段全可空**（会话未就绪/模型未解析 → 对应 null，渲染层微簇显示 `--`，不造假；`zion:session-meta` 返回形状，main 侧 `ensureCurrentSession` 异常时整体全 null）
 - `UiAsk`：`id`（`ui<N>` 序号）/ `kind: 'confirm' | 'input' | 'select'` / `title` / `message?`（confirm 消息或 input placeholder）/ `options?`（select 选项）/ `timeoutMs?`（透传扩展 timeout，renderer 侧未消费）
 - `UiNotify`：`message` / `type?: 'info' | 'warning' | 'error'`（`uibridge.mjs` 内部另有 `UiAnswer = { id, result: string | boolean | undefined }`，仅桥内回传、不经 IPC）
 

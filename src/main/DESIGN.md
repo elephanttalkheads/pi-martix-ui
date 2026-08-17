@@ -29,7 +29,7 @@
 src/renderer (React/TS)  ⇄  window.zion（preload.cjs, CJS, sandbox）
         │ 契约：src/shared/protocol.ts（ZionAPI / AgentSessionEvent / UiAsk / UiNotify）
         ▼
-main.mjs：ipcMain.handle ×19 + agent:event / zion:ui-ask / zion:ui-notify / zion:tree-changed 转发
+main.mjs：ipcMain.handle ×20 + agent:event / zion:ui-ask / zion:ui-notify / zion:tree-changed 转发
         │ sessions: Map<sessionId, AgentSession>；currentSession 指针
         │ ├─ skillscan.mjs：collectCommands（skills 扫描 + 命令清单，纯 Node）
         │ ├─ uibridge.mjs：createUiBridge（dialog Promise 表 + notify，纯 Node）
