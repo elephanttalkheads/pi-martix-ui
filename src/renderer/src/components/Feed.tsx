@@ -1,5 +1,5 @@
 // Feed —— 回合化消息流（回合聚合模型 + 回合级 memo；视觉 = agent-reply 组合原型落地：
-// 亮度波显影 / 脑波褶 / 机械继电器 / 烧录显影 / 封存带 / 字形蛾光标；雨轨维持凝结数字雨）。
+// 脑波褶 / 机械继电器 / 烧录显影 / 封存带 / 字形蛾光标；雨轨维持凝结数字雨）。
 // OPERATOR 回合右对齐；agent 回合内文本段与工具卡按 content 保序渲染；
 // 编辑类工具调用触发蠕虫入侵（目标=文件树行，缺省=继电器导轨行）。
 // 历史重建回合（turn.historical）不播入场编舞，直接终态（动画只演给"正在发生"的事）。
@@ -254,9 +254,8 @@ const TurnView = memo(function TurnView({
         }
         return (
           <div key={entry.id} className="msg agent">
-            {/* 亮度波显影（3.1A）：段 mount 时播一次（流式追加直出，写入头叙事归字形蛾）；
-                agent 段无 msg-head——会话名只在输入框上方微簇显示（◆ 标题），不逐段重复 */}
-            <div className={`msg-body${turn.historical ? '' : ' develop'}`}>
+            {/* agent 段无 msg-head——会话名只在输入框上方微簇显示（◆ 标题），不逐段重复 */}
+            <div className="msg-body">
               <Body text={entry.text} />
               {turn.interrupted && entry.id === lastTextId && <AbortedMark />}
               {streaming && entry.id === lastEntry?.id && <MothCaret />}

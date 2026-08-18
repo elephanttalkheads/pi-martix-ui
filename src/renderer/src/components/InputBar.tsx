@@ -245,6 +245,7 @@ export default function InputBar() {
         <input
           id="cmdline"
           ref={inputRef}
+          aria-label="指令输入"
           value={text}
           placeholder={`输入 / 查看 skills 与命令 · 指令给 ${sessionTitle} …`}
           onChange={(e) => onInputChange(e.target.value)}

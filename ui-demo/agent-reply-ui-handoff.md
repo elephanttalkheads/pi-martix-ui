@@ -71,7 +71,7 @@ agent 回合数据形状（store.ts）：
 
 ## 3. Agent 回复 UI 区块
 
-### 3.1 消息块 `.msg`（agent 分支，回复正文）—— 亮度波显影（3.1A，已落地）
+### 3.1 消息块 `.msg`（agent 分支，回复正文）—— 直出（3.1A 亮度波显影已退役，2026-08-18）
 
 | 项 | 值 |
 |---|---|
@@ -79,7 +79,7 @@ agent 回合数据形状（store.ts）：
 | 出现时机 | agent 回合内**每个 text 段**一条（左对齐） |
 | 内容 | 纯正文（`.msg-body`）——**无 msg-head**：会话名只在输入框上方微簇（`.mi-title` ◆ 标题）显示，不逐段重复 |
 | 样式 | `.msg` margin-bottom 20px、max-width 820px、`blockIn` 入场；`.msg-body` **15px**、行高 1.8、pre-wrap |
-| 显影 | 段 mount 播一次亮度波显影（`.develop` 0.85s：暗+微糊就位 → 55% 波峰近白 → 落定磷光绿）；**流式追加不重播**（元素持久，动画只跑一次）。历史回合（`.turn-agent.historical`）不播 |
+| 入场 | 无段级入场动画（3.1A 已退役）；写入头叙事归字形蛾 |
 | 子元素 | `.hl`（【高亮词】→ `--bright`）、行内 `code`（13px、`rgba(61,255,143,0.08)` 底 + 1px border）、`.msg-code`（``` 围栏代码块：13px、左侧 1px 弱线、无背景无边框） |
 
 ### 3.2 思考块 `.think`（agent 思维链）—— 脑波褶（3.2A，已落地）
@@ -144,7 +144,7 @@ agent 回合数据形状（store.ts）：
 ## 4. Agent 回合行为时序（重构不得破坏）
 
 1. **回合创建**：`agent_start` 创建 agent 回合（激活）→ 雨轨挂载走帧。
-2. **流式正文**：`message_update` 按到达保序追加 text/thinking 段 → `.msg`/`.think` 即时渲染；text 段 mount 播一次亮度波显影，流式追加直出；字形蛾挂在末段。
+2. **流式正文**：`message_update` 按到达保序追加 text/thinking 段 → `.msg`/`.think` 即时渲染（text 段直出无入场动画）；字形蛾挂在末段。
 3. **工具调用**：`tool_execution_start/end` 生成/更新继电器单元（end 写 `dur`、可升级 `edit`）→ 触点 run→ok/err + clack 冲击波。
 4. **diff 卡门控**：`revealedEdits[toolCallId]` 由蠕虫动画（SignalCanvas 一次性写入信号）命中后置 true；**前置 true 不渲染 diff 卡**；命中后烧录显影（逐行阶梯 + 校验环）。
 5. **回合闭环**：`agent_end` 写 `settle`、`activeTurnId` 清空 → 雨轨凝 ◆、封存带展开、字形蛾熄灭。
@@ -159,7 +159,7 @@ agent 回合数据形状（store.ts）：
 - [ ] agent 消息流保留回合化 + memo 边界（历史回合不重渲染）
 - [ ] `.msg-body` 主文本 **15px**；头部/时间戳/结算行辅助 **12px**；代码块/工具链/思考体 13px
 - [ ] 正文子元素齐全：`.hl` 高亮词 / 行内 code / `.msg-code` 围栏代码块
-- [ ] 亮度波显影：段 mount 播一次，流式追加不重播；历史回合不播
+- [ ] 正文段直出无段级入场动画（3.1A 已退役）
 - [ ] 思考块 `<details>` 折叠默认收起；streaming 末段「· 思考中…」+ 脑波流动；末 5 行沉降梯度
 - [ ] 机械继电器：保序、触点三态着色（warning/danger/accent）、clack 冲击波收尾、参数抽屉展开
 - [ ] diff 卡：revealedEdits 门控 + 符号/色彩双编码 + `+N −M` + MODIFIED 徽标 + 烧录阶梯（封顶 30 行）+ 校验环

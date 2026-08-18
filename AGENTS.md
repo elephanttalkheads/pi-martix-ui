@@ -77,7 +77,7 @@ research/                技术调研（壳层 / pi-SDK / pi-RPC）；matrix-sty
 ## 当前状态（2026-08-11）
 
 - ✅ 首个可运行闭环 + E2E 验证（真实 prompt → deepseek → 事件流 → feed）
-- ✅ agent 回复 UI 重构落地（2026-08-17）：亮度波显影 / 脑波褶 / 机械继电器 / 烧录显影 / 封存带 / 字形蛾光标（3.6C 磁带纹落地后退回，雨轨维持凝结数字雨；组合选型 ui-demo/plan/ui-proto-variants.md，交接事实源 ui-demo/agent-reply-ui-handoff.md）；旧液态玻璃/角标/涟漪/方块光标退役
+- ✅ agent 回复 UI 重构落地（2026-08-17）：脑波褶 / 机械继电器 / 烧录显影 / 封存带 / 字形蛾光标（3.1A 亮度波显影落地后于 2026-08-18 退役；3.6C 磁带纹落地后退回，雨轨维持凝结数字雨；组合选型 ui-demo/plan/ui-proto-variants.md，交接事实源 ui-demo/agent-reply-ui-handoff.md）；旧液态玻璃/角标/涟漪/方块光标退役
 - ✅ v3 视觉迁移完成：深度分层数字雨+镜像片假名+bloom / CRT 层（扫描线/暗角/曲面/亮度抖动）/ WebAudio 音效
   （SND，localStorage 持久化开关）/ 蠕虫动画（编辑类工具调用触发）/ diff 卡（tool 事件解析：edit 的 edits[]/patch、
   write 的 content、end 事件 result.patch 升级；toolCallId 精确匹配）/ FX 折算规则（agent_start→busy+FX 抬升，

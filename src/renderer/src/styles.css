@@ -454,7 +454,7 @@ body {
 .console { flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--surface); }
 
 /* 微簇状态条（贴输入框上方；模型/ctx 胶囊/思考强度/状态；数据 zion:session-meta + usage.input） */
-.micro { flex: none; display: flex; align-items: center; gap: 10px; padding: 2px 4px 8px; font-size: 12px; }
+.micro { flex: none; display: flex; align-items: center; gap: 10px; padding: 2px 4px 8px; font-size: 12px; font-variant-numeric: tabular-nums; }
 .mi-title { color: var(--accent); }
 .mi-cluster { margin-left: auto; display: flex; align-items: center; gap: 8px; color: var(--text-tertiary); }
 .mi-model { color: var(--accent); }
@@ -503,14 +503,6 @@ body {
 .msg.user .msg-head { justify-content: flex-end; }
 .msg-head .m-time { margin-left: auto; letter-spacing: 0.05em; text-transform: none; color: var(--text-tertiary); }
 .msg-body { font-size: 15px; line-height: 1.8; white-space: pre-wrap; word-break: break-word; color: var(--text-primary); }
-/* 亮度波显影（3.1A）：段 mount 播一次——暗+微糊就位 → 波峰近白 → 落定磷光绿；
-   流式追加不重播（元素持久，动画只跑一次），写入头叙事归字形蛾 */
-.msg-body.develop { animation: develop 0.85s ease-out; }
-@keyframes develop {
-  0% { opacity: 0.1; filter: blur(2px); color: var(--text-tertiary); }
-  55% { opacity: 1; filter: blur(0); color: var(--bright); text-shadow: 0 0 12px rgba(194, 255, 217, 0.55); }
-  100% { opacity: 1; filter: blur(0); text-shadow: none; }
-}
 .msg.user .msg-body { text-align: right; }
 .msg-body .hl { color: var(--bright); }
 .msg-body code {
@@ -542,7 +534,7 @@ body {
 
 /* ---------- 回合容器 + 凝结雨轨（见 CONTEXT.md「凝结雨轨」） ---------- */
 .turn-agent { position: relative; padding-left: 40px; }
-/* 历史重建回合：跳过全部入场编舞（显影/烧录/封存带/ping/凝印），直接终态呈现 */
+/* 历史重建回合：跳过全部入场编舞（烧录/封存带/ping/凝印），直接终态呈现 */
 .turn-agent.historical *, .turn-agent.historical *::before, .turn-agent.historical *::after {
   animation: none !important;
 }
@@ -608,6 +600,7 @@ body {
   display: inline-flex; align-items: center;
   border-top: 1px solid currentColor; border-bottom: 1px solid currentColor;
   padding: 2px 10px 2px 8px; opacity: 0.85;
+  font-variant-numeric: tabular-nums;
   animation: unroll 0.65s cubic-bezier(0.3, 0, 0.2, 1) both;
 }
 @keyframes unroll { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 0 0 0); } }
@@ -660,6 +653,7 @@ body {
 /* 数码管耗时读数：边框小窗；ok 绿 / run 琥珀 / err 红 */
 .trace .dur {
   flex: none; font-size: 12px; letter-spacing: 0.12em; padding: 1px 6px;
+  font-variant-numeric: tabular-nums;
   border: 1px solid var(--border); background: rgba(2, 14, 7, 0.8); color: var(--text-tertiary);
 }
 .trace .unit.ok .dur { color: var(--accent-muted); }
@@ -823,8 +817,9 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .msg, .msg-body.develop, .trace, .diff, .settle, .settle .tape, .rail .seal,
-  .dl, .dl .ln-code, .caret, .think.streaming .eeg, .think.streaming .eeg path { animation: none; }
+  .msg, .trace, .diff, .settle, .settle .tape, .rail .seal,
+  .dl, .dl .ln-code, .caret, .think.streaming .eeg, .think.streaming .eeg path,
+  .trace .unit .contact { animation: none; }
   /* 无动画时的终态补偿：校验环直接闭合、EOL 常亮、焦化删行保持余烬 */
   .diff .ring rect { stroke-dashoffset: 0; animation: none; }
   .settle .eol { opacity: 0.9; animation: none; }

@@ -510,7 +510,7 @@ export const useFeed = create<FeedState>()((set) => ({
               startedAt: 0, // 历史回合不计时（共识 Q12：只重建文本，无结算行）
               tokens: 0,
               seenUsage: false,
-              historical: true, // 批量恢复：不播入场编舞（亮度波显影/烧录/封存带）
+              historical: true, // 批量恢复：不播入场编舞（烧录/封存带）
             };
       turns[t.id] = t;
       order.push(t.id);

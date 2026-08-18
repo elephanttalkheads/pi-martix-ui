@@ -2,7 +2,7 @@
 
 ## 目标与非目标
 
-**目标**：把 pi SDK 会话事件流渲染为黑客帝国风 UI——v4 四区骨架 + 回合化会话区（回合聚合消息流 + agent 回复重构：亮度波显影 / 脑波褶 / 机械继电器 / 烧录显影 / 封存带 / 字形蛾，选型见 `ui-demo/plan/ui-proto-variants.md`；雨轨维持凝结数字雨）+ 4 态会话状态机 + 三件装饰（单层数字雨 / 轻扫描线 / 蠕虫入侵+Neo 头像）+ 会话脑机链路 + WebAudio 程序化音效；会话列表、文件树、历史恢复、项目选择面板（最近项目 / 原生目录浏览 → 切换工作目录与会话上下文）、扩展对话框（`ctx.ui` 的 confirm/select/input → AskDialog 弹层）与扩展通知（notify → toast）、模态弹层家族（ZionModal：模型选择 / 设置 / 快捷键速查，runCommand `data.open` 数据驱动触发）走真实 IPC；纯浏览器调试桥（`mockBridge.ts`：无 preload 时注入 mock ZionAPI，prompt 经真实事件派发路径，UI 全功能可演示）。
+**目标**：把 pi SDK 会话事件流渲染为黑客帝国风 UI——v4 四区骨架 + 回合化会话区（回合聚合消息流 + agent 回复重构：脑波褶 / 机械继电器 / 烧录显影 / 封存带 / 字形蛾，选型见 `ui-demo/plan/ui-proto-variants.md`；雨轨维持凝结数字雨）+ 4 态会话状态机 + 三件装饰（单层数字雨 / 轻扫描线 / 蠕虫入侵+Neo 头像）+ 会话脑机链路 + WebAudio 程序化音效；会话列表、文件树、历史恢复、项目选择面板（最近项目 / 原生目录浏览 → 切换工作目录与会话上下文）、扩展对话框（`ctx.ui` 的 confirm/select/input → AskDialog 弹层）与扩展通知（notify → toast）、模态弹层家族（ZionModal：模型选择 / 设置 / 快捷键速查，runCommand `data.open` 数据驱动触发）走真实 IPC；纯浏览器调试桥（`mockBridge.ts`：无 preload 时注入 mock ZionAPI，prompt 经真实事件派发路径，UI 全功能可演示）。
 
 **非目标**：不定义 IPC 契约（`src/shared/protocol.ts` 类型与主进程是事实源）；不提供 Node/凭据能力（隔离在 preload 白名单之后）；不实现扩展对话框的 Promise 表/超时/AbortSignal 兜底（主进程 `src/main/uibridge.mjs` 是事实源）——本模块只消费 `UiAsk`/`UiNotify` 类型与 `uiAnswer`/`onUiAsk`/`onUiNotify` 桥面；不实现项目切换的主进程语义（`WORKSPACE_DIR` 变更、旧会话 dispose、`~/.pi/agent/zion-projects.json` 持久化在 `src/main/main.mjs`）——本模块只消费 `listProjects`/`browseProject`/`switchProject` 桥面；不做完整 markdown 渲染（仅围栏 + 行内 code/高亮子集，语法边界见「正文解析」）；不实现主进程主动弹窗（弹层只经 runCommand 结果 `data.open` 打开，无独立事件通道，ADR-0005 决策 2）；AskDialog/ProjectPanel 不迁移到 ZionModal 壳（ADR-0005 决策 1，维持现状）。
 
@@ -37,7 +37,7 @@
 
 **回合聚合模型与渲染队列**（store.ts）：feed 数据不再是平铺 FeedItem 数组，而是 `turns`（id→Turn）+ `order`（渲染序）+ `activeTurnId`。Turn 分两类：`operator`（一次用户输入）与 `agent`（agent_start→闭环的执行周期）；agent 回合的 `content` 按到达顺序保序存放内容段（`text`/`thinking`）与工具条目（`tool`）。agent 事件经 IPC 逐条到达（每条一个宏任务），store 把它们攒进模块级 op 队列（`arm`/`delta`/`toolStart`/`toolEnd`/`usage`/`interrupt`/`close`），rAF 时 `_flush` 一次应用：每帧至多一次 `set()`，且只替换活动回合对象（`edit()` 首次访问克隆换引用，`ensureTurn()` 在 armed 或无活动回合时新建）——这是 TurnView 回合级 memo 的前提，历史回合零重渲染。`pushUser` 先同步 `flushNow`（OPERATOR 回合落在正确位置）；`applySession`/`reset` 清队防跨会话污染。
 
-**回合内容与结算行**（Feed.tsx TurnView）：`order.map` 渲染 TurnView（memo），`active`/`streaming` 只对活动回合为真。operator 回合右对齐（OPERATOR 头 + 注入解码）；agent 回合 `.turn-agent`：`TurnRail` + content 逐条渲染——`tool` → ToolCard（机械继电器导轨 + diff 卡，revealedEdits 门控）、`thinking` → `<details class="think">` 默认折叠（脑波褶：summary 旁 EEG 折线，streaming 末段流动 + 「· 思考中…」；思考体按行切片，末 5 行 1→0.38 反向沉降梯度）、`text` → `.msg.agent`（Body 解析，语法见「正文解析」；段 mount 播一次亮度波显影 `.develop`，流式追加直出；中断标记 `[已被操作员中断]` 乱码逐位锁定入场、落最后一个 text 段；流式光标 = 字形蛾 MothCaret，落末 entry）。闭环写结算行 `.settle`（封存带）：`◆ + 封存带（已结算/已中断/错误 · N tools · Σtokens · 耗时）+ EOL 方块`——tokens 为回合内各 turn_end usage 求和（`seenUsage=false` 时显示 null），耗时为 `agent_start`→闭环的渲染层实测（performance.now，非 SDK 计时）；outcome 判定：`closeTurn('error')` → error，有 `interrupted` 标记 → interrupted，否则 ok；`!cur.settle` 守卫保证每回合至多一条。中断/错误版带尾撕裂锯齿、无 EOL。历史重建回合（`turn.historical`，applySession 标记）经 `.turn-agent.historical` CSS 压掉全部入场编舞，直接终态。
+**回合内容与结算行**（Feed.tsx TurnView）：`order.map` 渲染 TurnView（memo），`active`/`streaming` 只对活动回合为真。operator 回合右对齐（OPERATOR 头 + 注入解码）；agent 回合 `.turn-agent`：`TurnRail` + content 逐条渲染——`tool` → ToolCard（机械继电器导轨 + diff 卡，revealedEdits 门控）、`thinking` → `<details class="think">` 默认折叠（脑波褶：summary 旁 EEG 折线，streaming 末段流动 + 「· 思考中…」；思考体按行切片，末 5 行 1→0.38 反向沉降梯度）、`text` → `.msg.agent`（Body 解析，语法见「正文解析」；正文直出无入场动画（3.1A 亮度波显影已退役）；中断标记 `[已被操作员中断]` 乱码逐位锁定入场、落最后一个 text 段；流式光标 = 字形蛾 MothCaret，落末 entry）。闭环写结算行 `.settle`（封存带）：`◆ + 封存带（已结算/已中断/错误 · N tools · Σtokens · 耗时）+ EOL 方块`——tokens 为回合内各 turn_end usage 求和（`seenUsage=false` 时显示 null），耗时为 `agent_start`→闭环的渲染层实测（performance.now，非 SDK 计时）；outcome 判定：`closeTurn('error')` → error，有 `interrupted` 标记 → interrupted，否则 ok；`!cur.settle` 守卫保证每回合至多一条。中断/错误版带尾撕裂锯齿、无 EOL。历史重建回合（`turn.historical`，applySession 标记）经 `.turn-agent.historical` CSS 压掉全部入场编舞，直接终态。
 
 **正文解析**（markdown.ts `parseBody` 纯函数，Feed Body / OperatorBody 解码完成后共用）：```（或 ~~~）围栏代码块 + 行内 `code` /【高亮词】；围栏开行可带语言标签（`lang` 只解析不展示）、未闭合宽容到文末、代码块内不做行内解析。代码块渲染为 `.msg-code` `<pre>`——简约样式（无边框无背景，唯一锚点是左侧 1px 弱线，与正文区分但保持密度）；markdown.test.mjs 覆盖 8 用例。
 
@@ -142,7 +142,7 @@
 - **结算行照常结算**：中断/错误回合也写结算行（标「已中断」/「错误」）——结算行是回合闭环的固定仪式，即使无工具调用/usage 也显示（tokens 显示 null）。
 - **thinking 默认折叠**：`<details>` 原生折叠不引入额外状态；「思考中…」由 streaming + 末 entry 判定。
 - **注入解码入场一次**：`useEffect` 空依赖（eslint-disable）保证只播一次，OPERATOR 文本更新不重播；DEC 开关与 reduced-motion 都直出原文。
-- **入场动画基态即终态**：烧录/显影/封存带等入场编舞只播"增量"（白热闪光、亮度波、clip-path 展开），元素基态已是最终视觉——历史重建（`.turn-agent.historical`）与 reduced-motion 用 `animation: none` 压平即终态，不积累补偿样式（唯二例外：校验环 `stroke-dashoffset` 与 EOL 透明度需显式补终态）。
+- **入场动画基态即终态**：烧录/封存带等入场编舞只播"增量"（白热闪光、clip-path 展开），元素基态已是最终视觉——历史重建（`.turn-agent.historical`）与 reduced-motion 用 `animation: none` 压平即终态，不积累补偿样式（唯二例外：校验环 `stroke-dashoffset` 与 EOL 透明度需显式补终态）。
 - **凝结雨轨零常驻**：闭环即卸载 canvas、停 rAF，长会话不叠加常驻动画开销；◆ 是卸载后的静态替身。
 - **tool_end 迟到回退**：回合闭环后可能仍有迟到 `tool_execution_end`（SDK 时序），`_flush` 在活动回合找不到 run 态 toolCallId 时倒序扫全部回合回退匹配；仍无匹配则丢弃。
 - **弹层应答成对（uiAnswer + setUiAsk(null)）**：主进程 `handleAnswer` 按 id 在 Promise 表查找，只关弹层不应答会让扩展阻塞到超时兜底（undefined）才继续——`answer()` 封装了这一对操作，勿拆开。
