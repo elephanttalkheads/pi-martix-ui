@@ -1,16 +1,6 @@
-# AGENTS.md — ZION（pi-martix-ui）
+# AGENTS.md — ZION（pi-martix-ui）【已废弃，仅作 UI 迁移参考】
 
-以 **pi**（@earendil-works/pi-coding-agent）为底座的黑客帝国风 Windows 桌面编码 Agent。
-开发主仓：本目录（GitHub `elephanttalkheads/pi-martix-ui`）。Gitee `xuhuitalker/pi-martix-ui` 只作备份，**不要**在别处重复开发。
-
-## 技术栈（已定案，勿改）
-
-- **Electron 43.x**（≥39；38 内嵌 Node 22.18 低于 pi SDK 门槛，不可用）
-- **主进程**：pi SDK 进程内 —— `createAgentSession`（复用 `~/.pi/agent` 配置：auth/models/settings）
-- **renderer**：React 18 + zustand + vite 8（`@vitejs/plugin-react`）**+ TypeScript（strict）**
-- **主进程/preload 保持 JS**（`.mjs`/`.cjs`）：preload 受 sandbox 约束必须 CJS；main 的 TS 构建管线是后续步骤。两者用 JSDoc + `tsc -p tsconfig.node.json`（checkJs）做类型检查
-- **通信**：preload IPC 桥（`contextIsolation: true` + `sandbox: true`，凭据只留主进程）；桥面/事件类型契约见 `src/shared/protocol.ts`
-- **打包**：electron-builder（NSIS + portable）；更新通道 Gitee Releases 主 + GitHub 海外镜像（generic provider）
+⚠️ **本项目已停止开发。** 唯一剩余任务：把黑客帝国风 UI 迁移到 **deepseek-zion**（https://github.com/elephanttalkheads/deepseek-zion）；迁移完成后本仓废弃。**不要**在本仓做新功能开发。
 
 ## 常用命令
 
@@ -23,110 +13,41 @@ npm run e2e           # 构建 + 真实 prompt E2E（deepseek → 事件流 → 
 npm run dist           # 打包 NSIS + portable → dist/
 ```
 
-会话工作目录（agent 实际操作的目录）：`D:\zion-test`（项目选择 UI 已实现：侧栏「⇄ 切换项目」/ 启动无最近项目自动打开面板，切换 = 会话上下文重建，见 docs/adr/0003）。
+迁移验证常用脚本（不在 package.json，直接 node 跑）：
 
-## 必读架构
-
-```
-src/main/main.mjs        Electron 主进程：createAgentSession → session.subscribe(事件流) → IPC → renderer
-                         IPC: zion:ping / agent:prompt / agent:abort / agent:steer / agent:followUp
-                         （JS + JSDoc；类型经 tsconfig.node.json checkJs 校验）
-src/preload/preload.cjs  安全桥（window.zion.*，CJS 必须；桥面契约 = shared/protocol.ts 的 ZionAPI）
-src/shared/protocol.ts   IPC 类型契约单一事实源：AgentSessionEvent（re-export SDK 类型）+ ZionAPI；
-                         渲染层 type-only import，主进程/preload 经 JSDoc import 引用
-src/renderer/src/        React + TS 应用：store.ts(zustand) / App.tsx / env.d.ts(window.zion 声明) /
-                         components/MatrixBg(深度分层数字雨),CrtOverlay, WormLayer(蠕虫动画),SoundFx,
-                         DiffCard, Feed, InputBar（.tsx/.ts）
-DESIGN.md                项目级视觉单一事实源；任何界面、视觉重构、动效、声音或品牌素材任务必须先读。
-                         默认大胆、前卫、视觉优先；真实状态、可控性、可访问性与性能降级是硬边界
-docs/neural-cable-visual.md
-                         会话脑机链路（Sidebar + NeuralCableLayer + neuralCable.ts）视觉实现参考文档（事实源：
-                         代码 + styles.css 的 .neural-cable-* 段；实现是程序化 SVG，不依赖任何连接态 PNG 素材，
-                         早期素材已归档 ui-demo/废案/）。⚠️ 修改脑机链路设计时**必须同步更新本文档**
-tsconfig.json            renderer 类型检查（moduleResolution: bundler，strict，noEmit）
-tsconfig.node.json       main/preload checkJs（bundler 解析 + allowImportingTsExtensions，noEmit）
-scripts/                 smoke-cdp.mjs（冒烟）/ e2e-prompt.mjs（真实 prompt 回归）
-ui-demo/                 index-v4.html = 历史视觉实现（不再限制未来构图；新设计以根目录 DESIGN.md 为准）：
-                         该版本曾收敛 v3 的 boot/CRT/视差/glitch，采用绿色语义化并将日志改为抽屉，
-                         蠕虫简化为一次性写入信号脉冲）；index-v3.html = 重度氛围版（含 releaseWorm、
-                         addDiffCard、SND、CRT 层、深度分层数字雨）；index-v2.html = 稳定基线；
-                         brand-spec.md 设计系统；react/agent-ui-design-spec.md = v4 纯文本复刻规格
-                         （供无多模态模型按文字复刻 demo 为真实 Agent UI，含令牌/算法/mock 替换点）
-research/                技术调研（壳层 / pi-SDK / pi-RPC）；matrix-style-references.md = 黑客帝国风格
-                         参考作品调研（数字雨/电影 UI/CRT 还原，含 6 项优化清单及完成状态）
+```bash
+node scripts/e2e-visual.mjs       # CDP 截图看真实视觉效果
+node scripts/verify-restore.mjs   # 会话历史全量恢复验证（切换/重启后工具卡+diff 卡进 DOM）
 ```
 
-关键 SDK 行为（docs/sdk.md）：
-- `session.prompt()` **从不抛错** —— 模型/请求失败时末条消息 `stopReason: "error"` + `errorMessage`，UI 必须查
-- 事件流：`message_update`（text/thinking delta）、`tool_execution_start/end`、`agent_start/end`、`agent_settled`（真空闲）
-- `ModelRuntime` 目录刷新可能挂 → 初始化带超时保护；`ctx.ui` 默认 headless，需自实现 ExtensionUIContext（未做）
-- 项目信任（project trust）：headless 下 `ask` 会静默忽略项目资源，需显式处理（未做）
-- 会话持久化：`~/.pi/agent/sessions/` JSONL v3；`SessionManager.create/continueRecent/open`
+会话工作目录（agent 实际操作的目录）：`D:\zion-test`（项目选择 UI：侧栏「⇄ 切换项目」/ 启动无最近项目自动打开面板）。
 
-## 已知坑（改代码前必读）
+## 跑通命令的两个环境坑
 
 1. **npm 11 allow-scripts** 默认拦截安装脚本 → electron 二进制不下载。首次 `npm install` 后需 `npm approve-scripts electron`；失败则从 `https://npmmirror.com/mirrors/electron/<版本>/` 手动下载 zip 解压到 `node_modules/electron/dist/` 并写 `path.txt`（内容 `electron.exe`）
 2. **vite 8 只绑 IPv6** → `vite.config.mjs` 必须 `server.host: '127.0.0.1'`，否则 `wait-on tcp:127.0.0.1:5173` 卡死、electron 不启动
-3. **preload 必须 `.cjs`（CJS）** —— `sandbox: true` 下 ESM preload 不注入，`window.zion` 会 undefined
-4. npm 源/镜像走 npmmirror；GitHub 域名在本机可能被墙，electron/electron-builder 下载走镜像。**镜像地址在用户环境变量**（`ELECTRON_MIRROR` / `ELECTRON_BUILDER_BINARIES_MIRROR`，User 作用域，PowerShell `[Environment]::SetEnvironmentVariable`）—— 勿写回 `.npmrc`：npm 11 对未知键告警、npm 12 将不再透传
-5. **SDK 的 d.ts 内部用 `.ts` 后缀 import（tsgo 产物）** → tsconfig 必须 `moduleResolution: bundler` 才能解析；`NodeNext` 解析不到会把整个 SDK import 变 any（静默，typecheck 不易发现）
-6. **CJS 里 `require('electron')` 返回 any** → 用 `/** @type {typeof import('electron')} */` 注解解构（见 preload.cjs）
-7. **`stopReason` 只在 LLM 助手消息分支**（`AgentMessage` 联合的其他成员没有）→ 取 stopReason 用 `'stopReason' in msg` 守卫，直接 `msg.stopReason` 在 strict 下会报错
-8. **JSDoc `import('../shared/protocol.ts')` 需要 `allowImportingTsExtensions: true`**（tsconfig.node.json 已开；noEmit 下合法）
 
-## 当前状态（2026-08-11）
+## UI 迁移地图
 
-- ✅ 首个可运行闭环 + E2E 验证（真实 prompt → deepseek → 事件流 → feed）
-- ✅ agent 回复 UI 重构落地（2026-08-17）：脑波褶 / 机械继电器 / 烧录显影 / 封存带 / 字形蛾光标（3.1A 亮度波显影落地后于 2026-08-18 退役；3.6C 磁带纹落地后退回，雨轨维持凝结数字雨；组合选型 ui-demo/plan/ui-proto-variants.md，交接事实源 ui-demo/agent-reply-ui-handoff.md）；旧液态玻璃/角标/涟漪/方块光标退役
-- ✅ v3 视觉迁移完成：深度分层数字雨+镜像片假名+bloom / CRT 层（扫描线/暗角/曲面/亮度抖动）/ WebAudio 音效
-  （SND，localStorage 持久化开关）/ 蠕虫动画（编辑类工具调用触发）/ diff 卡（tool 事件解析：edit 的 edits[]/patch、
-  write 的 content、end 事件 result.patch 升级；toolCallId 精确匹配）/ FX 折算规则（agent_start→busy+FX 抬升，
-  rAF 指数插值衰减，规则见 CONTEXT.md）/ 状态栏 SND 开关+时钟
-- ✅ 域文档：CONTEXT.md（词汇表）+ docs/adr/0001-canvas-doom-boundary.md（氛围层 canvas、数据卡 DOM）
-- ✅ 回归：typecheck 双配置 / smoke / 真实 prompt E2E / 真实编辑工具验证（write→diff 卡带内容行）
-- 未做（v3 范围外）：3D 神经核心+频谱+鼠标视差（纯装饰，可后续加）、开屏加载页（明确不实现）
-- ✅ preload/vite 两个坑已修（commit a9c8859）
-- ✅ **TypeScript 重构完成**：renderer 全 TS（strict）+ shared/protocol.ts 类型契约 + main/preload JSDoc 类型 + typecheck/smoke/e2e 回归脚本（typecheck 双配置通过；smoke + 真实 prompt E2E 复验通过）
-- ✅ ui-demo 升级到 index-v3.html：深度分层镜像数字雨 + bloom、CRT 曲率/抖动/开机亮线、WebAudio bleep 音效、蠕虫定位动画（releaseWorm）、diff 修改卡（addDiffCard）、细线条几何 trace 卡片
-- ✅ 会话历史全量恢复（2026-08-18）：切换会话/重启后正文+思考段+工具卡+diff 卡完整恢复（`historyFromSession` 全量提取 toolCall/toolResult，`applySession` 重建 + `details.patch` 升级 diff 行；历史回合无结算行；`SessionHistoryItem` 改联合类型，SDK JSONL 唯一事实源零新增存储）
-- ⬜ 未做：工具调用行详情展开（diff 卡已部分覆盖）、扩展 UI 桥、项目信任处理、离线字体、Gitee 备份镜像配置、打包实测（dist）、main 进程 TS 构建管线、v3 残余氛围装饰（3D 神经核心/频谱/视差）
+视觉与术语事实源：
 
-## Git 约定
+- `DESIGN.md`（根）—— **视觉宪章/单一事实源**：设计令牌、语义绿、叙事字形、状态→动效映射；任何界面/动效/声音/品牌素材任务先读
+- `CONTEXT.md`（根）—— UI 词汇表：凝结雨轨 / 脑波褶 / 机械继电器 / 烧录显影 / 封存带 / 字形蛾光标 / 注入解码等术语定义
+- `research/matrix-style-references.md` —— 黑客帝国风格参考调研（数字雨/电影 UI/CRT 还原）
 
-- 唯一推送目标：`origin/main`（GitHub）。Gitee 由镜像/手动同步，不直接推
-- 提交信息中文、聚焦单件事；动环境变量前先读后写（本项目曾发生 setx 覆盖 PATH 事故，恢复法见 D:\skills-guide\用户配置\环境变量备份与恢复记录-2026-08-11.md）
-- **提交/推送仅在用户明确指示（如「提交推送」）时执行**
+实现（全部 UI 代码在 `src/renderer/`，React 18 + zustand + vite 8 + TypeScript strict）：
 
-## Subagents
+- `src/renderer/src/styles.css` —— **样式令牌与全部组件样式集中此文件**；顶部三个本地 `@font-face`（Share Tech Mono 拉丁 / Sarasa Term SC GB2312 子集 CJK / Matrix Code 电影雨字形）
+- `src/renderer/DESIGN.md` + `src/renderer/AGENTS.md`（21 条硬约束）—— 渲染层架构、设计决策与实现纪律的事实源
+- 组件（`src/renderer/src/components/`）：`RainCanvas`（数字雨）/ `SignalCanvas`（蠕虫写入）/ `NeoAvatar` / `Sidebar` / `SessionPod`（会话培育仓）/ `NeuralCableLayer`（会话脑机链路）/ `Feed`（回合化消息流：脑波褶思考块 + 机械继电器工具卡 + 封存带结算行 + 字形蛾光标）/ `TurnRail`（凝结雨轨）/ `DiffCard`（烧录显影 + 校验环）/ `InputBar`（微簇状态条 + 输入行）/ `SoundFx`（WebAudio 音效）
+- `src/renderer/src/assets/` —— UI 素材：`fonts/`（三个字体的生产用文件）、`neo-avatar/`、`neural-cable-system/`、session-pod 四帧 PNG；`src/renderer/src/matrixGlyphs.ts` = Matrix 假名字符集单一事实源
+- `docs/neural-cable-visual.md` —— 会话脑机链路视觉实现参考（程序化 SVG，不依赖连接态 PNG 素材）
 
-- 需要**视觉/多媒体能力**的任务（截图分析、图像理解、UI 还原比对、图表/示意图解读等）→ 统一交给 `vision` subagent：
-  `runs.run('main', { agent: 'vision', task: '...' })`（模型 MiniMax-M3，思考深度 max，别名 `multimodal` / `vision-m3`）（如果你有视觉能力，则忽略这条规则即可）
-- 主会话默认模型（deepseek）无图像输入能力，**不要**用主会话假装处理图片内容；涉及图像的 prompt 一律改派 `vision`
-- `vision` 无法加载或理解图像时，要求它如实说明，不得编造图片内容
+原型与设计稿（`ui-demo/`）：
 
-## Agent skills
-
-### Issue tracker
-
-Issues live in this repo's GitHub Issues (via the `gh` CLI). See `docs/agents/issue-tracker.md`.
-
-### Triage labels
-
-Default five-label vocabulary: `needs-triage` / `needs-info` / `ready-for-agent` / `ready-for-human` / `wontfix`. See `docs/agents/triage-labels.md`.
-
-### Domain docs
-
-Single-context: root `CONTEXT.md` + `docs/adr/`. See `docs/agents/domain.md`.
-
-## graphify
-
-This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
-
-When the user types `/graphify`, use the installed graphify skill or instructions before doing anything else.
-
-Rules:
-- For codebase questions, first run `graphify query "<question>"` when graphify-out/graph.json exists. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts. These return a scoped subgraph, usually much smaller than GRAPH_REPORT.md or raw grep output.
-- Dirty graphify-out/ files are expected after hooks or incremental updates; dirty graph files are not a reason to skip graphify. Only skip graphify if the task is about stale or incorrect graph output, or the user explicitly says not to use it.
-- If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
-- Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
-- After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
+- `index-v4.html` / `index-v5.html` —— 历史视觉实现与「信号凝结」原型
+- `react/agent-ui-design-spec.md` —— v4 纯文本复刻规格（供无多模态模型按文字复刻，含令牌/算法/mock 替换点）
+- `agent-reply-ui-handoff.md` —— agent 回复 UI 各块交接（代码位置/样式值/行为时序/自检清单）
+- `plan/ui-proto-variants.md` —— 七块 21 变体选型归档（含采用/退役状态）
+- `plan/icon-set-plan.md` —— 细线 SVG 图标套件待实现清单（P0/P1/P2）
+- `font/`（Matrix-Code.ttf / SarasaTermSC-Regular.ttf 源文件）、`废案/`（归档素材）
