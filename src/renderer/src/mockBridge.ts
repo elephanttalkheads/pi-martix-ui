@@ -36,15 +36,32 @@ const MOCK_SESSIONS: Record<string, SessionInfoLike[]> = {
   ],
 };
 
-/** 假历史（按会话 id） */
+/** 假历史（按会话 id；mock-1 含思考段 + read/edit 工具块，验证历史全量恢复含 diff 卡） */
 const MOCK_ITEMS: Record<string, SessionHistoryItem[]> = {
   'mock-1': [
     { role: 'user', text: '读取 palette-verify.txt 并核对色值', ts: 1786613401000 },
-    { role: 'assistant', text: '已读取 D:/zion-workspace/palette-verify.txt（6 行）：line-one / PALETTE-VERIFY-2 / NEW-LINE-3 / 绕口令段。', ts: 1786613404000 },
+    {
+      role: 'agent',
+      ts: 1786613402000,
+      blocks: [
+        { kind: 'thinking', text: '先读文件核对色值，再把偏差的第二行修正。' },
+        { kind: 'tool', toolCallId: 'mock-call-read', toolName: 'read', args: { path: 'palette-verify.txt' }, isError: false, dur: 0.4 },
+        { kind: 'text', text: '已读取 palette-verify.txt（6 行）：line-one / PALETTE-VERIFY-2 / NEW-LINE-3 / 绕口令段。第二行色值偏差，已修正。' },
+        {
+          kind: 'tool',
+          toolCallId: 'mock-call-edit',
+          toolName: 'edit',
+          args: { path: 'palette-verify.txt', edits: [{ oldText: 'PALETTE-VERIFY-2', newText: 'PALETTE-VERIFY-2-FIXED' }] },
+          isError: false,
+          dur: 0.9,
+          result: { patch: '@@ -1,3 +1,3 @@\n line-one\n-PALETTE-VERIFY-2\n+PALETTE-VERIFY-2-FIXED\n NEW-LINE-3' },
+        },
+      ],
+    },
   ],
   'mock-2': [
     { role: 'user', text: '给会话自动生成标题', ts: 1786593900000 },
-    { role: 'assistant', text: '已按首条消息摘要生成显示名，持久化于会话信息。', ts: 1786593902000 },
+    { role: 'agent', ts: 1786593902000, blocks: [{ kind: 'text', text: '已按首条消息摘要生成显示名，持久化于会话信息。' }] },
   ],
 };
 

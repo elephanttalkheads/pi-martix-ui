@@ -149,7 +149,13 @@ const ToolCard = memo(function ToolCard({ item }: { item: TurnTool }) {
   const revealed = useFeed((s) => !!s.revealedEdits[item.toolCallId]);
   const toggleToolExpand = useFeed((s) => s.toggleToolExpand);
   const durText =
-    item.status === 'run' ? '执行中…' : item.status === 'err' ? '失败' : `${(item.dur ?? 0).toFixed(1)}s`;
+    item.status === 'run'
+      ? '执行中…'
+      : item.status === 'err'
+        ? '失败'
+        : item.dur === undefined
+          ? '—' // 历史恢复无计时（无 toolResult），不显示假 0.0s
+          : `${item.dur.toFixed(1)}s`;
   const onToggle = () => toggleToolExpand(item.toolCallId);
   const detail = item.args === undefined ? '' : formatToolArgs(item.toolName, item.args);
   return (

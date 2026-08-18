@@ -94,7 +94,7 @@ export type Turn =
       tokens: number;
       seenUsage: boolean;
       settle?: TurnSettle;
-      /** 历史重建回合（applySession）：跳过重入场动画（显影/烧录/封存带），直接终态呈现 */
+      /** 历史重建回合（applySession）：跳过重入场动画（烧录/封存带），直接终态呈现 */
       historical?: boolean;
     };
 
@@ -492,30 +492,63 @@ export const useFeed = create<FeedState>()((set) => ({
   setTree(tree) { set({ tree }); },
   setSessionMeta(sessionMeta) { set({ sessionMeta }); },
   applySession(id, title, items) {
-    // 历史重建：丢弃旧会话的流式队列（防跨会话污染），回合只重建文本（共识 Q12）
+    // 历史全量重建：丢弃旧会话的流式队列（防跨会话污染）；
+    // 正文/思考/工具调用（含 diff 卡）全量恢复，无结算行（共识 Q12 部分保留：历史不合成 settle）
     opQueue.length = 0;
     armed = false;
     const turns: Record<string, Turn> = {};
     const order: string[] = [];
+    const revealedEdits: Record<string, true> = {};
     for (const h of items) {
       const time = h.ts ? fmtTime(new Date(h.ts)) : msgTime();
-      const t: Turn =
-        h.role === 'user'
-          ? { id: nid(), kind: 'operator', text: h.text, time }
-          : {
-              id: nid(),
-              kind: 'agent',
-              time,
-              content: [{ id: nid(), kind: 'text', text: h.text, time }],
-              startedAt: 0, // 历史回合不计时（共识 Q12：只重建文本，无结算行）
-              tokens: 0,
-              seenUsage: false,
-              historical: true, // 批量恢复：不播入场编舞（烧录/封存带）
-            };
+      if (h.role === 'user') {
+        const t: Turn = { id: nid(), kind: 'operator', text: h.text, time };
+        turns[t.id] = t;
+        order.push(t.id);
+        continue;
+      }
+      const content: TurnEntry[] = [];
+      for (const b of h.blocks) {
+        if (b.kind === 'tool') {
+          const item: TurnTool = {
+            id: nid(),
+            kind: 'tool',
+            toolCallId: b.toolCallId,
+            toolName: b.toolName,
+            args: b.args,
+            status: b.isError ? 'err' : 'ok',
+            time,
+            startAt: 0,
+            dur: b.dur,
+          };
+          // diff 卡：先从工具参数还原（edit 的 edits[]/write 的 content/bash 启发式），
+          // 再用 toolResult.details 的 patch/diff 升级行号；历史无蠕虫，直接置 revealedEdits 绕过门控
+          const edit = parseEditFromTool(b.toolName, b.args);
+          if (edit) {
+            item.edit = edit;
+            const upgraded = upgradeEditFromResult(item, b.result);
+            if (upgraded) item.edit = upgraded;
+            if (item.edit.rows.length > 0) revealedEdits[b.toolCallId] = true;
+          }
+          content.push(item);
+        } else {
+          content.push({ id: nid(), kind: b.kind, text: b.text, time });
+        }
+      }
+      const t: Turn = {
+        id: nid(),
+        kind: 'agent',
+        time,
+        content,
+        startedAt: 0, // 历史回合不计时（共识 Q12：无结算行）
+        tokens: 0,
+        seenUsage: false,
+        historical: true, // 批量恢复：不播入场编舞（烧录/封存带）
+      };
       turns[t.id] = t;
       order.push(t.id);
     }
-    set({ currentSessionId: id, sessionTitle: title, turns, order, activeTurnId: null, sessionState: 'READY', tokenCount: 0, ctxInput: null, expandedTools: {} });
+    set({ currentSessionId: id, sessionTitle: title, turns, order, activeTurnId: null, sessionState: 'READY', tokenCount: 0, ctxInput: null, expandedTools: {}, revealedEdits });
   },
   setSndOn(sndOn) {
     localStorage.setItem('zion.snd', sndOn ? '1' : '0');

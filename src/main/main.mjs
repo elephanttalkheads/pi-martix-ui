@@ -90,10 +90,19 @@ function wireSession(/** @type {import('@earendil-works/pi-coding-agent').AgentS
   });
 }
 
-/** 从 state.messages 提取 user/assistant 文本历史（工具消息跳过） */
+/**
+ * 从 state.messages 全量提取历史：user 文本项 + agent 回合项（正文/思考/工具调用保序）。
+ * 连续 assistant/toolResult 消息归入同一 agent 分组（一回合 = user → 下一轮 user 前的全部 agent 活动）；
+ * toolResult 按 toolCallId 回填挂起的 tool block（isError/dur/details），扩展自定义消息跳过。
+ */
 function historyFromSession(/** @type {import('@earendil-works/pi-coding-agent').AgentSession} */ s) {
   /** @type {import('../shared/protocol.ts').SessionHistoryItem[]} */
   const out = [];
+  /** @type {Extract<import('../shared/protocol.ts').SessionHistoryItem, { role: 'agent' }> | null} */
+  let cur = null;
+  /** 挂起待回填的 tool block（toolResult 到达时补 isError/dur/result） */
+  /** @type {Map<string, { block: Extract<import('../shared/protocol.ts').HistoryBlock, { kind: 'tool' }>, ts: number }>} */
+  const pending = new Map();
   for (const m of s.state.messages) {
     if (m.role === 'user') {
       const text =
@@ -104,12 +113,34 @@ function historyFromSession(/** @type {import('@earendil-works/pi-coding-agent')
               .map((/** @type {any} */ c) => c.text)
               .join('\n');
       if (text) out.push({ role: 'user', text, ts: m.timestamp });
+      cur = null;
+      pending.clear();
     } else if (m.role === 'assistant') {
-      const text = m.content
-        .filter((/** @type {any} */ c) => c.type === 'text')
-        .map((/** @type {any} */ c) => c.text)
-        .join('\n');
-      if (text) out.push({ role: 'assistant', text, ts: m.timestamp });
+      if (!cur) {
+        cur = { role: 'agent', ts: m.timestamp, blocks: [] };
+        out.push(cur);
+      }
+      for (const c of m.content) {
+        if (c.type === 'text' && c.text) {
+          cur.blocks.push({ kind: 'text', text: c.text });
+        } else if (c.type === 'thinking' && c.thinking) {
+          cur.blocks.push({ kind: 'thinking', text: c.thinking });
+        } else if (c.type === 'toolCall') {
+          /** @type {Extract<import('../shared/protocol.ts').HistoryBlock, { kind: 'tool' }>} */
+          const block = { kind: 'tool', toolCallId: c.id, toolName: c.name, args: c.arguments, isError: false };
+          cur.blocks.push(block);
+          pending.set(c.id, { block, ts: m.timestamp });
+        }
+      }
+    } else if (m.role === 'toolResult') {
+      const p = pending.get(m.toolCallId);
+      if (p) {
+        p.block.isError = !!m.isError;
+        const dur = (m.timestamp - p.ts) / 1000;
+        if (Number.isFinite(dur) && dur >= 0) p.block.dur = dur;
+        if (m.details !== undefined && m.details !== null) p.block.result = m.details;
+        pending.delete(m.toolCallId);
+      }
     }
   }
   return out;

@@ -90,7 +90,7 @@ notify 单向：uibridge.notify → send('zion:ui-notify') → preload onUiNotif
 ### 数据形状
 
 - `SessionInfoLike`：`id` / `path` / `name?` / `firstMessage`（首条消息摘要，main 侧截断 80 字符）/ `messageCount` / `modified`（ISO 字符串）
-- `SessionHistoryItem`：`role: 'user' | 'assistant'` / `text` / `ts`（仅文本消息；main 侧 `historyFromSession` 跳过工具消息与空文本）
+- `SessionHistoryItem`：`{ role: 'user', text, ts }` 或 `{ role: 'agent', ts, blocks: HistoryBlock[] }`（全量历史：正文/思考/工具调用保序；tool 块带 `toolCallId`/`toolName`/`args`/`isError`/`dur?`/`result?`(=toolResult.details，edit 类含 diff/patch)；main 侧 `historyFromSession` 把连续 assistant/toolResult 归为一回合，toolResult 按 toolCallId 回填）
 - `ProjectInfo`：`path` / `lastUsed`（ISO 字符串；main 侧最近优先去重、上限 8）
 - `SessionPayload`：`id` / `items`（该会话历史，同 `SessionHistoryItem[]`；`getCurrentSession`/`switchSession`/`newSession` 的返回载荷，`SwitchProjectResult` 复用同一 id/items 形状）
 - `SwitchProjectResult`：`path`（切换后的工作目录）+ `SessionPayload`（id/items：新当前会话及其历史）

@@ -208,7 +208,7 @@ feed 不再是无结构消息列表，而是**回合序列**（词汇见 CONTEXT
 5. **结算行** `.settle`（见 CONTEXT.md，回合闭环时落出）：`◆ 已结算 · N tools · Σtokens tok · X.Xs` + 右侧延伸发线。
    - `Σtokens` = 回合内各 LLM turn 的 `usage.totalTokens` 求和（`turn_end` 事件携带；未收到 usage 则不显示 tok 段）；耗时 = `agent_start`→闭环实测；`N tools` = 回合内工具调用数。
    - **中断/错误回合照常结算**：首词变 `已中断` / `错误`，整行（含 ◆）转 `--danger`。
-   - 历史恢复的回合无结算行（只重建文本）。
+   - 历史恢复的回合无结算行（正文/思考/工具卡/diff 卡全量恢复，但不合成 settle）。
 - **流式光标 `.caret`**：8px 宽、1.05em 高的 `--accent` 色块，0.9s 步进闪烁，仅流式期间存在于最后一个正文段末尾。
 
 ### 5.7 工具链块 `.trace`（液态玻璃卡）

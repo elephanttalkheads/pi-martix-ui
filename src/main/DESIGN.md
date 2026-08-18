@@ -51,7 +51,7 @@ main.mjs：ipcMain.handle ×20 + agent:event / zion:ui-ask / zion:ui-notify / zi
 
 **prompt 主流程**：`agent:prompt` → `ensureCurrentSession` → `s.prompt(text)` → 取末条消息 stopReason（仅 LLM 助手消息分支有该字段，守卫规则见 `src/shared/DESIGN.md` 失败模式）→ 返回 `stop ?? 'ok'`。SDK 事件：`s.subscribe` 回调 → 过滤（`win` 未销毁且 `s === currentSession`）→ `win.webContents.send('agent:event', event)` → preload `ipcRenderer.on('agent:event')` 剥掉 `IpcRendererEvent` → `onAgentEvent` 回调（返回退订函数）。过滤是转发期判断而非订阅期判断：`wireSession` 每会话只订阅一次，切换会话不重订阅，旧会话事件被过滤不污染当前 feed。
 
-**历史提取**：`historyFromSession(s)` 遍历 `s.state.messages`，仅处理 `role === 'user'` / `'assistant'` 的消息（其余角色天然排除）；user 的 `content` 兼容 string 与内容数组（取 `type === 'text'` 部分拼接），assistant 同为数组文本过滤；空文本跳过；输出 `SessionHistoryItem[]`（形状归 shared 契约）。
+**历史提取**：`historyFromSession(s)` 遍历 `s.state.messages` 全量提取：user 的 `content` 兼容 string 与内容数组（取 `type === 'text'` 部分拼接，空文本跳过）；连续 assistant/toolResult 消息归入同一 agent 分组（user 消息结束分组）——assistant content 按序产出 text/thinking/tool block，toolResult 按 `toolCallId` 回填挂起 tool block 的 `isError`/`dur`(=timestamp 差）/`result`(=details，edit 类工具含 diff/patch)；其他 role（扩展自定义消息）跳过；输出 `SessionHistoryItem[]`（形状归 shared 契约）。
 
 **文件树扫描**：`zion:scan-tree` → `scanDir(WORKSPACE_DIR, WORKSPACE_DIR, 0)` 同步递归（`readdirSync`/`statSync`），跳过规则与契约摘要同 `src/shared/DESIGN.md` scanTree 行：
 - `SCAN_SKIP` 集合（node_modules / .git / dist / dist-renderer / graphify-out / .vite）+ 一切点文件（`e.name.startsWith('.')`）
@@ -134,7 +134,7 @@ send ×4（`webContents.send`；preload 经 `subscribe(channel, cb)` 统一订�
 - **WORKSPACE_DIR 可变 + 切换即整体重建**（ADR-0003）：项目选择 UI 已落地（侧栏 Project 标题 + 切换按钮 + ProjectPanel），工作区不再固定——跨目录切换 dispose 全部旧会话（`wireSession` 订阅随实例销毁，事件不会串台）+ 清空 Map/指针，保证新项目上下文干净；同目录快速路径避免无谓重建。`SessionManager.open(info.path, undefined, WORKSPACE_DIR)` 的第三参 cwdOverride 把会话 cwd 固定到当前工作区；模块加载期再从最近项目清单首位恢复 `WORKSPACE_DIR`——重启回到上次项目而非默认工作区（只影响工作目录，会话仍懒创建）
 - **最近项目清单 = 本地 JSON**：`~/.pi/agent/zion-projects.json`（`{ path, lastUsed }[]`，上限 8，最近优先、去重置顶、损坏/缺失视为空列表）——无独立配置库的轻量持久化；读取时防御损坏条目（曾出现 `\r` 被 JSON 解析进路径、启动恢复采纳后 mkdir ENOENT 崩溃；清洗/过滤机制见「接口与依赖」list-projects 行），写失败仅 warn，不阻断切换
 - **browse 走主进程原生 dialog**：目录选择器在 main 侧（`dialog.showOpenDialog`），渲染层不实现目录浏览器、只消费结果；`win` 为 null（未建/已销毁）时无父窗重载兜底
-- **历史只取 user/assistant 文本**：恢复 feed 的最小契约（`SessionHistoryItem` 无工具细节字段），工具消息与空文本排除
+- **历史全量提取（正文/思考/工具调用）**：`SessionHistoryItem` 为 user 文本项 + agent 回合项（blocks 保序含 tool 块），SDK JSONL 是唯一事实源、零新增存储；恢复 feed 时渲染层重建工具卡与 diff 卡（`parseEditFromTool` + `details.patch` 升级），历史回合无结算行
 - **scan-tree 同步 fs + 深度/跳过限制**：主进程阻塞式扫描换实现简单，深度上限 + 跳过集合（清单见 shared）把代价限制在可控范围
 - **文件树监听 = fs.watch 目录级事件 + 全量重扫，而非事件级增量**：fs.watch 只报「某处变化」与文件名，rename/外部保存下事件级增量易漏，重扫整树保证与 `zion:scan-tree` 同源一致（renderer 可直接 merge 或整体替换）；400ms 防抖聚合批量变化、JSON 对比过滤重复事件、回调期 `SCAN_SKIP`/点文件预过滤省无谓扫描；recursive 挂接失败仅 warn 退化为手动刷新——同步快照 `zion:scan-tree` 本就是兜底路径
 - **abort/steer/followUp fire-and-forget**：与 prompt 的完整 await 不对称——主进程不维护回合状态，UI 交互即时返回；需要精确 idle 状态时 SDK 提供 `waitForIdle`

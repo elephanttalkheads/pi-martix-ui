@@ -88,7 +88,8 @@ research/                技术调研（壳层 / pi-SDK / pi-RPC）；matrix-sty
 - ✅ preload/vite 两个坑已修（commit a9c8859）
 - ✅ **TypeScript 重构完成**：renderer 全 TS（strict）+ shared/protocol.ts 类型契约 + main/preload JSDoc 类型 + typecheck/smoke/e2e 回归脚本（typecheck 双配置通过；smoke + 真实 prompt E2E 复验通过）
 - ✅ ui-demo 升级到 index-v3.html：深度分层镜像数字雨 + bloom、CRT 曲率/抖动/开机亮线、WebAudio bleep 音效、蠕虫定位动画（releaseWorm）、diff 修改卡（addDiffCard）、细线条几何 trace 卡片
-- ⬜ 未做：工具调用行详情展开（diff 卡已部分覆盖）、会话历史/恢复、扩展 UI 桥、项目信任处理、离线字体、Gitee 备份镜像配置、打包实测（dist）、main 进程 TS 构建管线、v3 残余氛围装饰（3D 神经核心/频谱/视差）
+- ✅ 会话历史全量恢复（2026-08-18）：切换会话/重启后正文+思考段+工具卡+diff 卡完整恢复（`historyFromSession` 全量提取 toolCall/toolResult，`applySession` 重建 + `details.patch` 升级 diff 行；历史回合无结算行；`SessionHistoryItem` 改联合类型，SDK JSONL 唯一事实源零新增存储）
+- ⬜ 未做：工具调用行详情展开（diff 卡已部分覆盖）、扩展 UI 桥、项目信任处理、离线字体、Gitee 备份镜像配置、打包实测（dist）、main 进程 TS 构建管线、v3 残余氛围装饰（3D 神经核心/频谱/视差）
 
 ## Git 约定
 

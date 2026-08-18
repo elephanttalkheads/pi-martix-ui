@@ -30,12 +30,26 @@ export interface SessionInfoLike {
   modified: string;
 }
 
-/** 会话历史消息（切换会话时恢复 feed 用，仅 user/assistant 文本） */
-export interface SessionHistoryItem {
-  role: 'user' | 'assistant';
-  text: string;
-  ts: number;
-}
+/** 历史 agent 回合内容块（保序）：正文 / 思考 / 工具调用（含 diff 还原所需的 args 与 result.details） */
+export type HistoryBlock =
+  | { kind: 'text'; text: string }
+  | { kind: 'thinking'; text: string }
+  | {
+      kind: 'tool';
+      toolCallId: string;
+      toolName: string;
+      args?: unknown;
+      isError: boolean;
+      /** 耗时秒（toolResult.timestamp - assistant.timestamp 推导；无 result 时缺省） */
+      dur?: number;
+      /** toolResult.details（edit 类工具带 { diff, patch }，渲染层升级 diff 行用） */
+      result?: unknown;
+    };
+
+/** 会话历史消息（切换会话/重启恢复 feed 用）：user 文本项 + agent 回合项（正文/思考/工具调用全量保序） */
+export type SessionHistoryItem =
+  | { role: 'user'; text: string; ts: number }
+  | { role: 'agent'; ts: number; blocks: HistoryBlock[] };
 
 /**
  * window.zion —— preload（preload.cjs）暴露给渲染进程的安全桥。

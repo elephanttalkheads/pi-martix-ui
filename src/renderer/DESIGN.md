@@ -198,7 +198,7 @@
 
 - 单元测试仅覆盖纯函数层（`deriveSessionTitle`、`toolfmt`、`parseBody`（markdown.test.mjs 8 用例）、会话摘要、会话链路 hash/锚点/路径，node:test）；组件、事件管线、store 逻辑无自动化测试（含命令面板键盘交互、AskDialog 三形态与 toast 自动消失、快捷键注册；smoke 已覆盖 `.zion-modal` 打开契约与可见性、模型清单 scoped 计数，仍不查 `.palette`/`.ask-dialog`/`.neural-cables-layer`），UI 回归依赖 typecheck + smoke + e2e；链路另需人工覆盖侧栏 160/232/480、04–06 滚动换线、删除待确认开仓与 reduced-motion。
 - AskDialog.tsx 头部注释与实现不完全一致：注释声称的「Esc 取消 / select ↑↓/Enter / confirm danger 强调」实际只有 input 形态的 Esc/Enter 真实存在——select 选项纯鼠标（hover/click，`role="listbox"` 仅是标记），confirm 主按钮为 `.primary`（accent 绿）而非 danger 色；改注释或补实现前先认清现状。
-- 会话历史恢复只重建文本回合（无工具卡 / 结算行，`startedAt=0` 不计时）。
+- 会话历史恢复全量重建正文/思考段/工具卡/diff 卡（`applySession` 消费 `HistoryBlock[]`，diff 由工具参数还原 + `details.patch` 升级，`revealedEdits` 直接置位绕过蠕虫门控）；历史回合无结算行（`startedAt=0` 不计时），无 toolResult 的工具卡耗时显示 `—`。
 - 状态栏「TLS 1.3」为硬编码装饰，非真实数据（会话头 `.conv-head` 及其硬编码 ctx 已移除，由输入栏微簇 `.micro` 取代：模型/上下文窗口/思考强度取 `zion:session-meta`，ctx 占用取最新 turn 的 `usage.input`，缺数据显示 `--`，无假数据）。
 - `AgentInfo` 类型保留但 Agent 卡片已移除（侧栏改为会话列表），注释注明供未来 agent 注册表。
 - 协议提供 `steer`/`followUp`，UI 未接线；事件流中 steer 相关事件被默认分支忽略。
