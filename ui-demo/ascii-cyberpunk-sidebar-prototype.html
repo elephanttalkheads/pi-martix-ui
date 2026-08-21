@@ -1,0 +1,1762 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ZION ASCII DISTRICT — 280px Sidebar Prototype</title>
+  <!--
+    PROTOTYPE / THROWAWAY UI
+    Question: Can a 280px sidebar become a walkable ASCII city while preserving
+    multiple workspace identities, every session, real DOM controls and readable Chinese?
+
+    Run: npx vite ui-demo --host 127.0.0.1 --port 4178
+    Open: http://127.0.0.1:4178/ascii-cyberpunk-sidebar-prototype.html
+  -->
+  <style>
+    @font-face {
+      font-family: "Matrix Code";
+      src: url("./font/Matrix-Code.ttf") format("truetype");
+      font-display: block;
+    }
+
+    @font-face {
+      font-family: "Sarasa Term SC";
+      src: url("./assets/sidebar-spatial-layout/SarasaTermSC-Regular.subset.woff2") format("woff2");
+      font-display: swap;
+    }
+
+    @font-face {
+      font-family: "Share Tech Mono";
+      src: url("./assets/sidebar-spatial-layout/ShareTechMono-Regular.woff2") format("woff2");
+      font-display: swap;
+    }
+
+    :root {
+      color-scheme: dark;
+      --sidebar-width: 280px;
+      --void: #010403;
+      --surface: #05100b;
+      --surface-raised: rgba(7, 20, 14, 0.94);
+      --matrix: #37ff79;
+      --matrix-hot: #d9ffe4;
+      --matrix-dim: #0a7f3d;
+      --cyan: #68e9dd;
+      --amber: #ffb45e;
+      --error: #ff5364;
+      --ink: #d7ffe0;
+      --muted: #71977c;
+      --line: rgba(77, 255, 131, 0.22);
+      --display: "Share Tech Mono", "Sarasa Term SC", monospace;
+      --body: "Sarasa Term SC", monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      width: 100%;
+      min-height: 100%;
+      margin: 0;
+      background: #020504;
+      color: var(--ink);
+      font-family: var(--body);
+    }
+
+    button {
+      font: inherit;
+    }
+
+    body {
+      min-height: 100vh;
+      overflow: hidden;
+      display: flex;
+      background:
+        radial-gradient(circle at 18% 44%, rgba(27, 149, 68, 0.08), transparent 36%),
+        linear-gradient(90deg, #010403 0 var(--sidebar-width), #050907 var(--sidebar-width));
+    }
+
+    .zion-sidebar {
+      position: relative;
+      isolation: isolate;
+      width: min(var(--sidebar-width), 100vw);
+      min-width: min(var(--sidebar-width), 100vw);
+      height: 100vh;
+      min-height: 560px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      background: var(--void);
+      border-right: 1px solid rgba(103, 255, 148, 0.32);
+      box-shadow: 16px 0 60px rgba(0, 0, 0, 0.52), inset -1px 0 rgba(196, 255, 215, 0.06);
+    }
+
+    .zion-sidebar::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      z-index: 20;
+      pointer-events: none;
+      background:
+        repeating-linear-gradient(0deg, transparent 0 2px, rgba(122, 255, 163, 0.028) 2px 3px),
+        linear-gradient(90deg, rgba(70, 255, 125, 0.03), transparent 18%, transparent 82%, rgba(70, 255, 125, 0.04));
+      mix-blend-mode: screen;
+    }
+
+    .zion-sidebar::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      z-index: 21;
+      pointer-events: none;
+      box-shadow:
+        inset 0 0 36px rgba(0, 0, 0, 0.88),
+        inset 0 0 3px rgba(121, 255, 160, 0.28);
+    }
+
+    .sidebar-head {
+      position: relative;
+      z-index: 8;
+      height: 58px;
+      flex: 0 0 58px;
+      padding: 9px 11px 7px 13px;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      align-items: start;
+      background:
+        linear-gradient(180deg, rgba(15, 39, 25, 0.98), rgba(3, 11, 7, 0.94)),
+        var(--void);
+      border-bottom: 1px solid var(--line);
+    }
+
+    .sidebar-head::after {
+      content: "";
+      position: absolute;
+      left: 12px;
+      right: 12px;
+      bottom: -1px;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--matrix), transparent);
+      box-shadow: 0 0 12px var(--matrix);
+      opacity: 0.6;
+    }
+
+    .brand-kicker,
+    .brand-name,
+    .head-status,
+    .frame-label,
+    .frame-coordinate,
+    .dock-path,
+    .dock-meta,
+    .key,
+    .map-kicker,
+    .map-address,
+    .host-field,
+    .mode-button,
+    .map-toggle,
+    .micro-state {
+      font-family: var(--display);
+      letter-spacing: 0.08em;
+    }
+
+    .brand-kicker {
+      display: block;
+      margin-bottom: 2px;
+      color: var(--matrix);
+      font-size: 8px;
+      line-height: 1;
+    }
+
+    .brand-name {
+      margin: 0;
+      font-size: 17px;
+      line-height: 1;
+      letter-spacing: 0.045em;
+      font-weight: 400;
+      color: #ebfff1;
+      text-shadow: 0 0 13px rgba(80, 255, 135, 0.42);
+    }
+
+    .brand-name em {
+      color: var(--matrix);
+      font-style: normal;
+    }
+
+    .head-status {
+      margin-top: 3px;
+      padding: 4px 5px 3px;
+      border: 1px solid rgba(73, 255, 130, 0.28);
+      color: var(--matrix);
+      background: rgba(38, 255, 99, 0.055);
+      font-size: 7px;
+      line-height: 1;
+      white-space: nowrap;
+    }
+
+    .head-status::before {
+      content: "";
+      display: inline-block;
+      width: 4px;
+      height: 4px;
+      margin-right: 5px;
+      border-radius: 50%;
+      background: var(--matrix);
+      box-shadow: 0 0 7px var(--matrix);
+      vertical-align: 1px;
+      animation: breathe 2.4s ease-in-out infinite;
+    }
+
+    .city-frame {
+      position: relative;
+      min-height: 335px;
+      flex: 1 1 auto;
+      overflow: hidden;
+      background: #010403;
+      border-bottom: 1px solid rgba(77, 255, 131, 0.2);
+      touch-action: none;
+    }
+
+    #city-canvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+      cursor: ns-resize;
+    }
+
+    .frame-chrome,
+    .projection-layer,
+    .session-layer {
+      position: absolute;
+      inset: 0;
+    }
+
+    .frame-chrome,
+    .projection-layer,
+    .session-layer {
+      pointer-events: none;
+    }
+
+    .frame-topline {
+      position: absolute;
+      top: 8px;
+      left: 9px;
+      right: 9px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      color: rgba(190, 255, 207, 0.72);
+      text-shadow: 0 0 8px rgba(56, 255, 112, 0.5);
+    }
+
+    .frame-label,
+    .frame-coordinate {
+      font-size: 7px;
+      line-height: 1;
+    }
+
+    .frame-coordinate {
+      color: var(--matrix);
+    }
+
+    .crosshair {
+      position: absolute;
+      left: 50%;
+      top: 43%;
+      width: 17px;
+      height: 17px;
+      transform: translate(-50%, -50%);
+      opacity: 0.62;
+      transition: opacity 160ms ease;
+    }
+
+    .crosshair::before,
+    .crosshair::after {
+      content: "";
+      position: absolute;
+      background: var(--matrix-hot);
+      box-shadow: 0 0 8px var(--matrix);
+    }
+
+    .crosshair::before {
+      width: 1px;
+      height: 17px;
+      left: 8px;
+      top: 0;
+    }
+
+    .crosshair::after {
+      width: 17px;
+      height: 1px;
+      left: 0;
+      top: 8px;
+    }
+
+    .horizon-tag {
+      position: absolute;
+      right: 8px;
+      top: 46%;
+      writing-mode: vertical-rl;
+      color: rgba(91, 255, 140, 0.42);
+      font: 7px/1 var(--display);
+      letter-spacing: 0.14em;
+    }
+
+    .district-marker,
+    .session-portal {
+      position: absolute;
+      pointer-events: auto;
+      opacity: 0;
+      transform-origin: center center;
+      will-change: transform, left, top, opacity;
+    }
+
+    .district-marker {
+      min-width: 86px;
+      max-width: 148px;
+      padding: 4px 6px 4px 7px;
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      gap: 5px;
+      align-items: center;
+      color: #a9cdb2;
+      background: linear-gradient(90deg, rgba(2, 8, 5, 0.94), rgba(4, 18, 10, 0.78));
+      border: 1px solid rgba(77, 255, 131, 0.22);
+      border-left-color: var(--workspace-color, var(--matrix));
+      clip-path: polygon(0 0, calc(100% - 6px) 0, 100% 6px, 100% 100%, 5px 100%, 0 calc(100% - 5px));
+      text-align: left;
+      cursor: pointer;
+      font: 8px/1.05 var(--display);
+      letter-spacing: 0.035em;
+      white-space: nowrap;
+      overflow: hidden;
+      transition: color 140ms ease, border-color 140ms ease, background 140ms ease;
+    }
+
+    .district-marker:hover,
+    .district-marker:focus-visible,
+    .district-marker.is-active {
+      color: #edfff1;
+      border-color: color-mix(in srgb, var(--workspace-color) 68%, transparent);
+      background: linear-gradient(90deg, rgba(3, 10, 7, 0.98), color-mix(in srgb, var(--workspace-color) 14%, rgba(3, 12, 7, 0.9)));
+      outline: none;
+      box-shadow: 0 0 14px color-mix(in srgb, var(--workspace-color) 25%, transparent);
+    }
+
+    .district-marker .code {
+      color: var(--workspace-color);
+    }
+
+    .district-marker .name {
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .district-marker .count {
+      color: rgba(213, 255, 223, 0.58);
+      font-size: 7px;
+    }
+
+    .session-portal {
+      height: 19px;
+      padding: 2px 18px 2px 7px;
+      overflow: hidden;
+      display: block;
+      color: #a8c8b0;
+      border: 0;
+      border-left: 2px solid var(--status-color, var(--matrix));
+      background:
+        linear-gradient(90deg, rgba(0, 4, 2, 0.97), rgba(5, 22, 12, 0.88) 74%, rgba(5, 24, 13, 0.35)),
+        rgba(1, 8, 4, 0.9);
+      box-shadow: inset 0 1px rgba(216, 255, 226, 0.04);
+      cursor: pointer;
+      text-align: left;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+      font: 10px/15px var(--body);
+      transition: color 110ms ease, background 110ms ease, box-shadow 110ms ease;
+    }
+
+    .session-portal::after {
+      content: attr(data-slot);
+      position: absolute;
+      top: 3px;
+      right: 5px;
+      color: var(--status-color);
+      font: 7px/1 var(--display);
+      opacity: 0.64;
+    }
+
+    .session-portal:hover,
+    .session-portal:focus-visible,
+    .session-portal.is-current {
+      color: #effff3;
+      outline: none;
+      background:
+        linear-gradient(90deg, rgba(3, 16, 8, 0.98), color-mix(in srgb, var(--status-color) 14%, rgba(3, 18, 9, 0.9)) 78%, transparent);
+      box-shadow:
+        inset 0 0 11px color-mix(in srgb, var(--status-color) 9%, transparent),
+        0 0 9px color-mix(in srgb, var(--status-color) 18%, transparent);
+    }
+
+    .session-portal.is-current {
+      border-left-width: 4px;
+    }
+
+    .walk-controls {
+      position: absolute;
+      left: 9px;
+      bottom: 9px;
+      pointer-events: auto;
+      display: grid;
+      grid-template-columns: repeat(3, 22px);
+      grid-template-rows: repeat(2, 19px);
+      gap: 3px;
+      opacity: 0.78;
+    }
+
+    .walk-button {
+      display: grid;
+      place-items: center;
+      padding: 0;
+      border: 1px solid rgba(91, 255, 140, 0.24);
+      background: rgba(3, 13, 7, 0.82);
+      color: #97bfa1;
+      font: 8px/1 var(--display);
+      cursor: pointer;
+    }
+
+    .walk-button:hover,
+    .walk-button:focus-visible {
+      color: var(--matrix-hot);
+      border-color: var(--matrix);
+      outline: none;
+      box-shadow: 0 0 8px rgba(60, 255, 116, 0.22);
+    }
+
+    .walk-button[data-move="forward"] {
+      grid-column: 2;
+      grid-row: 1;
+    }
+
+    .walk-button[data-move="left"] {
+      grid-column: 1;
+      grid-row: 2;
+    }
+
+    .walk-button[data-move="back"] {
+      grid-column: 2;
+      grid-row: 2;
+    }
+
+    .walk-button[data-move="right"] {
+      grid-column: 3;
+      grid-row: 2;
+    }
+
+    .map-toggle {
+      position: absolute;
+      right: 9px;
+      bottom: 9px;
+      pointer-events: auto;
+      height: 41px;
+      min-width: 58px;
+      padding: 4px 7px;
+      border: 1px solid rgba(104, 233, 221, 0.35);
+      color: var(--cyan);
+      background: rgba(2, 14, 12, 0.82);
+      cursor: pointer;
+      font-size: 8px;
+      line-height: 1.15;
+      text-align: right;
+    }
+
+    .map-toggle small {
+      display: block;
+      margin-top: 3px;
+      color: rgba(182, 255, 246, 0.5);
+      font-size: 6px;
+    }
+
+    .map-toggle:hover,
+    .map-toggle:focus-visible {
+      outline: none;
+      border-color: var(--cyan);
+      color: #e7fffc;
+      box-shadow: 0 0 12px rgba(104, 233, 221, 0.22);
+    }
+
+    .session-dock {
+      position: relative;
+      z-index: 8;
+      flex: 0 0 112px;
+      min-height: 112px;
+      padding: 10px 12px 8px;
+      overflow: hidden;
+      background:
+        linear-gradient(145deg, rgba(9, 28, 17, 0.98), rgba(2, 9, 5, 0.99) 60%),
+        var(--surface);
+      border-bottom: 1px solid rgba(77, 255, 131, 0.18);
+    }
+
+    .session-dock::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 4px;
+      height: 100%;
+      background: var(--dock-color, var(--matrix));
+      box-shadow: 0 0 18px var(--dock-color, var(--matrix));
+      opacity: 0.78;
+    }
+
+    .dock-path {
+      margin: 0 0 6px;
+      color: var(--dock-color, var(--matrix));
+      font-size: 8px;
+      line-height: 1;
+    }
+
+    .dock-title {
+      margin: 0;
+      min-height: 40px;
+      display: -webkit-box;
+      overflow: hidden;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      color: #effff3;
+      font-size: 14px;
+      line-height: 1.42;
+      font-weight: 500;
+      text-wrap: balance;
+    }
+
+    .dock-meta {
+      margin-top: 7px;
+      display: flex;
+      gap: 7px;
+      align-items: center;
+      color: var(--muted);
+      font-size: 8px;
+      line-height: 1;
+    }
+
+    .dock-status {
+      color: var(--dock-color, var(--matrix));
+    }
+
+    .dock-status::before {
+      content: "";
+      display: inline-block;
+      width: 5px;
+      height: 5px;
+      margin-right: 5px;
+      background: var(--dock-color, var(--matrix));
+      box-shadow: 0 0 7px var(--dock-color, var(--matrix));
+    }
+
+    .sidebar-foot {
+      position: relative;
+      z-index: 8;
+      height: 49px;
+      flex: 0 0 49px;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      align-items: center;
+      gap: 7px;
+      padding: 7px 9px 7px 12px;
+      background: rgba(2, 8, 5, 0.98);
+    }
+
+    .experience-switch {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 3px;
+    }
+
+    .mode-button {
+      min-width: 0;
+      height: 25px;
+      padding: 0 5px;
+      overflow: hidden;
+      border: 1px solid rgba(77, 255, 131, 0.16);
+      background: rgba(8, 21, 13, 0.8);
+      color: #5f7f68;
+      cursor: pointer;
+      font-size: 7px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .mode-button:hover,
+    .mode-button:focus-visible,
+    .mode-button.is-active {
+      outline: none;
+      color: var(--matrix-hot);
+      border-color: rgba(77, 255, 131, 0.48);
+      background: rgba(30, 114, 54, 0.18);
+    }
+
+    .micro-state {
+      min-width: 63px;
+      color: #5f7f68;
+      font-size: 6px;
+      line-height: 1.45;
+      text-align: right;
+    }
+
+    .micro-state strong {
+      display: block;
+      color: var(--matrix);
+      font-weight: 400;
+    }
+
+    .city-map {
+      position: absolute;
+      z-index: 30;
+      inset: 58px 0 49px;
+      display: flex;
+      flex-direction: column;
+      background:
+        linear-gradient(180deg, rgba(2, 10, 6, 0.985), rgba(1, 5, 3, 0.995)),
+        var(--void);
+      transform: translateX(-102%);
+      visibility: hidden;
+      transition: transform 240ms cubic-bezier(.2, .75, .2, 1), visibility 240ms;
+      border-right: 1px solid var(--matrix-dim);
+    }
+
+    .city-map.is-open {
+      transform: translateX(0);
+      visibility: visible;
+    }
+
+    .map-head {
+      flex: 0 0 auto;
+      min-height: 55px;
+      padding: 10px 12px 8px;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      align-items: start;
+      border-bottom: 1px solid rgba(77, 255, 131, 0.21);
+      background:
+        linear-gradient(90deg, rgba(27, 107, 49, 0.16), transparent),
+        rgba(3, 12, 7, 0.98);
+    }
+
+    .map-kicker {
+      display: block;
+      color: var(--matrix);
+      font-size: 8px;
+      line-height: 1;
+    }
+
+    .map-head h2 {
+      margin: 5px 0 0;
+      color: #effff3;
+      font: 15px/1 var(--display);
+      font-weight: 400;
+      letter-spacing: 0.06em;
+    }
+
+    .map-close {
+      width: 28px;
+      height: 28px;
+      padding: 0;
+      border: 1px solid rgba(77, 255, 131, 0.3);
+      color: var(--matrix);
+      background: rgba(5, 22, 11, 0.7);
+      cursor: pointer;
+      font: 14px/1 var(--display);
+    }
+
+    .map-close:hover,
+    .map-close:focus-visible {
+      outline: none;
+      border-color: var(--matrix);
+      color: #fff;
+    }
+
+    .map-body {
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow-y: auto;
+      scrollbar-width: thin;
+      scrollbar-color: var(--matrix-dim) transparent;
+      padding: 9px 9px 18px;
+    }
+
+    .map-district {
+      position: relative;
+      margin: 0 0 9px;
+      padding: 7px 6px 6px 12px;
+      border: 1px solid rgba(77, 255, 131, 0.14);
+      background:
+        linear-gradient(90deg, color-mix(in srgb, var(--workspace-color) 7%, transparent), transparent 70%),
+        rgba(4, 14, 8, 0.78);
+    }
+
+    .map-district::before {
+      content: "";
+      position: absolute;
+      left: 4px;
+      top: 9px;
+      bottom: 9px;
+      width: 1px;
+      background: var(--workspace-color);
+      box-shadow: 0 0 8px var(--workspace-color);
+      opacity: 0.65;
+    }
+
+    .map-district-head {
+      width: 100%;
+      padding: 0 0 6px;
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      border: 0;
+      border-bottom: 1px solid rgba(162, 255, 187, 0.09);
+      color: #d8ffe2;
+      background: transparent;
+      cursor: pointer;
+      text-align: left;
+      font: 10px/1.2 var(--display);
+    }
+
+    .map-district-head:hover,
+    .map-district-head:focus-visible {
+      outline: none;
+      color: var(--workspace-color);
+    }
+
+    .map-address {
+      color: var(--workspace-color);
+      font-size: 8px;
+    }
+
+    .map-session-list {
+      margin: 5px 0 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .map-session-button {
+      width: 100%;
+      min-height: 27px;
+      padding: 4px 40px 4px 8px;
+      position: relative;
+      overflow: hidden;
+      display: block;
+      border: 0;
+      border-left: 1px solid rgba(141, 255, 173, 0.18);
+      color: #9db8a4;
+      background: transparent;
+      cursor: pointer;
+      text-align: left;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+      font: 10px/19px var(--body);
+    }
+
+    .map-session-button::before {
+      content: attr(data-status-code);
+      position: absolute;
+      left: 0;
+      top: 11px;
+      width: 3px;
+      height: 3px;
+      background: var(--status-color);
+      box-shadow: 0 0 6px var(--status-color);
+      color: transparent;
+    }
+
+    .map-session-button::after {
+      content: attr(data-time);
+      position: absolute;
+      right: 3px;
+      top: 7px;
+      color: #506a57;
+      font: 7px/1 var(--display);
+    }
+
+    .map-session-button:hover,
+    .map-session-button:focus-visible,
+    .map-session-button.is-current {
+      outline: none;
+      color: #effff3;
+      background: linear-gradient(90deg, rgba(63, 255, 116, 0.09), transparent);
+    }
+
+    .map-session-button.is-current {
+      border-left-color: var(--status-color);
+    }
+
+    .host-field {
+      position: relative;
+      flex: 1 1 auto;
+      min-width: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      overflow: hidden;
+      color: rgba(136, 183, 148, 0.2);
+      font-size: 10px;
+      letter-spacing: 0.13em;
+      text-align: center;
+    }
+
+    .host-field::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background:
+        linear-gradient(rgba(95, 255, 142, 0.025) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(95, 255, 142, 0.025) 1px, transparent 1px);
+      background-size: 32px 32px;
+      mask-image: radial-gradient(circle at 10% 50%, black, transparent 65%);
+    }
+
+    .host-field span {
+      position: relative;
+      padding: 13px 17px;
+      border: 1px solid rgba(105, 255, 149, 0.08);
+    }
+
+    .host-field strong {
+      display: block;
+      margin-bottom: 7px;
+      color: rgba(85, 255, 133, 0.27);
+      font-weight: 400;
+      font-size: 19px;
+    }
+
+    [data-experience="focus"] .zion-sidebar::before {
+      opacity: 0.35;
+    }
+
+    [data-experience="focus"] .crosshair,
+    [data-experience="focus"] .horizon-tag {
+      opacity: 0.25;
+    }
+
+    [data-experience="reduced"] .head-status::before {
+      animation: none;
+    }
+
+    [data-experience="reduced"] .city-map,
+    [data-experience="reduced"] .district-marker,
+    [data-experience="reduced"] .session-portal {
+      transition-duration: 0ms;
+    }
+
+    @keyframes breathe {
+      0%, 100% { opacity: 0.42; transform: scale(0.84); }
+      50% { opacity: 1; transform: scale(1.15); }
+    }
+
+    @media (max-width: 560px) {
+      body {
+        width: min(var(--sidebar-width), 100vw);
+        background: var(--void);
+      }
+
+      .host-field {
+        display: none;
+      }
+
+      .zion-sidebar {
+        border-right: 0;
+      }
+    }
+
+    @media (max-height: 650px) {
+      .zion-sidebar {
+        min-height: 520px;
+      }
+
+      .sidebar-head {
+        height: 52px;
+        flex-basis: 52px;
+        padding-top: 7px;
+      }
+
+      .session-dock {
+        min-height: 96px;
+        flex-basis: 96px;
+        padding-top: 8px;
+      }
+
+      .dock-title {
+        min-height: 32px;
+        font-size: 12px;
+      }
+
+      .city-map {
+        top: 52px;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *,
+      *::before,
+      *::after {
+        scroll-behavior: auto !important;
+        animation-duration: 0.001ms !important;
+        animation-iteration-count: 1 !important;
+      }
+    }
+  </style>
+</head>
+<body data-experience="cinematic">
+  <aside class="zion-sidebar" aria-label="ZION ASCII 多工作区会话栏">
+    <header class="sidebar-head">
+      <div>
+        <span class="brand-kicker">ZION NAVIGATION PROTOCOL</span>
+        <h1 class="brand-name">ASCII <em>DISTRICT</em></h1>
+      </div>
+      <div class="head-status">LINKED</div>
+    </header>
+
+    <section class="city-frame" id="city-frame" aria-label="可行走的工作区城市">
+      <canvas id="city-canvas" aria-hidden="true"></canvas>
+
+      <div class="frame-chrome" aria-hidden="true">
+        <div class="frame-topline">
+          <span class="frame-label">W/S WALK · A/D STRAFE</span>
+          <span class="frame-coordinate" id="frame-coordinate">Z:0000</span>
+        </div>
+        <div class="crosshair"></div>
+        <div class="horizon-tag">280PX // HARD LIMIT</div>
+      </div>
+
+      <div class="projection-layer" id="workspace-layer" aria-label="工作区地标"></div>
+      <div class="session-layer" id="session-layer" aria-label="当前工作区会话入口"></div>
+
+      <div class="walk-controls" aria-label="城市移动控制">
+        <button class="walk-button" type="button" data-move="forward" aria-label="向前移动">W</button>
+        <button class="walk-button" type="button" data-move="left" aria-label="向左横移">A</button>
+        <button class="walk-button" type="button" data-move="back" aria-label="向后移动">S</button>
+        <button class="walk-button" type="button" data-move="right" aria-label="向右横移">D</button>
+      </div>
+
+      <button class="map-toggle" type="button" id="map-toggle" aria-expanded="false" aria-controls="city-map">
+        CITY INDEX
+        <small>M · ALL 18</small>
+      </button>
+    </section>
+
+    <section class="session-dock" id="session-dock" aria-live="polite">
+      <p class="dock-path" id="dock-path">Z-01 / DEEPSEEK-ZION / 01</p>
+      <h2 class="dock-title" id="dock-title">重新设计多工作区会话栏</h2>
+      <div class="dock-meta">
+        <span class="dock-status" id="dock-status">STREAMING</span>
+        <span id="dock-time">现在</span>
+        <span id="dock-location">DISTRICT 01</span>
+      </div>
+    </section>
+
+    <footer class="sidebar-foot">
+      <div class="experience-switch" aria-label="体验模式">
+        <button class="mode-button is-active" type="button" data-experience="cinematic">CIN</button>
+        <button class="mode-button" type="button" data-experience="focus">FOCUS</button>
+        <button class="mode-button" type="button" data-experience="reduced">RED</button>
+      </div>
+      <div class="micro-state">
+        <span>VIEW STATE</span>
+        <strong id="micro-state">01/04 · CIN</strong>
+      </div>
+    </footer>
+
+    <section class="city-map" id="city-map" aria-hidden="true" aria-label="全部工作区与会话索引">
+      <header class="map-head">
+        <div>
+          <span class="map-kicker">SEMANTIC OVERLAY / 4 DISTRICTS</span>
+          <h2>ALL SESSION PORTALS</h2>
+        </div>
+        <button class="map-close" type="button" id="map-close" aria-label="关闭城市索引">×</button>
+      </header>
+      <div class="map-body" id="map-body" role="tree"></div>
+    </section>
+  </aside>
+
+  <main class="host-field" aria-hidden="true">
+    <span><strong>280 PX</strong>SIDEBAR PROTOTYPE BOUNDARY<br />HOST APPLICATION INTENTIONALLY EMPTY</span>
+  </main>
+
+  <script>
+    const WORKSPACES = [
+      {
+        id: "deepseek-zion",
+        code: "Z-01",
+        name: "deepseek-zion",
+        color: "#42ff85",
+        x: -52,
+        z: 230,
+        sessions: [
+          { id: "sidebar-redesign", title: "重新设计多工作区会话栏", time: "现在", status: "streaming" },
+          { id: "read-project", title: "阅读项目说明文件", time: "21小时", status: "ready" },
+          { id: "neural-link", title: "接入会话脑机链路与动态锚点", time: "1天", status: "tool" },
+          { id: "scroll-fix", title: "修复侧栏滚动定位漂移", time: "2天", status: "error" }
+        ]
+      },
+      {
+        id: "claude-code-toolkit",
+        code: "C-07",
+        name: "claude-code-toolkit",
+        color: "#ff9e42",
+        x: 54,
+        z: 570,
+        sessions: [
+          { id: "github-update", title: "更新到 GitHub 最新提交", time: "3天", status: "ready" },
+          { id: "hook-audit", title: "Hook 启动配置与官方文档核验", time: "5天", status: "thinking" },
+          { id: "launcher", title: "重构 Claude Launcher 启动协议", time: "6天", status: "ready" }
+        ]
+      },
+      {
+        id: "skills-guide",
+        code: "S-12",
+        name: "skills-guide",
+        color: "#68e9dd",
+        x: -48,
+        z: 910,
+        sessions: [
+          { id: "dsh-error", title: "安装 dsh 命令未找到报错", time: "2小时", status: "error" },
+          { id: "single-input", title: "Single number input", time: "1天", status: "ready" },
+          { id: "agent-skills", title: "重写 Agent Skills 中文索引与来源追踪", time: "1天", status: "tool" },
+          { id: "hello", title: "你好", time: "3天", status: "ready" },
+          { id: "cross-repo", title: "跨仓库技能组件映射", time: "4天", status: "thinking" }
+        ]
+      },
+      {
+        id: "matrix-lab",
+        code: "M-23",
+        name: "matrix-lab",
+        color: "#c6ff4a",
+        x: 50,
+        z: 1250,
+        sessions: [
+          { id: "perspective-test", title: "协议透视墙中文可读性压力测试", time: "12分", status: "thinking" },
+          { id: "orbit-collision", title: "神经轨道二十三节点碰撞实验", time: "37分", status: "tool" },
+          { id: "memory-bus", title: "记忆总线横向滚动与键盘路径", time: "1小时", status: "streaming" },
+          { id: "reduced-mode", title: "Reduced Motion 平坦化验证", time: "5小时", status: "ready" },
+          { id: "long-title", title: "这是一个用于验证极端情况下标题截断策略的超长中文会话名称", time: "8小时", status: "ready" },
+          { id: "error-recovery", title: "局部故障节点恢复入口", time: "11小时", status: "error" }
+        ]
+      }
+    ];
+
+    const STATUS = {
+      ready: { label: "READY", color: "#42ff85", glyph: ":" },
+      thinking: { label: "THINKING", color: "#ffcf4a", glyph: "*" },
+      streaming: { label: "STREAMING", color: "#68e9dd", glyph: "+" },
+      tool: { label: "TOOL ACTIVE", color: "#a7ff4a", glyph: ">" },
+      error: { label: "ERROR", color: "#ff5364", glyph: "<" }
+    };
+
+    // Matrix-Code.ttf only maps this deliberate glyph set. Keep canvas text inside it.
+    const MATRIX_GLYPHS = "アウエオカキケコサシスセソタツテナニヌネハヒホマミムメモヤヨラリワー012345789*+<>:|";
+    const ARCH_GLYPHS = "|<>:+*";
+
+    const canvas = document.querySelector("#city-canvas");
+    const context = canvas.getContext("2d", { alpha: false });
+    const frame = document.querySelector("#city-frame");
+    const workspaceLayer = document.querySelector("#workspace-layer");
+    const sessionLayer = document.querySelector("#session-layer");
+    const coordinateLabel = document.querySelector("#frame-coordinate");
+    const mapPanel = document.querySelector("#city-map");
+    const mapToggle = document.querySelector("#map-toggle");
+    const mapClose = document.querySelector("#map-close");
+    const mapBody = document.querySelector("#map-body");
+
+    const state = {
+      cameraZ: 0,
+      targetZ: 0,
+      cameraX: 0,
+      targetX: 0,
+      activeWorkspace: 0,
+      selectedWorkspace: 0,
+      selectedSessionId: "sidebar-redesign",
+      experience: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "reduced" : "cinematic",
+      mapOpen: false,
+      dragging: false,
+      pointerX: 0,
+      pointerY: 0,
+      width: 280,
+      height: 480,
+      dpr: 1
+    };
+
+    const buildingPoints = WORKSPACES.map(createBuildingPoints);
+    const rainColumns = [];
+    const workspaceMarkers = new Map();
+    let sessionButtons = [];
+    let previousTime = performance.now();
+    let lastActiveWorkspace = -1;
+
+    function clamp(value, min, max) {
+      return Math.min(max, Math.max(min, value));
+    }
+
+    function mix(a, b, amount) {
+      return a + (b - a) * amount;
+    }
+
+    function stableGlyph(seed, alphabet = MATRIX_GLYPHS) {
+      const value = Math.abs(Math.sin(seed * 12.9898 + 78.233) * 43758.5453);
+      return alphabet[Math.floor((value % 1) * alphabet.length)];
+    }
+
+    function hexToRgb(hex) {
+      const clean = hex.replace("#", "");
+      return {
+        r: parseInt(clean.slice(0, 2), 16),
+        g: parseInt(clean.slice(2, 4), 16),
+        b: parseInt(clean.slice(4, 6), 16)
+      };
+    }
+
+    function rgba(hex, alpha) {
+      const color = hexToRgb(hex);
+      return `rgba(${color.r}, ${color.g}, ${color.b}, ${alpha})`;
+    }
+
+    function createBuildingPoints(workspace, workspaceIndex) {
+      const points = [];
+      const width = 100;
+      const height = 184;
+      const depth = 74;
+      const xSteps = 13;
+      const ySteps = 22;
+
+      for (let yi = 0; yi <= ySteps; yi += 1) {
+        const y = yi * (height / ySteps);
+        for (let xi = 0; xi <= xSteps; xi += 1) {
+          const x = -width / 2 + xi * (width / xSteps);
+          const edge = xi === 0 || xi === xSteps || yi === 0 || yi === ySteps;
+          const windowBand = yi > 2 && yi < ySteps - 2 && yi % 3 !== 0 && xi > 1 && xi < xSteps - 1;
+          if (!edge && !windowBand && (xi + yi) % 4 !== 0) continue;
+          points.push({
+            x: workspace.x + x,
+            y,
+            z: workspace.z,
+            glyph: edge ? stableGlyph(xi + yi * 3 + workspaceIndex, "|<>+") : stableGlyph(xi * 7 + yi * 11 + workspaceIndex),
+            energy: edge ? 0.92 : (windowBand ? 0.52 : 0.28),
+            workspaceIndex
+          });
+        }
+      }
+
+      for (let zi = 1; zi <= 8; zi += 1) {
+        const z = workspace.z + zi * (depth / 8);
+        for (let yi = 0; yi <= ySteps; yi += 2) {
+          const y = yi * (height / ySteps);
+          [-width / 2, width / 2].forEach((side, sideIndex) => {
+            points.push({
+              x: workspace.x + side,
+              y,
+              z,
+              glyph: stableGlyph(zi * 17 + yi * 5 + sideIndex + workspaceIndex, ARCH_GLYPHS),
+              energy: 0.42,
+              workspaceIndex
+            });
+          });
+        }
+      }
+
+      workspace.sessions.forEach((session, sessionIndex) => {
+        const y = 127 - sessionIndex * 21;
+        const status = STATUS[session.status];
+        for (let xi = -5; xi <= 5; xi += 1) {
+          points.push({
+            x: workspace.x + xi * 7.2,
+            y,
+            z: workspace.z - 0.5,
+            glyph: xi === -5 || xi === 5 ? status.glyph : stableGlyph(sessionIndex * 19 + xi + workspaceIndex),
+            energy: 1,
+            workspaceIndex,
+            sessionIndex,
+            statusColor: status.color
+          });
+        }
+      });
+
+      return points;
+    }
+
+    function project(x, y, z) {
+      const depth = z - state.cameraZ;
+      if (depth <= 18) return null;
+      const focal = Math.min(232, state.height * 0.49);
+      const scale = focal / depth;
+      return {
+        x: state.width / 2 + (x - state.cameraX) * scale,
+        y: state.height * 0.435 - (y - 18) * scale,
+        depth,
+        scale
+      };
+    }
+
+    function resizeCanvas() {
+      const bounds = frame.getBoundingClientRect();
+      state.width = Math.round(bounds.width);
+      state.height = Math.round(bounds.height);
+      state.dpr = Math.min(2, window.devicePixelRatio || 1);
+      canvas.width = Math.round(state.width * state.dpr);
+      canvas.height = Math.round(state.height * state.dpr);
+      canvas.style.width = `${state.width}px`;
+      canvas.style.height = `${state.height}px`;
+      context.setTransform(state.dpr, 0, 0, state.dpr, 0, 0);
+      initRain();
+    }
+
+    function initRain() {
+      rainColumns.length = 0;
+      const step = 10;
+      for (let x = 4; x < state.width; x += step) {
+        rainColumns.push({
+          x,
+          offset: (x * 19.3) % Math.max(1, state.height),
+          speed: 15 + ((x * 7) % 29),
+          length: 5 + (x % 7),
+          seed: x * 0.31
+        });
+      }
+    }
+
+    function drawBackground(time) {
+      const gradient = context.createLinearGradient(0, 0, 0, state.height);
+      gradient.addColorStop(0, "#010705");
+      gradient.addColorStop(0.48, "#020a06");
+      gradient.addColorStop(1, "#010302");
+      context.fillStyle = gradient;
+      context.fillRect(0, 0, state.width, state.height);
+
+      const focusFactor = state.experience === "focus" ? 0.3 : 1;
+      const reducedTime = state.experience === "reduced" ? 0 : time;
+      context.font = '10px "Matrix Code"';
+      context.textAlign = "center";
+      context.textBaseline = "middle";
+
+      rainColumns.forEach((column, columnIndex) => {
+        const head = (column.offset + reducedTime * 0.001 * column.speed) % (state.height + 120) - 60;
+        for (let trail = 0; trail < column.length; trail += 1) {
+          const y = head - trail * 11;
+          if (y < -12 || y > state.height + 12) continue;
+          const energy = (1 - trail / column.length) * 0.23 * focusFactor;
+          const glyph = stableGlyph(column.seed + trail * 13 + Math.floor(reducedTime / 760) + columnIndex);
+          context.fillStyle = trail === 0
+            ? `rgba(220, 255, 229, ${0.32 * focusFactor})`
+            : `rgba(47, 255, 105, ${energy})`;
+          context.fillText(glyph, column.x, y);
+        }
+      });
+
+      const horizon = state.height * 0.435;
+      const haze = context.createRadialGradient(state.width / 2, horizon, 0, state.width / 2, horizon, state.width * 0.72);
+      haze.addColorStop(0, "rgba(68,255,123,0.12)");
+      haze.addColorStop(0.35, "rgba(30,112,55,0.035)");
+      haze.addColorStop(1, "rgba(0,0,0,0)");
+      context.fillStyle = haze;
+      context.fillRect(0, horizon - 100, state.width, 210);
+    }
+
+    function drawWorldLine(a, b, color, width = 1) {
+      const start = project(a.x, a.y, a.z);
+      const end = project(b.x, b.y, b.z);
+      if (!start || !end) return;
+      context.beginPath();
+      context.moveTo(start.x, start.y);
+      context.lineTo(end.x, end.y);
+      context.strokeStyle = color;
+      context.lineWidth = width;
+      context.stroke();
+    }
+
+    function drawStreet(time) {
+      context.font = '9px "Matrix Code"';
+      context.textAlign = "center";
+      context.textBaseline = "middle";
+
+      for (let distance = 42; distance < 1450; distance += 28) {
+        const z = state.cameraZ + distance;
+        [-34, 0, 34].forEach((x, lane) => {
+          const point = project(x, 0, z);
+          if (!point || point.y < 0 || point.y > state.height + 16) return;
+          const alpha = clamp(0.58 - distance / 2400, 0.06, 0.48);
+          context.fillStyle = lane === 1
+            ? `rgba(217,255,229,${alpha * 0.52})`
+            : `rgba(57,255,115,${alpha})`;
+          const glyphSeed = distance + lane * 17 + Math.floor((state.experience === "reduced" ? 0 : time) / 280);
+          context.fillText(stableGlyph(glyphSeed, lane === 1 ? ":*" : "|+"), point.x, point.y);
+        });
+      }
+
+      const farZ = state.cameraZ + 1500;
+      [-62, -34, 34, 62].forEach((x, index) => {
+        drawWorldLine(
+          { x, y: 0, z: state.cameraZ + 24 },
+          { x: x * 0.35, y: 0, z: farZ },
+          index === 1 || index === 2 ? "rgba(83,255,135,0.22)" : "rgba(83,255,135,0.08)"
+        );
+      });
+    }
+
+    function drawBuildingShell(workspace, workspaceIndex) {
+      const active = workspaceIndex === state.activeWorkspace;
+      const width = 100;
+      const height = 184;
+      const depth = 74;
+      const front = [
+        project(workspace.x - width / 2, 0, workspace.z),
+        project(workspace.x + width / 2, 0, workspace.z),
+        project(workspace.x + width / 2, height, workspace.z),
+        project(workspace.x - width / 2, height, workspace.z)
+      ];
+      if (front.some((point) => !point)) return;
+
+      context.beginPath();
+      context.moveTo(front[0].x, front[0].y);
+      front.slice(1).forEach((point) => context.lineTo(point.x, point.y));
+      context.closePath();
+      context.fillStyle = active ? rgba(workspace.color, 0.055) : "rgba(3,14,8,0.09)";
+      context.fill();
+      context.strokeStyle = active ? rgba(workspace.color, 0.36) : "rgba(69,181,100,0.12)";
+      context.lineWidth = active ? 1 : 0.6;
+      context.stroke();
+
+      const side = workspace.x < 0 ? width / 2 : -width / 2;
+      drawWorldLine(
+        { x: workspace.x + side, y: 0, z: workspace.z },
+        { x: workspace.x + side, y: 0, z: workspace.z + depth },
+        rgba(workspace.color, active ? 0.38 : 0.15)
+      );
+      drawWorldLine(
+        { x: workspace.x + side, y: height, z: workspace.z },
+        { x: workspace.x + side, y: height, z: workspace.z + depth },
+        rgba(workspace.color, active ? 0.3 : 0.12)
+      );
+    }
+
+    function drawBuildings(time) {
+      const drawable = [];
+
+      WORKSPACES.forEach((workspace, workspaceIndex) => {
+        drawBuildingShell(workspace, workspaceIndex);
+        buildingPoints[workspaceIndex].forEach((point) => {
+          const projected = project(point.x, point.y, point.z);
+          if (!projected) return;
+          if (projected.x < -12 || projected.x > state.width + 12 || projected.y < -12 || projected.y > state.height + 12) return;
+          drawable.push({ point, projected, workspace });
+        });
+      });
+
+      drawable.sort((a, b) => b.projected.depth - a.projected.depth);
+      context.textAlign = "center";
+      context.textBaseline = "middle";
+
+      drawable.forEach(({ point, projected, workspace }) => {
+        const active = point.workspaceIndex === state.activeWorkspace;
+        const size = clamp(5.5 + projected.scale * 5.8, 5.8, 13.5);
+        const depthFade = clamp(1 - projected.depth / 1700, 0.11, 0.88);
+        const pulse = state.experience === "cinematic" && point.sessionIndex !== undefined
+          ? 0.78 + Math.sin(time * 0.004 + point.sessionIndex) * 0.22
+          : 1;
+        const alpha = depthFade * point.energy * (active ? 1 : 0.68) * pulse;
+        context.font = `${size}px "Matrix Code"`;
+        context.fillStyle = point.statusColor
+          ? rgba(point.statusColor, alpha)
+          : rgba(workspace.color, alpha);
+        context.fillText(point.glyph, projected.x, projected.y);
+      });
+    }
+
+    function drawDepthFog() {
+      const fog = context.createLinearGradient(0, 0, 0, state.height);
+      fog.addColorStop(0, "rgba(0,3,2,0.18)");
+      fog.addColorStop(0.38, "rgba(0,0,0,0)");
+      fog.addColorStop(1, "rgba(0,3,1,0.36)");
+      context.fillStyle = fog;
+      context.fillRect(0, 0, state.width, state.height);
+    }
+
+    function renderCanvas(time) {
+      drawBackground(time);
+      drawStreet(time);
+      drawBuildings(time);
+      drawDepthFog();
+    }
+
+    function createWorkspaceMarkers() {
+      workspaceLayer.replaceChildren();
+      WORKSPACES.forEach((workspace, index) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "district-marker";
+        button.style.setProperty("--workspace-color", workspace.color);
+        button.setAttribute("aria-label", `前往工作区 ${workspace.name}，${workspace.sessions.length} 个会话`);
+
+        const code = document.createElement("span");
+        code.className = "code";
+        code.textContent = workspace.code;
+        const name = document.createElement("span");
+        name.className = "name";
+        name.textContent = workspace.name;
+        const count = document.createElement("span");
+        count.className = "count";
+        count.textContent = String(workspace.sessions.length).padStart(2, "0");
+
+        button.append(code, name, count);
+        button.addEventListener("click", () => navigateToWorkspace(index));
+        workspaceLayer.append(button);
+        workspaceMarkers.set(workspace.id, button);
+      });
+    }
+
+    function rebuildSessionPortals() {
+      const workspace = WORKSPACES[state.activeWorkspace];
+      sessionLayer.replaceChildren();
+      sessionButtons = workspace.sessions.map((session, sessionIndex) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "session-portal";
+        button.textContent = session.title;
+        button.dataset.slot = String(sessionIndex + 1).padStart(2, "0");
+        button.style.setProperty("--status-color", STATUS[session.status].color);
+        button.title = `${session.title} · ${STATUS[session.status].label} · ${session.time}`;
+        button.setAttribute("aria-label", `${session.title}，${STATUS[session.status].label}，${session.time}`);
+        if (state.selectedWorkspace === state.activeWorkspace && state.selectedSessionId === session.id) {
+          button.classList.add("is-current");
+        }
+        button.addEventListener("click", () => selectSession(state.activeWorkspace, session.id));
+        sessionLayer.append(button);
+        return button;
+      });
+    }
+
+    function updateProjectedDom() {
+      WORKSPACES.forEach((workspace, index) => {
+        const marker = workspaceMarkers.get(workspace.id);
+        const point = project(workspace.x, 203, workspace.z);
+        if (!point || point.depth > 1500 || point.x < -100 || point.x > state.width + 100) {
+          marker.style.opacity = "0";
+          marker.style.pointerEvents = "none";
+          return;
+        }
+
+        const scale = clamp(point.scale, 0.58, 1.08);
+        marker.style.left = `${point.x}px`;
+        marker.style.top = `${point.y}px`;
+        marker.style.opacity = String(clamp(1 - point.depth / 1750, 0.2, 0.96));
+        marker.style.transform = `translate(-50%, -100%) scale(${scale})`;
+        marker.style.pointerEvents = "auto";
+        marker.classList.toggle("is-active", index === state.activeWorkspace);
+      });
+
+      const workspace = WORKSPACES[state.activeWorkspace];
+      const buildingDepth = workspace.z - state.cameraZ;
+      sessionButtons.forEach((button, sessionIndex) => {
+        const y = 127 - sessionIndex * 21;
+        const point = project(workspace.x, y, workspace.z - 1);
+        if (!point || buildingDepth < 105 || buildingDepth > 510 || point.y < 24 || point.y > state.height - 50) {
+          button.style.opacity = "0";
+          button.style.pointerEvents = "none";
+          return;
+        }
+        const scale = clamp(point.scale, 0.72, 1.04);
+        const width = clamp(130 * scale + 28, 132, 174);
+        button.style.width = `${width}px`;
+        button.style.left = `${point.x}px`;
+        button.style.top = `${point.y}px`;
+        button.style.opacity = String(clamp(1.2 - Math.abs(buildingDepth - 225) / 370, 0.22, 1));
+        button.style.transform = `translate(-50%, -50%) scale(${scale})`;
+        button.style.pointerEvents = "auto";
+      });
+
+      coordinateLabel.textContent = `Z:${String(Math.round(state.cameraZ + 100)).padStart(4, "0")} X:${Math.round(state.cameraX)}`;
+    }
+
+    function closestWorkspaceIndex() {
+      let bestIndex = 0;
+      let bestDistance = Infinity;
+      WORKSPACES.forEach((workspace, index) => {
+        const distance = Math.abs(state.cameraZ - (workspace.z - 230));
+        if (distance < bestDistance) {
+          bestDistance = distance;
+          bestIndex = index;
+        }
+      });
+      return bestIndex;
+    }
+
+    function syncActiveWorkspaceFromCamera() {
+      const next = closestWorkspaceIndex();
+      if (next === state.activeWorkspace) return;
+      state.activeWorkspace = next;
+      rebuildSessionPortals();
+      updateMicroState();
+    }
+
+    function navigateToWorkspace(index, selectFirst = false) {
+      const workspace = WORKSPACES[index];
+      state.activeWorkspace = index;
+      state.targetZ = workspace.z - 230;
+      state.targetX = workspace.x * 0.08;
+      if (state.experience === "reduced") {
+        state.cameraZ = state.targetZ;
+        state.cameraX = state.targetX;
+      }
+      if (selectFirst) selectSession(index, workspace.sessions[0].id);
+      rebuildSessionPortals();
+      updateMicroState();
+    }
+
+    function selectSession(workspaceIndex, sessionId) {
+      const workspace = WORKSPACES[workspaceIndex];
+      const session = workspace.sessions.find((item) => item.id === sessionId);
+      if (!session) return;
+      state.selectedWorkspace = workspaceIndex;
+      state.selectedSessionId = session.id;
+      if (state.activeWorkspace !== workspaceIndex) navigateToWorkspace(workspaceIndex);
+      updateDock();
+      rebuildSessionPortals();
+      updateMapSelection();
+    }
+
+    function updateDock() {
+      const workspace = WORKSPACES[state.selectedWorkspace];
+      const sessionIndex = workspace.sessions.findIndex((item) => item.id === state.selectedSessionId);
+      const session = workspace.sessions[sessionIndex] || workspace.sessions[0];
+      const status = STATUS[session.status];
+      const dock = document.querySelector("#session-dock");
+      dock.style.setProperty("--dock-color", status.color);
+      document.querySelector("#dock-path").textContent = `${workspace.code} / ${workspace.name.toUpperCase()} / ${String(sessionIndex + 1).padStart(2, "0")}`;
+      document.querySelector("#dock-title").textContent = session.title;
+      document.querySelector("#dock-status").textContent = status.label;
+      document.querySelector("#dock-time").textContent = session.time;
+      document.querySelector("#dock-location").textContent = `DISTRICT ${String(state.selectedWorkspace + 1).padStart(2, "0")}`;
+    }
+
+    function updateMicroState() {
+      const label = state.experience === "cinematic" ? "CIN" : state.experience === "focus" ? "FOC" : "RED";
+      document.querySelector("#micro-state").textContent = `${String(state.activeWorkspace + 1).padStart(2, "0")}/04 · ${label}`;
+    }
+
+    function buildMap() {
+      mapBody.replaceChildren();
+      WORKSPACES.forEach((workspace, workspaceIndex) => {
+        const district = document.createElement("section");
+        district.className = "map-district";
+        district.style.setProperty("--workspace-color", workspace.color);
+        district.setAttribute("role", "group");
+        district.setAttribute("aria-label", workspace.name);
+
+        const head = document.createElement("button");
+        head.type = "button";
+        head.className = "map-district-head";
+        head.innerHTML = `<span>${workspace.name}</span><span class="map-address">${workspace.code} // ${String(workspace.sessions.length).padStart(2, "0")}</span>`;
+        head.addEventListener("click", () => {
+          navigateToWorkspace(workspaceIndex);
+          closeMap();
+        });
+
+        const list = document.createElement("ul");
+        list.className = "map-session-list";
+        list.setAttribute("role", "group");
+        workspace.sessions.forEach((session) => {
+          const item = document.createElement("li");
+          item.setAttribute("role", "none");
+          const button = document.createElement("button");
+          button.type = "button";
+          button.className = "map-session-button";
+          button.textContent = session.title;
+          button.dataset.workspaceIndex = String(workspaceIndex);
+          button.dataset.sessionId = session.id;
+          button.dataset.statusCode = STATUS[session.status].glyph;
+          button.dataset.time = session.time;
+          button.style.setProperty("--status-color", STATUS[session.status].color);
+          button.setAttribute("role", "treeitem");
+          button.setAttribute("aria-label", `${workspace.name}，${session.title}，${STATUS[session.status].label}，${session.time}`);
+          button.title = `${session.title} · ${STATUS[session.status].label} · ${session.time}`;
+          button.addEventListener("click", () => {
+            selectSession(workspaceIndex, session.id);
+            navigateToWorkspace(workspaceIndex);
+            closeMap();
+          });
+          item.append(button);
+          list.append(item);
+        });
+
+        district.append(head, list);
+        mapBody.append(district);
+      });
+      updateMapSelection();
+    }
+
+    function updateMapSelection() {
+      mapBody.querySelectorAll(".map-session-button").forEach((button) => {
+        const isCurrent = Number(button.dataset.workspaceIndex) === state.selectedWorkspace
+          && button.dataset.sessionId === state.selectedSessionId;
+        button.classList.toggle("is-current", isCurrent);
+        button.setAttribute("aria-current", isCurrent ? "page" : "false");
+      });
+    }
+
+    function openMap() {
+      state.mapOpen = true;
+      mapPanel.classList.add("is-open");
+      mapPanel.setAttribute("aria-hidden", "false");
+      mapToggle.setAttribute("aria-expanded", "true");
+      const current = mapBody.querySelector(".map-session-button.is-current");
+      if (current) {
+        current.scrollIntoView({ block: "center" });
+        current.focus({ preventScroll: true });
+      } else {
+        mapClose.focus();
+      }
+    }
+
+    function closeMap() {
+      state.mapOpen = false;
+      mapPanel.classList.remove("is-open");
+      mapPanel.setAttribute("aria-hidden", "true");
+      mapToggle.setAttribute("aria-expanded", "false");
+      mapToggle.focus({ preventScroll: true });
+    }
+
+    function toggleMap() {
+      if (state.mapOpen) closeMap();
+      else openMap();
+    }
+
+    function moveCamera(direction, amount = 76) {
+      if (direction === "forward") state.targetZ += amount;
+      if (direction === "back") state.targetZ -= amount;
+      if (direction === "left") state.targetX -= 13;
+      if (direction === "right") state.targetX += 13;
+      state.targetZ = clamp(state.targetZ, -15, WORKSPACES.at(-1).z - 128);
+      state.targetX = clamp(state.targetX, -30, 30);
+      if (state.experience === "reduced") {
+        state.cameraZ = state.targetZ;
+        state.cameraX = state.targetX;
+        syncActiveWorkspaceFromCamera();
+      }
+    }
+
+    function setExperience(experience) {
+      state.experience = experience;
+      document.body.dataset.experience = experience;
+      document.querySelectorAll("[data-experience]").forEach((button) => {
+        if (!button.classList.contains("mode-button")) return;
+        button.classList.toggle("is-active", button.dataset.experience === experience);
+        button.setAttribute("aria-pressed", button.dataset.experience === experience ? "true" : "false");
+      });
+      if (experience === "reduced") {
+        state.cameraZ = state.targetZ;
+        state.cameraX = state.targetX;
+      }
+      updateMicroState();
+    }
+
+    function handleKeydown(event) {
+      if (event.target.matches("input, textarea, [contenteditable]")) return;
+      if (event.key === "Escape" && state.mapOpen) {
+        event.preventDefault();
+        closeMap();
+        return;
+      }
+      if (event.key.toLowerCase() === "m") {
+        event.preventDefault();
+        toggleMap();
+        return;
+      }
+      if (state.mapOpen) return;
+      const key = event.key.toLowerCase();
+      const directions = {
+        w: "forward",
+        arrowup: "forward",
+        s: "back",
+        arrowdown: "back",
+        a: "left",
+        arrowleft: "left",
+        d: "right",
+        arrowright: "right"
+      };
+      const direction = directions[key];
+      if (!direction) return;
+      event.preventDefault();
+      moveCamera(direction);
+    }
+
+    function animate(time) {
+      const delta = Math.min(0.05, (time - previousTime) / 1000);
+      previousTime = time;
+      const smoothing = state.experience === "reduced" ? 1 : 1 - Math.pow(0.001, delta);
+      state.cameraZ = mix(state.cameraZ, state.targetZ, smoothing);
+      state.cameraX = mix(state.cameraX, state.targetX, smoothing);
+      syncActiveWorkspaceFromCamera();
+      renderCanvas(time);
+      updateProjectedDom();
+      requestAnimationFrame(animate);
+    }
+
+    frame.addEventListener("wheel", (event) => {
+      if (state.mapOpen) return;
+      event.preventDefault();
+      const amount = clamp(event.deltaY * 0.32, -105, 105);
+      state.targetZ = clamp(state.targetZ + amount, -15, WORKSPACES.at(-1).z - 128);
+    }, { passive: false });
+
+    frame.addEventListener("pointerdown", (event) => {
+      if (event.target.closest("button")) return;
+      state.dragging = true;
+      state.pointerX = event.clientX;
+      state.pointerY = event.clientY;
+      frame.setPointerCapture(event.pointerId);
+    });
+
+    frame.addEventListener("pointermove", (event) => {
+      if (!state.dragging) return;
+      const dx = event.clientX - state.pointerX;
+      const dy = event.clientY - state.pointerY;
+      state.pointerX = event.clientX;
+      state.pointerY = event.clientY;
+      state.targetX = clamp(state.targetX - dx * 0.23, -30, 30);
+      state.targetZ = clamp(state.targetZ + dy * 0.72, -15, WORKSPACES.at(-1).z - 128);
+    });
+
+    frame.addEventListener("pointerup", (event) => {
+      state.dragging = false;
+      if (frame.hasPointerCapture(event.pointerId)) frame.releasePointerCapture(event.pointerId);
+    });
+
+    document.querySelectorAll("[data-move]").forEach((button) => {
+      button.addEventListener("click", () => moveCamera(button.dataset.move));
+    });
+
+    document.querySelectorAll(".mode-button").forEach((button) => {
+      button.addEventListener("click", () => setExperience(button.dataset.experience));
+    });
+
+    mapToggle.addEventListener("click", toggleMap);
+    mapClose.addEventListener("click", closeMap);
+    document.addEventListener("keydown", handleKeydown);
+
+    const observer = new ResizeObserver(resizeCanvas);
+    observer.observe(frame);
+
+    createWorkspaceMarkers();
+    rebuildSessionPortals();
+    buildMap();
+    updateDock();
+    setExperience(state.experience);
+    resizeCanvas();
+
+    document.fonts.load('12px "Matrix Code"').finally(() => {
+      requestAnimationFrame(animate);
+    });
+  </script>
+</body>
+</html>
