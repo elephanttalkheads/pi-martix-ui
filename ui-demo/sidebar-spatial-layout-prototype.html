@@ -1,0 +1,1671 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ZION · 开放式多工作区会话栏原型</title>
+  <!--
+    PROTOTYPE — THROWAWAY UI, DO NOT PROMOTE DIRECTLY TO PRODUCTION.
+    Question: 取消旧尺寸与纵向列表约束后，多工作区会话栏应该采用哪一种空间模型？
+    Three mutually exclusive variants on one route: ?variant=wall|orbit|bus.
+    Run: npx vite ui-demo --host 127.0.0.1 --port 4178
+  -->
+  <style>
+    @font-face {
+      font-family: "Zion Mono";
+      src: url("./assets/sidebar-spatial-layout/SarasaTermSC-Regular.subset.woff2") format("woff2");
+      font-display: swap;
+    }
+    @font-face {
+      font-family: "Share Tech";
+      src: url("./assets/sidebar-spatial-layout/ShareTechMono-Regular.woff2") format("woff2");
+      font-display: swap;
+    }
+    @font-face {
+      font-family: "Matrix Code";
+      src: url("./font/Matrix-Code.ttf") format("truetype");
+      font-display: swap;
+    }
+
+    :root {
+      --black: #010503;
+      --ink: #030a06;
+      --panel: #06110b;
+      --panel-deep: #020704;
+      --green: #42ff85;
+      --green-2: #1fc963;
+      --green-3: #0b7438;
+      --white: #d8ffe2;
+      --cyan: #68e9dd;
+      --amber: #ff9e42;
+      --red: #ff4d57;
+      --dim: #618a70;
+      --line: rgba(66, 255, 133, .18);
+      --line-strong: rgba(66, 255, 133, .52);
+      --surface-width: clamp(500px, 43vw, 650px);
+      --titlebar-height: 38px;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; margin: 0; }
+    body {
+      overflow: hidden;
+      color: var(--green);
+      background: #010302;
+      font: 13px/1.45 "Zion Mono", "Microsoft YaHei", monospace;
+    }
+    button, input { font: inherit; }
+    button { color: inherit; }
+    button:focus-visible, input:focus-visible {
+      outline: 2px solid var(--white);
+      outline-offset: 2px;
+    }
+    ::selection { color: #001b08; background: var(--green); }
+
+    .app-shell {
+      height: 100vh;
+      display: grid;
+      grid-template-rows: var(--titlebar-height) minmax(0, 1fr);
+      isolation: isolate;
+    }
+    .app-titlebar {
+      position: relative;
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      min-width: 0;
+      padding: 0 12px 0 16px;
+      border-bottom: 1px solid rgba(100, 150, 115, .22);
+      background:
+        linear-gradient(90deg, rgba(8, 24, 14, .98), rgba(2, 8, 5, .98) 48%, rgba(11, 16, 13, .98));
+      box-shadow: 0 5px 18px rgba(0, 0, 0, .38);
+      color: #9ec2a8;
+      letter-spacing: .08em;
+    }
+    .app-brand {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      min-width: 0;
+      color: var(--white);
+      white-space: nowrap;
+    }
+    .app-brand-mark {
+      width: 18px;
+      height: 18px;
+      border: 1px solid var(--green);
+      border-radius: 50% 50% 48% 12%;
+      transform: rotate(-17deg);
+      box-shadow: inset 4px -3px 0 rgba(66, 255, 133, .18), 0 0 12px rgba(66, 255, 133, .22);
+    }
+    .app-brand b { font: 15px/1 "Share Tech", monospace; letter-spacing: .16em; }
+    .prototype-flag {
+      padding: 2px 7px;
+      border: 1px solid rgba(255, 158, 66, .4);
+      color: var(--amber);
+      font: 9px/1.4 "Share Tech", monospace;
+      letter-spacing: .12em;
+    }
+    .titlebar-spacer { flex: 1; }
+    .experience-switch {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .experience-switch > span {
+      margin-right: 4px;
+      color: #52725b;
+      font: 9px/1 "Share Tech", monospace;
+    }
+    .experience-btn {
+      height: 25px;
+      padding: 0 8px;
+      border: 1px solid rgba(106, 150, 117, .18);
+      background: #07100a;
+      color: #64856d;
+      font: 9px/1 "Share Tech", monospace;
+      letter-spacing: .08em;
+      cursor: pointer;
+    }
+    .experience-btn:hover { color: var(--white); border-color: rgba(66, 255, 133, .4); }
+    .experience-btn.active {
+      color: #001a08;
+      border-color: var(--green);
+      background: var(--green);
+      box-shadow: 0 0 12px rgba(66, 255, 133, .24);
+    }
+    .clock {
+      min-width: 72px;
+      color: #5c8267;
+      text-align: right;
+      font: 10px/1 "Share Tech", monospace;
+    }
+
+    .workspace-shell {
+      min-height: 0;
+      display: grid;
+      grid-template-columns: var(--surface-width) minmax(0, 1fr);
+      background: #010302;
+    }
+    .prototype-surface {
+      position: relative;
+      min-width: 0;
+      overflow: hidden;
+      border-right: 1px solid rgba(66, 255, 133, .24);
+      background: #020805;
+      box-shadow: 18px 0 40px rgba(0, 0, 0, .45);
+      isolation: isolate;
+    }
+    #variant-root { position: absolute; inset: 0; z-index: 2; }
+    .surface-scanlines,
+    .surface-noise {
+      position: absolute;
+      inset: 0;
+      z-index: 40;
+      pointer-events: none;
+    }
+    .surface-scanlines {
+      opacity: .38;
+      background: repeating-linear-gradient(0deg, rgba(0,0,0,.2) 0 1px, transparent 1px 4px);
+      mix-blend-mode: multiply;
+    }
+    .surface-noise {
+      opacity: .12;
+      background-image:
+        radial-gradient(circle at 17% 24%, rgba(66,255,133,.2) 0 1px, transparent 1.4px),
+        radial-gradient(circle at 78% 68%, rgba(255,255,255,.15) 0 1px, transparent 1.3px);
+      background-size: 13px 17px, 19px 23px;
+      animation: noise-shift 500ms steps(2) infinite;
+    }
+    @keyframes noise-shift {
+      50% { transform: translate3d(-3px, 2px, 0); }
+    }
+
+    .context-stage {
+      position: relative;
+      min-width: 0;
+      overflow: hidden;
+      background:
+        linear-gradient(90deg, rgba(1, 8, 4, .98), rgba(2, 6, 4, .92)),
+        #020503;
+    }
+    .context-stage::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      opacity: .16;
+      background:
+        linear-gradient(rgba(66,255,133,.08) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(66,255,133,.06) 1px, transparent 1px);
+      background-size: 40px 40px;
+      mask-image: linear-gradient(90deg, rgba(0,0,0,.7), transparent 78%);
+    }
+    .context-rain {
+      position: absolute;
+      inset: 0;
+      overflow: hidden;
+      color: rgba(66, 255, 133, .16);
+      font: 18px/1.3 "Matrix Code", monospace;
+      letter-spacing: .5em;
+      writing-mode: vertical-rl;
+      word-break: break-all;
+      animation: rain-drift 13s linear infinite;
+      pointer-events: none;
+    }
+    @keyframes rain-drift {
+      from { transform: translateY(-16%); }
+      to { transform: translateY(5%); }
+    }
+    .context-inner {
+      position: relative;
+      z-index: 2;
+      height: 100%;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr) auto;
+      padding: clamp(24px, 4vw, 58px);
+    }
+    .context-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 22px;
+      padding-bottom: 18px;
+      border-bottom: 1px solid rgba(100, 142, 111, .16);
+    }
+    .context-kicker {
+      color: #4f765a;
+      font: 10px/1 "Share Tech", monospace;
+      letter-spacing: .2em;
+    }
+    .context-header h1 {
+      max-width: 720px;
+      margin: 9px 0 0;
+      color: #b6d6be;
+      font: clamp(22px, 3vw, 44px)/1.05 "Zion Mono", monospace;
+      font-weight: 400;
+      letter-spacing: -.04em;
+    }
+    .context-status {
+      flex: none;
+      min-width: 125px;
+      padding: 9px 11px;
+      border-left: 2px solid var(--status-color, var(--green));
+      background: rgba(8, 19, 11, .7);
+      color: var(--status-color, var(--green));
+      font: 10px/1.45 "Share Tech", monospace;
+      letter-spacing: .1em;
+    }
+    .context-feed {
+      align-self: center;
+      width: min(760px, 92%);
+      opacity: .72;
+    }
+    .context-message {
+      position: relative;
+      margin: 20px 0;
+      padding: 14px 18px 14px 28px;
+      border-left: 1px solid rgba(66,255,133,.24);
+      color: #72937a;
+      background: linear-gradient(90deg, rgba(66,255,133,.035), transparent);
+    }
+    .context-message::before {
+      content: attr(data-index);
+      position: absolute;
+      left: -9px;
+      top: 14px;
+      padding: 1px 3px;
+      color: #0f4f2a;
+      background: #010503;
+      font: 9px/1 "Share Tech", monospace;
+    }
+    .context-message strong {
+      display: block;
+      margin-bottom: 6px;
+      color: #9fbaa6;
+      font-weight: 400;
+    }
+    .context-message p { margin: 0; }
+    .context-message.tool {
+      margin-left: 42px;
+      border-color: rgba(104,233,221,.25);
+      color: #5c8781;
+    }
+    .state-ledger {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 1px;
+      border: 1px solid rgba(87, 122, 96, .14);
+      background: rgba(87, 122, 96, .14);
+    }
+    .ledger-cell {
+      min-width: 0;
+      padding: 10px 12px;
+      background: rgba(2, 8, 4, .96);
+    }
+    .ledger-cell span {
+      display: block;
+      color: #3d5d45;
+      font: 8px/1 "Share Tech", monospace;
+      letter-spacing: .16em;
+    }
+    .ledger-cell b {
+      display: block;
+      overflow: hidden;
+      margin-top: 6px;
+      color: #789b81;
+      font-weight: 400;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .prototype-switcher {
+      position: fixed;
+      z-index: 200;
+      left: 50%;
+      bottom: 18px;
+      display: grid;
+      grid-template-columns: 38px minmax(230px, auto) 38px;
+      height: 44px;
+      transform: translateX(-50%);
+      border: 1px solid rgba(216, 255, 226, .38);
+      background: rgba(0, 4, 2, .96);
+      box-shadow: 0 14px 50px rgba(0,0,0,.72), 0 0 0 1px rgba(0,0,0,.8);
+      backdrop-filter: blur(14px);
+    }
+    .prototype-switcher button {
+      border: 0;
+      background: rgba(66,255,133,.07);
+      color: var(--green);
+      cursor: pointer;
+    }
+    .prototype-switcher button:hover { color: #001707; background: var(--green); }
+    .switcher-copy {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      min-width: 0;
+      padding: 0 16px;
+      border-inline: 1px solid rgba(216,255,226,.14);
+      text-align: center;
+    }
+    .switcher-copy b {
+      color: var(--white);
+      font: 11px/1.1 "Share Tech", monospace;
+      letter-spacing: .12em;
+    }
+    .switcher-copy small {
+      margin-top: 4px;
+      color: #53705b;
+      font: 8px/1 "Share Tech", monospace;
+      letter-spacing: .12em;
+    }
+
+    /* Shared sidebar atoms */
+    .variant-shell { height: 100%; min-height: 0; position: relative; }
+    .variant-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+    }
+    .variant-tool {
+      width: 28px;
+      height: 28px;
+      padding: 0;
+      border: 1px solid rgba(66,255,133,.18);
+      background: rgba(1,9,4,.72);
+      color: #5d9c70;
+      cursor: pointer;
+    }
+    .variant-tool:hover { color: var(--white); border-color: rgba(66,255,133,.55); }
+    .session-status-dot {
+      width: 6px;
+      height: 6px;
+      flex: none;
+      border-radius: 50%;
+      background: var(--session-color, var(--green));
+      box-shadow: 0 0 8px color-mix(in srgb, var(--session-color, var(--green)) 65%, transparent);
+    }
+    .session-status-dot.error { border-radius: 0; transform: rotate(45deg); }
+    .session-status-dot.thinking { animation: status-think 1.1s ease-in-out infinite alternate; }
+    .session-status-dot.streaming,
+    .session-status-dot.tool { animation: status-blink 750ms steps(2) infinite; }
+    @keyframes status-think { to { transform: scale(1.7); opacity: .52; } }
+    @keyframes status-blink { 50% { opacity: .22; } }
+
+    /* A — WIRED PERSPECTIVE WALL */
+    .wall-shell {
+      display: grid;
+      grid-template-rows: 118px minmax(0, 1fr) 67px;
+      color: #d8e7dc;
+      background:
+        radial-gradient(circle at 50% 38%, rgba(48, 255, 115, .1), transparent 42%),
+        linear-gradient(145deg, #0b0d0c 0%, #020403 55%, #080b09 100%);
+    }
+    .wall-shell::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      opacity: .18;
+      background:
+        linear-gradient(112deg, transparent 0 39%, rgba(255,255,255,.1) 39.2% 39.4%, transparent 39.6%),
+        radial-gradient(ellipse at 82% 28%, rgba(255, 61, 75, .3) 0 1%, transparent 7%),
+        radial-gradient(ellipse at 14% 72%, rgba(255, 61, 75, .24) 0 2%, transparent 11%);
+      filter: blur(.4px);
+      pointer-events: none;
+    }
+    .wall-header {
+      position: relative;
+      z-index: 3;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 104px auto;
+      align-items: center;
+      gap: 12px;
+      padding: 13px 14px 12px 18px;
+      border-bottom: 1px solid rgba(216,231,220,.16);
+      background: linear-gradient(90deg, rgba(17,22,19,.92), rgba(4,7,5,.72));
+    }
+    .wall-id small {
+      display: block;
+      color: #69766d;
+      font: 8px/1 "Share Tech", monospace;
+      letter-spacing: .28em;
+    }
+    .wall-id strong {
+      display: block;
+      margin-top: 8px;
+      color: #f0fff4;
+      font: 20px/.9 "Share Tech", monospace;
+      letter-spacing: .11em;
+      text-transform: uppercase;
+    }
+    .wall-id span {
+      display: block;
+      margin-top: 8px;
+      color: #5e7968;
+      font-size: 9px;
+      letter-spacing: .08em;
+    }
+    .wall-neo {
+      position: relative;
+      align-self: stretch;
+      overflow: hidden;
+      border-inline: 1px solid rgba(216,231,220,.1);
+      background: rgba(0,0,0,.3);
+    }
+    .wall-neo img {
+      position: absolute;
+      width: 118px;
+      height: 118px;
+      left: -8px;
+      top: -9px;
+      object-fit: contain;
+      image-rendering: pixelated;
+      filter: saturate(.25) contrast(1.2) brightness(.9);
+      opacity: .78;
+    }
+    .wall-neo::after {
+      content: "NAVI // 03";
+      position: absolute;
+      right: 4px;
+      bottom: 3px;
+      color: rgba(216,255,226,.56);
+      font: 7px/1 "Share Tech", monospace;
+      letter-spacing: .08em;
+    }
+    .wall-stage-wrap {
+      position: relative;
+      min-height: 0;
+      overflow: hidden;
+      perspective: 980px;
+      perspective-origin: 50% 46%;
+    }
+    .wall-stage-wrap::before {
+      content: "WIRED // ARCHIVE FIELD";
+      position: absolute;
+      left: 16px;
+      bottom: 11px;
+      z-index: 8;
+      color: rgba(216,231,220,.28);
+      font: 8px/1 "Share Tech", monospace;
+      letter-spacing: .22em;
+    }
+    .wall-stage {
+      position: absolute;
+      inset: 16px 0 36px;
+      transform-style: preserve-3d;
+    }
+    .wall-panel {
+      --offset: 0;
+      --abs: 0;
+      --sign: 0;
+      position: absolute;
+      left: 50%;
+      top: 0;
+      width: min(66%, 400px);
+      height: 100%;
+      display: grid;
+      grid-template-rows: 76px minmax(0, 1fr);
+      transform:
+        translateX(calc(-50% + var(--offset) * 38%))
+        translateZ(calc(var(--abs) * -132px))
+        rotateY(calc(var(--sign) * -29deg))
+        scale(calc(1 - var(--abs) * .055));
+      transform-origin: center;
+      opacity: calc(1 - var(--abs) * .15);
+      border: 1px solid rgba(221,239,226,.18);
+      background:
+        linear-gradient(160deg, rgba(26,31,28,.96), rgba(5,7,6,.98) 46%, rgba(15,18,16,.98));
+      box-shadow: 0 28px 48px rgba(0,0,0,.45);
+      transition: transform 440ms cubic-bezier(.2,.8,.2,1), opacity 280ms ease, filter 280ms ease;
+      overflow: hidden;
+    }
+    .wall-panel:not(.active) {
+      cursor: pointer;
+      filter: saturate(.7) brightness(.72);
+    }
+    .wall-panel.active {
+      z-index: 7;
+      border-color: rgba(216,255,226,.54);
+      box-shadow: 0 30px 60px rgba(0,0,0,.62), 0 0 26px rgba(66,255,133,.08);
+    }
+    .wall-panel-head {
+      position: relative;
+      display: grid;
+      grid-template-columns: 72px minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 9px;
+      padding: 9px 12px;
+      border-bottom: 1px solid rgba(216,231,220,.13);
+      overflow: hidden;
+    }
+    .wall-layer-no {
+      position: absolute;
+      left: 4px;
+      top: 0;
+      color: rgba(255,255,255,.08);
+      font: 58px/.9 "Share Tech", monospace;
+      letter-spacing: -.12em;
+    }
+    .wall-workspace-mark {
+      position: relative;
+      z-index: 2;
+      width: 52px;
+      height: 52px;
+      border: 1px solid rgba(66,255,133,.28);
+      background:
+        repeating-radial-gradient(circle, transparent 0 4px, rgba(66,255,133,.12) 4px 5px),
+        #060a08;
+    }
+    .wall-workspace-mark::before,
+    .wall-workspace-mark::after {
+      content: "";
+      position: absolute;
+      background: var(--workspace-color);
+      opacity: .7;
+    }
+    .wall-workspace-mark::before { width: 1px; inset-block: 6px; left: 50%; }
+    .wall-workspace-mark::after { height: 1px; inset-inline: 6px; top: 50%; }
+    .wall-workspace-copy { position: relative; z-index: 2; min-width: 0; }
+    .wall-workspace-copy small {
+      display: block;
+      color: #657068;
+      font: 7px/1 "Share Tech", monospace;
+      letter-spacing: .14em;
+    }
+    .wall-workspace-copy b {
+      display: block;
+      overflow: hidden;
+      margin-top: 6px;
+      color: #e8f6ec;
+      font-weight: 400;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .wall-workspace-copy span { color: #65776a; font-size: 8px; }
+    .wall-workspace-count {
+      color: var(--workspace-color);
+      font: 19px/1 "Share Tech", monospace;
+    }
+    .wall-sessions {
+      min-height: 0;
+      padding: 7px;
+      overflow: auto;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(66,255,133,.28) transparent;
+    }
+    .wall-session {
+      width: 100%;
+      min-height: 42px;
+      display: grid;
+      grid-template-columns: 12px minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 9px;
+      padding: 7px 8px;
+      border: 0;
+      border-bottom: 1px solid rgba(216,231,220,.085);
+      color: #9eaca2;
+      background: transparent;
+      text-align: left;
+      cursor: pointer;
+      transition: background 120ms ease, color 120ms ease, transform 120ms ease;
+    }
+    .wall-session:hover { color: #f1fff4; background: rgba(255,255,255,.045); transform: translateX(3px); }
+    .wall-session.current {
+      color: #041108;
+      background: linear-gradient(90deg, var(--workspace-color), rgba(216,255,226,.84));
+      box-shadow: 0 0 18px color-mix(in srgb, var(--workspace-color) 22%, transparent);
+    }
+    .wall-session-title {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .wall-session-meta { color: #66736a; font: 8px/1 "Share Tech", monospace; }
+    .wall-session.current .wall-session-meta { color: rgba(1,17,7,.62); }
+    .wall-session.current .session-status-dot { box-shadow: none; background: #001b09; }
+    .wall-footer {
+      position: relative;
+      z-index: 5;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 15px 13px 18px;
+      border-top: 1px solid rgba(216,231,220,.12);
+      background: rgba(7,10,8,.94);
+    }
+    .wall-current small { color: #59655d; font: 7px/1 "Share Tech", monospace; letter-spacing: .18em; }
+    .wall-current b {
+      display: block;
+      overflow: hidden;
+      margin-top: 6px;
+      color: #e8f6ec;
+      font-weight: 400;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .wall-nav { display: flex; gap: 4px; }
+    .wall-nav button {
+      width: 34px;
+      height: 34px;
+      border: 1px solid rgba(216,231,220,.16);
+      background: #0b0e0c;
+      cursor: pointer;
+    }
+    .wall-nav button:hover { color: #071009; background: #d8ffe2; }
+
+    /* B — NEURAL ORBIT */
+    .orbit-shell {
+      display: grid;
+      grid-template-rows: 91px minmax(0, 1fr) 66px;
+      color: var(--green);
+      background:
+        radial-gradient(circle at 50% 50%, rgba(42,255,108,.12), transparent 28%),
+        radial-gradient(circle at 20% 20%, rgba(104,233,221,.07), transparent 34%),
+        #010805;
+    }
+    .orbit-shell::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      opacity: .26;
+      background-image:
+        linear-gradient(rgba(66,255,133,.08) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(66,255,133,.08) 1px, transparent 1px);
+      background-size: 28px 28px;
+      mask-image: radial-gradient(circle at 50% 48%, black, transparent 78%);
+      pointer-events: none;
+    }
+    .orbit-header {
+      position: relative;
+      z-index: 5;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 12px;
+      padding: 13px 14px 11px 17px;
+      border-bottom: 1px solid var(--line);
+      background: linear-gradient(90deg, rgba(3,19,10,.94), rgba(1,8,4,.68));
+    }
+    .orbit-brand small {
+      display: block;
+      color: #287446;
+      font: 8px/1 "Share Tech", monospace;
+      letter-spacing: .26em;
+    }
+    .orbit-brand b {
+      display: block;
+      margin-top: 7px;
+      color: var(--white);
+      font: 18px/1 "Share Tech", monospace;
+      letter-spacing: .12em;
+    }
+    .orbit-brand span {
+      display: block;
+      margin-top: 6px;
+      color: #407b50;
+      font-size: 8px;
+    }
+    .orbit-field {
+      position: relative;
+      z-index: 2;
+      min-height: 0;
+      overflow: hidden;
+    }
+    .orbit-svg {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      overflow: visible;
+    }
+    .orbit-grid-circle { fill: none; stroke: rgba(66,255,133,.07); stroke-width: 1; stroke-dasharray: 2 7; }
+    .orbit-ring {
+      fill: rgba(1,8,4,.14);
+      stroke: var(--workspace-color);
+      stroke-width: 1;
+      stroke-dasharray: 4 6;
+      vector-effect: non-scaling-stroke;
+      opacity: .45;
+      transform-box: fill-box;
+      transform-origin: center;
+      animation: orbit-ring-spin 24s linear infinite;
+    }
+    .orbit-ring.active { opacity: .95; stroke-width: 1.5; filter: drop-shadow(0 0 6px var(--workspace-color)); }
+    @keyframes orbit-ring-spin { to { stroke-dashoffset: -100; } }
+    .orbit-cable-bed,
+    .orbit-cable-nerve {
+      fill: none;
+      stroke-linecap: round;
+      vector-effect: non-scaling-stroke;
+    }
+    .orbit-cable-bed { stroke: #000; stroke-width: 8; opacity: .95; }
+    .orbit-cable-nerve { stroke: var(--workspace-color); stroke-width: 2; stroke-dasharray: 3 8; opacity: .58; animation: orbit-flow 1.8s linear infinite; }
+    .orbit-cable-nerve.active { stroke-width: 3; opacity: 1; filter: drop-shadow(0 0 5px var(--workspace-color)); }
+    @keyframes orbit-flow { to { stroke-dashoffset: -44; } }
+    .orbit-neo {
+      position: absolute;
+      z-index: 5;
+      left: 50%;
+      top: 50%;
+      width: 118px;
+      height: 118px;
+      transform: translate(-50%, -50%);
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(23,121,56,.22), rgba(0,0,0,.88) 70%);
+      box-shadow: 0 0 0 1px rgba(66,255,133,.24), 0 0 28px rgba(66,255,133,.2);
+    }
+    .orbit-neo::before,
+    .orbit-neo::after {
+      content: "";
+      position: absolute;
+      inset: -10px;
+      border: 1px dashed rgba(66,255,133,.32);
+      border-radius: 50%;
+      animation: core-spin 14s linear infinite;
+    }
+    .orbit-neo::after { inset: -19px; border-style: dotted; animation-direction: reverse; animation-duration: 22s; }
+    @keyframes core-spin { to { transform: rotate(360deg); } }
+    .orbit-neo img {
+      width: 100%;
+      height: 100%;
+      border-radius: 50%;
+      object-fit: cover;
+      image-rendering: pixelated;
+      filter: saturate(.95) contrast(1.12);
+    }
+    .orbit-neo-label {
+      position: absolute;
+      z-index: 7;
+      left: 50%;
+      top: calc(50% + 68px);
+      transform: translateX(-50%);
+      color: var(--white);
+      font: 8px/1 "Share Tech", monospace;
+      letter-spacing: .18em;
+      white-space: nowrap;
+    }
+    .orbit-workspace-core {
+      position: absolute;
+      z-index: 6;
+      width: 104px;
+      min-height: 44px;
+      padding: 7px 8px;
+      transform: translate(-50%, -50%);
+      border: 1px solid color-mix(in srgb, var(--workspace-color) 52%, transparent);
+      background: rgba(0,8,4,.9);
+      box-shadow: 0 0 18px color-mix(in srgb, var(--workspace-color) 12%, transparent);
+      text-align: center;
+      cursor: pointer;
+    }
+    .orbit-workspace-core.active {
+      color: #001707;
+      border-color: var(--workspace-color);
+      background: var(--workspace-color);
+    }
+    .orbit-workspace-core b {
+      display: block;
+      overflow: hidden;
+      font: 9px/1.1 "Share Tech", monospace;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .orbit-workspace-core span { display: block; margin-top: 5px; font: 7px/1 "Share Tech", monospace; opacity: .72; }
+    .orbit-node {
+      position: absolute;
+      z-index: 8;
+      width: 84px;
+      height: 26px;
+      display: grid;
+      grid-template-columns: 7px minmax(0,1fr);
+      align-items: center;
+      gap: 5px;
+      padding: 0 7px;
+      transform: translate(-50%, -50%);
+      border: 1px solid color-mix(in srgb, var(--workspace-color) 30%, transparent);
+      border-radius: 14px;
+      background: rgba(0,7,3,.92);
+      color: #6ca07b;
+      box-shadow: 0 4px 12px rgba(0,0,0,.5);
+      text-align: left;
+      cursor: pointer;
+      transition: width 130ms ease, color 130ms ease, border-color 130ms ease, transform 130ms ease;
+    }
+    .orbit-node:hover,
+    .orbit-node:focus-visible {
+      z-index: 14;
+      width: 132px;
+      color: var(--white);
+      border-color: var(--workspace-color);
+      transform: translate(-50%, -50%) scale(1.06);
+    }
+    .orbit-node.current {
+      z-index: 13;
+      color: #001707;
+      border-color: var(--white);
+      background: var(--workspace-color);
+      box-shadow: 0 0 18px color-mix(in srgb, var(--workspace-color) 54%, transparent);
+    }
+    .orbit-node-title {
+      overflow: hidden;
+      font-size: 8px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .orbit-node.current .session-status-dot { background: #001707; box-shadow: none; }
+    .orbit-footer {
+      position: relative;
+      z-index: 10;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 12px;
+      padding: 9px 14px 13px 17px;
+      border-top: 1px solid var(--line);
+      background: rgba(1,10,5,.94);
+    }
+    .orbit-current small { color: #277044; font: 7px/1 "Share Tech", monospace; letter-spacing: .16em; }
+    .orbit-current b {
+      display: block;
+      overflow: hidden;
+      margin-top: 5px;
+      color: var(--white);
+      font-weight: 400;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .orbit-legend {
+      display: grid;
+      grid-template-columns: repeat(2, auto);
+      gap: 4px 9px;
+      color: #3e7950;
+      font: 7px/1 "Share Tech", monospace;
+    }
+    .orbit-legend i { display: inline-block; width: 5px; height: 5px; margin-right: 4px; border-radius: 50%; background: currentColor; }
+
+    /* C — IRON-CITY MEMORY BUS */
+    .bus-shell {
+      display: grid;
+      grid-template-rows: 118px minmax(0, 1fr) 62px;
+      color: #bbd0bf;
+      background:
+        linear-gradient(90deg, rgba(255,142,55,.04), transparent 28%),
+        repeating-linear-gradient(90deg, rgba(255,255,255,.018) 0 1px, transparent 1px 7px),
+        #080a09;
+    }
+    .bus-shell::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      opacity: .34;
+      background:
+        linear-gradient(117deg, transparent 0 26%, rgba(255,158,66,.06) 26.2% 27%, transparent 27.2%),
+        radial-gradient(circle at 12% 84%, rgba(255,158,66,.16), transparent 22%);
+      pointer-events: none;
+    }
+    .bus-header {
+      position: relative;
+      z-index: 5;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 126px;
+      align-items: center;
+      border-bottom: 2px solid #2d251d;
+      background:
+        repeating-linear-gradient(135deg, rgba(255,158,66,.08) 0 7px, transparent 7px 14px),
+        linear-gradient(90deg, #191a17, #090b09);
+      box-shadow: inset 0 -10px 24px rgba(0,0,0,.4);
+    }
+    .bus-brand {
+      min-width: 0;
+      padding: 15px 12px 14px 19px;
+    }
+    .bus-brand small { color: #75634f; font: 8px/1 "Share Tech", monospace; letter-spacing: .22em; }
+    .bus-brand b {
+      display: block;
+      margin-top: 9px;
+      color: #ffe1bf;
+      font: 20px/.92 "Share Tech", monospace;
+      letter-spacing: .06em;
+    }
+    .bus-brand span {
+      display: block;
+      margin-top: 8px;
+      color: #736757;
+      font-size: 8px;
+      letter-spacing: .08em;
+    }
+    .bus-neo {
+      position: relative;
+      align-self: stretch;
+      overflow: hidden;
+      border-left: 1px solid #302b25;
+      background: radial-gradient(circle at 38% 48%, rgba(66,255,133,.12), transparent 58%);
+    }
+    .bus-neo img {
+      position: absolute;
+      width: 144px;
+      height: 144px;
+      left: -11px;
+      top: -12px;
+      object-fit: contain;
+      image-rendering: pixelated;
+      filter: sepia(.15) saturate(.7) contrast(1.18);
+    }
+    .bus-neo::after {
+      content: "JACKED // LIVE";
+      position: absolute;
+      right: 5px;
+      bottom: 4px;
+      padding: 3px 5px;
+      color: var(--green);
+      background: #050806;
+      font: 7px/1 "Share Tech", monospace;
+    }
+    .bus-field {
+      position: relative;
+      z-index: 3;
+      min-height: 0;
+      overflow-y: auto;
+      overflow-x: hidden;
+      scrollbar-width: thin;
+      scrollbar-color: #6c563c #080a09;
+    }
+    .bus-line {
+      --workspace-color: var(--green);
+      position: relative;
+      min-height: 146px;
+      display: grid;
+      grid-template-columns: 148px minmax(0, 1fr);
+      border-bottom: 1px solid #252821;
+      background:
+        linear-gradient(90deg, rgba(255,158,66,.035), transparent 36%),
+        rgba(6,9,7,.82);
+    }
+    .bus-line::before {
+      content: "";
+      position: absolute;
+      z-index: 0;
+      left: 139px;
+      right: 0;
+      top: 50%;
+      height: 10px;
+      transform: translateY(-50%);
+      border-block: 1px solid color-mix(in srgb, var(--workspace-color) 38%, #151915);
+      background:
+        repeating-linear-gradient(90deg, color-mix(in srgb, var(--workspace-color) 42%, #101510) 0 4px, #0a0d0b 4px 10px);
+      box-shadow: 0 0 0 4px #040605, 0 0 12px rgba(0,0,0,.8);
+    }
+    .bus-station {
+      position: relative;
+      z-index: 3;
+      min-width: 0;
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      padding: 12px 13px 10px 16px;
+      border-right: 4px double #353129;
+      background:
+        radial-gradient(circle at 12px 12px, #67533c 0 2px, #0d0f0d 2.4px 4px, transparent 4.5px),
+        radial-gradient(circle at calc(100% - 12px) calc(100% - 12px), #67533c 0 2px, #0d0f0d 2.4px 4px, transparent 4.5px),
+        linear-gradient(145deg, #24251f, #10120f 58%, #1a1b17);
+    }
+    .bus-station-code {
+      color: #806c55;
+      font: 8px/1 "Share Tech", monospace;
+      letter-spacing: .16em;
+    }
+    .bus-station b {
+      align-self: center;
+      overflow: hidden;
+      color: #e6d2b9;
+      font: 14px/1.05 "Share Tech", monospace;
+      font-weight: 400;
+      text-overflow: ellipsis;
+      text-transform: uppercase;
+    }
+    .bus-station-meta {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      color: #726452;
+      font: 8px/1 "Share Tech", monospace;
+    }
+    .bus-station-meta i {
+      width: 32px;
+      height: 4px;
+      background: repeating-linear-gradient(90deg, var(--workspace-color) 0 3px, transparent 3px 6px);
+      opacity: .65;
+    }
+    .bus-line.active .bus-station {
+      box-shadow: inset -5px 0 0 color-mix(in srgb, var(--workspace-color) 68%, transparent);
+    }
+    .bus-track-wrap {
+      position: relative;
+      z-index: 2;
+      min-width: 0;
+      display: grid;
+      grid-template-rows: 1fr 24px;
+      padding: 12px 0 8px 12px;
+      overflow: hidden;
+    }
+    .bus-track {
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      padding: 7px 52px 7px 5px;
+      overflow-x: auto;
+      scroll-snap-type: x proximity;
+      scrollbar-width: none;
+    }
+    .bus-track::-webkit-scrollbar { display: none; }
+    .memory-slab {
+      position: relative;
+      flex: 0 0 148px;
+      height: 86px;
+      display: grid;
+      grid-template-rows: auto minmax(0,1fr) auto;
+      gap: 6px;
+      padding: 8px 9px 8px 13px;
+      scroll-snap-align: start;
+      border: 1px solid #3b3f36;
+      color: #9ba99c;
+      background:
+        linear-gradient(90deg, color-mix(in srgb, var(--workspace-color) 12%, transparent), transparent 38%),
+        repeating-linear-gradient(0deg, rgba(255,255,255,.022) 0 1px, transparent 1px 4px),
+        #151915;
+      box-shadow: 0 5px 10px rgba(0,0,0,.42), inset 4px 0 0 color-mix(in srgb, var(--workspace-color) 40%, #151915);
+      text-align: left;
+      cursor: pointer;
+      clip-path: polygon(0 0, calc(100% - 9px) 0, 100% 9px, 100% 100%, 0 100%);
+      transition: transform 140ms ease, border-color 140ms ease, color 140ms ease;
+    }
+    .memory-slab:hover { transform: translateY(-4px); color: #f1ffe9; border-color: #7e8f7e; }
+    .memory-slab.current {
+      color: #e9ffe9;
+      border-color: var(--workspace-color);
+      background:
+        linear-gradient(90deg, color-mix(in srgb, var(--workspace-color) 28%, transparent), transparent 52%),
+        #0c1710;
+      box-shadow: 0 8px 18px rgba(0,0,0,.55), 0 0 15px color-mix(in srgb, var(--workspace-color) 22%, transparent), inset 5px 0 0 var(--workspace-color);
+    }
+    .memory-slab-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      color: #647065;
+      font: 7px/1 "Share Tech", monospace;
+      letter-spacing: .08em;
+    }
+    .memory-slab-title {
+      overflow: hidden;
+      display: -webkit-box;
+      align-self: center;
+      font-size: 10px;
+      line-height: 1.35;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 2;
+    }
+    .memory-slab-foot {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      color: #5f6d61;
+      font: 7px/1 "Share Tech", monospace;
+    }
+    .memory-ports { display: flex; gap: 3px; }
+    .memory-ports i { width: 9px; height: 3px; background: #2b352d; }
+    .memory-slab.current .memory-ports i:first-child { background: var(--green); box-shadow: 0 0 6px var(--green); }
+    .bus-track-controls {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 4px;
+      padding-right: 11px;
+    }
+    .bus-track-controls span {
+      margin-right: auto;
+      color: #4f594f;
+      font: 7px/1 "Share Tech", monospace;
+      letter-spacing: .12em;
+    }
+    .bus-track-controls button {
+      width: 25px;
+      height: 20px;
+      padding: 0;
+      border: 1px solid #343930;
+      background: #111510;
+      color: #786752;
+      cursor: pointer;
+    }
+    .bus-track-controls button:hover { color: #100800; background: var(--amber); border-color: var(--amber); }
+    .bus-footer {
+      position: relative;
+      z-index: 5;
+      display: grid;
+      grid-template-columns: minmax(0,1fr) auto;
+      align-items: center;
+      gap: 12px;
+      padding: 9px 14px 12px 18px;
+      border-top: 1px solid #302c25;
+      background: #11130f;
+    }
+    .bus-current small { color: #75654f; font: 7px/1 "Share Tech", monospace; letter-spacing: .16em; }
+    .bus-current b {
+      display: block;
+      overflow: hidden;
+      margin-top: 5px;
+      color: #e6d2b9;
+      font-weight: 400;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .bus-meter { display: flex; align-items: flex-end; gap: 3px; height: 22px; }
+    .bus-meter i { width: 3px; background: var(--amber); opacity: .38; animation: meter 1s steps(3) infinite alternate; }
+    .bus-meter i:nth-child(1) { height: 7px; }
+    .bus-meter i:nth-child(2) { height: 16px; animation-delay: 200ms; }
+    .bus-meter i:nth-child(3) { height: 11px; animation-delay: 400ms; }
+    .bus-meter i:nth-child(4) { height: 20px; animation-delay: 600ms; }
+    .bus-meter i:nth-child(5) { height: 9px; animation-delay: 800ms; }
+    @keyframes meter { to { opacity: 1; height: 4px; } }
+
+    /* Experience tiers */
+    body[data-experience="focus"] .surface-noise,
+    body[data-experience="focus"] .surface-scanlines { opacity: .05; }
+    body[data-experience="focus"] .wall-shell::before,
+    body[data-experience="focus"] .orbit-shell::before,
+    body[data-experience="focus"] .bus-shell::before { opacity: .08; }
+    body[data-experience="focus"] .context-rain { display: none; }
+    body[data-experience="focus"] .orbit-cable-nerve,
+    body[data-experience="focus"] .orbit-ring,
+    body[data-experience="focus"] .bus-meter i,
+    body[data-experience="focus"] .session-status-dot { animation: none; }
+
+    body[data-experience="reduced"] *,
+    body[data-experience="reduced"] *::before,
+    body[data-experience="reduced"] *::after {
+      scroll-behavior: auto !important;
+      animation-duration: .001ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: .001ms !important;
+    }
+    body[data-experience="reduced"] .surface-noise,
+    body[data-experience="reduced"] .surface-scanlines,
+    body[data-experience="reduced"] .context-rain { display: none; }
+    body[data-experience="reduced"] .wall-panel {
+      transform: translateX(calc(-50% + var(--offset) * 36%)) scale(calc(1 - var(--abs) * .06));
+    }
+    body[data-experience="reduced"] .orbit-cable-nerve { stroke-dasharray: none; }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        scroll-behavior: auto !important;
+        animation-duration: .001ms !important;
+        animation-iteration-count: 1 !important;
+      }
+    }
+    @media (max-width: 980px) {
+      :root { --surface-width: min(620px, 100vw); }
+      .workspace-shell { grid-template-columns: minmax(0, 1fr); }
+      .context-stage { display: none; }
+      .prototype-surface { border-right: 0; }
+    }
+    @media (max-width: 560px) {
+      :root { --surface-width: 100vw; }
+      .app-titlebar { padding-left: 10px; gap: 7px; }
+      .app-brand b { font-size: 12px; }
+      .prototype-flag, .experience-switch > span, .clock { display: none; }
+      .experience-btn { padding-inline: 5px; }
+      .wall-header { grid-template-columns: minmax(0,1fr) 82px auto; }
+      .wall-neo img { left: -17px; }
+      .wall-panel { width: 74%; }
+      .orbit-node { width: 70px; }
+      .bus-line { grid-template-columns: 124px minmax(0,1fr); }
+      .bus-line::before { left: 115px; }
+      .prototype-switcher { width: calc(100vw - 24px); grid-template-columns: 36px minmax(0,1fr) 36px; }
+      .switcher-copy { padding-inline: 8px; }
+    }
+  </style>
+</head>
+<body data-experience="cinematic">
+  <div class="app-shell">
+    <header class="app-titlebar">
+      <div class="app-brand">
+        <span class="app-brand-mark" aria-hidden="true"></span>
+        <b>DEEPSEEK ZION</b>
+      </div>
+      <span class="prototype-flag">THROWAWAY PROTOTYPE</span>
+      <span class="titlebar-spacer"></span>
+      <div class="experience-switch" aria-label="体验强度">
+        <span>EXPERIENCE</span>
+        <button class="experience-btn active" type="button" data-experience="cinematic">CINEMATIC</button>
+        <button class="experience-btn" type="button" data-experience="focus">FOCUS</button>
+        <button class="experience-btn" type="button" data-experience="reduced">REDUCED</button>
+      </div>
+      <time class="clock" id="clock">--:--:--</time>
+    </header>
+
+    <div class="workspace-shell">
+      <aside class="prototype-surface" id="prototype-surface" aria-label="多工作区会话栏布局原型">
+        <div id="variant-root"></div>
+        <div class="surface-scanlines" aria-hidden="true"></div>
+        <div class="surface-noise" aria-hidden="true"></div>
+      </aside>
+
+      <main class="context-stage" aria-label="应用上下文">
+        <div class="context-rain" aria-hidden="true">
+          アキナミタカシテス012345789｜ホメラワケソツエアキナミタカシテス012345789｜ホメラワケソツエ
+          ナミタカシテス012345789｜ホメラワケソツエアキナミタカシテス012345789｜ホメラワケソツエ
+        </div>
+        <div class="context-inner">
+          <header class="context-header">
+            <div>
+              <div class="context-kicker" id="context-workspace">WORKSPACE / DEEPSEEK-ZION</div>
+              <h1 id="context-title">重新设计多工作区会话栏</h1>
+            </div>
+            <div class="context-status" id="context-status">STREAMING<br />NEURAL LINK</div>
+          </header>
+          <section class="context-feed">
+            <article class="context-message" data-index="01">
+              <strong>OPERATOR / 研究已确认三个互斥方向</strong>
+              <p>保持相同数据密度，分别验证空间档案、轨道拓扑和横向工业总线。</p>
+            </article>
+            <article class="context-message tool" data-index="02">
+              <strong>TOOL / PROTOTYPE STATE EXPOSED</strong>
+              <p>点击任意会话节点，右侧上下文会同步更新当前工作区、会话和状态。</p>
+            </article>
+            <article class="context-message" data-index="03">
+              <strong>AGENT / 等待视觉选型</strong>
+              <p>当前页面不写入真实数据，也不触发会话切换、删除或新建。</p>
+            </article>
+          </section>
+          <div class="state-ledger" aria-live="polite">
+            <div class="ledger-cell"><span>VARIANT</span><b id="ledger-variant">WALL</b></div>
+            <div class="ledger-cell"><span>WORKSPACE</span><b id="ledger-workspace">deepseek-zion</b></div>
+            <div class="ledger-cell"><span>SESSION</span><b id="ledger-session">重新设计多工作区会话栏</b></div>
+            <div class="ledger-cell"><span>EXPERIENCE</span><b id="ledger-experience">CINEMATIC</b></div>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <nav class="prototype-switcher" aria-label="原型变体切换">
+    <button type="button" id="variant-prev" aria-label="上一个变体">←</button>
+    <div class="switcher-copy">
+      <b id="switcher-label">A — WIRED PERSPECTIVE WALL</b>
+      <small>← / → 切换变体 · URL 可分享</small>
+    </div>
+    <button type="button" id="variant-next" aria-label="下一个变体">→</button>
+  </nav>
+
+  <script>
+    const NEO_SRC = "./assets/sidebar-spatial-layout/neo-side-profile-neural-port-v4.png";
+
+    const WORKSPACES = [
+      {
+        id: "deepseek-zion",
+        code: "Z-01",
+        name: "deepseek-zion",
+        color: "#42ff85",
+        sessions: [
+          { id: "sidebar-redesign", title: "重新设计多工作区会话栏", time: "现在", status: "streaming" },
+          { id: "read-project", title: "阅读项目说明文件", time: "21小时", status: "ready" },
+          { id: "neural-link", title: "接入会话脑机链路与动态锚点", time: "1天", status: "tool" },
+          { id: "scroll-fix", title: "修复侧栏滚动定位漂移", time: "2天", status: "error" }
+        ]
+      },
+      {
+        id: "claude-code-toolkit",
+        code: "C-07",
+        name: "claude-code-toolkit",
+        color: "#ff9e42",
+        sessions: [
+          { id: "github-update", title: "更新到 GitHub 最新提交", time: "3天", status: "ready" },
+          { id: "hook-audit", title: "Hook 启动配置与官方文档核验", time: "5天", status: "thinking" },
+          { id: "launcher", title: "重构 Claude Launcher 启动协议", time: "6天", status: "ready" }
+        ]
+      },
+      {
+        id: "skills-guide",
+        code: "S-12",
+        name: "skills-guide",
+        color: "#68e9dd",
+        sessions: [
+          { id: "dsh-error", title: "安装 dsh 命令未找到报错", time: "2小时", status: "error" },
+          { id: "single-input", title: "Single number input", time: "1天", status: "ready" },
+          { id: "agent-skills", title: "重写 Agent Skills 中文索引与来源追踪", time: "1天", status: "tool" },
+          { id: "hello", title: "你好", time: "3天", status: "ready" },
+          { id: "cross-repo", title: "跨仓库技能组件映射", time: "4天", status: "thinking" }
+        ]
+      },
+      {
+        id: "matrix-lab",
+        code: "M-23",
+        name: "matrix-lab",
+        color: "#c6ff4a",
+        sessions: [
+          { id: "perspective-test", title: "协议透视墙中文可读性压力测试", time: "12分", status: "thinking" },
+          { id: "orbit-collision", title: "神经轨道二十三节点碰撞实验", time: "37分", status: "tool" },
+          { id: "memory-bus", title: "记忆总线横向滚动与键盘路径", time: "1小时", status: "streaming" },
+          { id: "reduced-mode", title: "Reduced Motion 平坦化验证", time: "5小时", status: "ready" },
+          { id: "long-title", title: "这是一个用于验证极端情况下标题截断策略的超长中文会话名称", time: "8小时", status: "ready" },
+          { id: "error-recovery", title: "局部故障节点恢复入口", time: "11小时", status: "error" }
+        ]
+      }
+    ];
+
+    const STATUS = {
+      ready: { label: "READY", color: "#42ff85" },
+      thinking: { label: "THINKING", color: "#ffcf4a" },
+      streaming: { label: "STREAMING", color: "#68e9dd" },
+      tool: { label: "TOOL ACTIVE", color: "#a7ff4a" },
+      error: { label: "ERROR", color: "#ff4d57" }
+    };
+
+    const VARIANTS = [
+      { key: "wall", short: "A", name: "WIRED PERSPECTIVE WALL", subtitle: "协议透视墙 · 空间档案" },
+      { key: "orbit", short: "B", name: "NEURAL ORBIT", subtitle: "神经轨道舱 · 活体拓扑" },
+      { key: "bus", short: "C", name: "IRON-CITY MEMORY BUS", subtitle: "记忆总线 · 工业编组场" }
+    ];
+
+    const state = {
+      variant: normalizeVariant(new URL(location.href).searchParams.get("variant")),
+      experience: "cinematic",
+      workspaceId: "deepseek-zion",
+      sessionId: "sidebar-redesign"
+    };
+
+    function normalizeVariant(value) {
+      if (value === "A") return "wall";
+      if (value === "B") return "orbit";
+      if (value === "C") return "bus";
+      return VARIANTS.some(function (item) { return item.key === value; }) ? value : "wall";
+    }
+
+    function escapeHtml(value) {
+      return String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;");
+    }
+
+    function currentVariant() {
+      return VARIANTS.find(function (item) { return item.key === state.variant; }) || VARIANTS[0];
+    }
+
+    function currentWorkspace() {
+      return WORKSPACES.find(function (item) { return item.id === state.workspaceId; }) || WORKSPACES[0];
+    }
+
+    function currentSession() {
+      const workspace = currentWorkspace();
+      return workspace.sessions.find(function (item) { return item.id === state.sessionId; }) || workspace.sessions[0];
+    }
+
+    function statusDot(session) {
+      const meta = STATUS[session.status];
+      return '<span class="session-status-dot ' + session.status + '" style="--session-color:' + meta.color + '" aria-hidden="true"></span>';
+    }
+
+    function renderWall() {
+      const activeIndex = WORKSPACES.findIndex(function (workspace) { return workspace.id === state.workspaceId; });
+      const panels = WORKSPACES.map(function (workspace, index) {
+        let offset = index - activeIndex;
+        if (offset > WORKSPACES.length / 2) offset -= WORKSPACES.length;
+        if (offset < -WORKSPACES.length / 2) offset += WORKSPACES.length;
+        const abs = Math.abs(offset);
+        const sign = offset === 0 ? 0 : (offset < 0 ? -1 : 1);
+        const sessions = workspace.sessions.map(function (session) {
+          const current = session.id === state.sessionId;
+          return '<button class="wall-session' + (current ? ' current' : '') + '" type="button" data-session="' + session.id + '" data-workspace="' + workspace.id + '" title="' + escapeHtml(session.title) + '">' +
+            statusDot(session) +
+            '<span class="wall-session-title">' + escapeHtml(session.title) + '</span>' +
+            '<span class="wall-session-meta">' + escapeHtml(session.time) + '</span>' +
+          '</button>';
+        }).join("");
+        return '<section class="wall-panel' + (workspace.id === state.workspaceId ? ' active' : '') + '" data-workspace-panel="' + workspace.id + '" style="--offset:' + offset + ';--abs:' + abs + ';--sign:' + sign + ';--workspace-color:' + workspace.color + ';z-index:' + (10 - abs) + '">' +
+          '<header class="wall-panel-head">' +
+            '<span class="wall-layer-no">' + String(index + 1).padStart(2, "0") + '</span>' +
+            '<span class="wall-workspace-mark" aria-hidden="true"></span>' +
+            '<span class="wall-workspace-copy"><small>LAYER://' + workspace.code + '</small><b>' + escapeHtml(workspace.name) + '</b><span>ALL SESSIONS INDEXED</span></span>' +
+            '<span class="wall-workspace-count">' + String(workspace.sessions.length).padStart(2, "0") + '</span>' +
+          '</header>' +
+          '<div class="wall-sessions">' + sessions + '</div>' +
+        '</section>';
+      }).join("");
+      const session = currentSession();
+      return '<div class="variant-shell wall-shell">' +
+        '<header class="wall-header">' +
+          '<div class="wall-id"><small>PROTOCOL ARCHIVE / PRESENT DAY</small><strong>WIRED<br />PERSPECTIVE</strong><span>多个 Layer 同场 · 当前档案翻正</span></div>' +
+          '<div class="wall-neo"><img src="' + NEO_SRC + '" alt="" /></div>' +
+          '<div class="variant-toolbar">' +
+            '<button class="variant-tool" type="button" title="搜索，仅视觉原型">⌕</button>' +
+            '<button class="variant-tool" type="button" title="新会话，仅视觉原型">＋</button>' +
+          '</div>' +
+        '</header>' +
+        '<div class="wall-stage-wrap"><div class="wall-stage">' + panels + '</div></div>' +
+        '<footer class="wall-footer">' +
+          '<div class="wall-current"><small>FOCAL MEMORY / ' + STATUS[session.status].label + '</small><b>' + escapeHtml(session.title) + '</b></div>' +
+          '<div class="wall-nav"><button type="button" data-wall-step="-1" aria-label="上一个工作区">‹</button><button type="button" data-wall-step="1" aria-label="下一个工作区">›</button></div>' +
+        '</footer>' +
+      '</div>';
+    }
+
+    function orbitGeometry(index) {
+      const points = [
+        { x: 145, y: 145, rx: 102, ry: 72 },
+        { x: 455, y: 145, rx: 104, ry: 72 },
+        { x: 140, y: 470, rx: 108, ry: 78 },
+        { x: 460, y: 470, rx: 112, ry: 82 }
+      ];
+      return points[index];
+    }
+
+    function renderOrbit() {
+      const svgParts = [
+        '<svg class="orbit-svg" viewBox="0 0 600 620" preserveAspectRatio="none" aria-hidden="true">',
+        '<circle class="orbit-grid-circle" cx="300" cy="310" r="142"></circle>',
+        '<circle class="orbit-grid-circle" cx="300" cy="310" r="212"></circle>'
+      ];
+      const nodes = [];
+
+      WORKSPACES.forEach(function (workspace, index) {
+        const g = orbitGeometry(index);
+        const active = workspace.id === state.workspaceId;
+        svgParts.push('<ellipse class="orbit-ring' + (active ? ' active' : '') + '" style="--workspace-color:' + workspace.color + '" cx="' + g.x + '" cy="' + g.y + '" rx="' + g.rx + '" ry="' + g.ry + '"></ellipse>');
+        const controlX = 300 + (g.x - 300) * .34;
+        const controlY = 310 + (g.y - 310) * .34;
+        const d = 'M 300 310 Q ' + controlX.toFixed(1) + ' ' + controlY.toFixed(1) + ' ' + g.x + ' ' + g.y;
+        svgParts.push('<path class="orbit-cable-bed" d="' + d + '"></path>');
+        svgParts.push('<path class="orbit-cable-nerve' + (active ? ' active' : '') + '" style="--workspace-color:' + workspace.color + '" d="' + d + '"></path>');
+
+        nodes.push('<button class="orbit-workspace-core' + (active ? ' active' : '') + '" type="button" data-workspace-core="' + workspace.id + '" style="left:' + (g.x / 6) + '%;top:' + (g.y / 6.2) + '%;--workspace-color:' + workspace.color + '" title="聚焦工作区 ' + escapeHtml(workspace.name) + '">' +
+          '<b>' + escapeHtml(workspace.name) + '</b><span>' + workspace.code + ' / ' + String(workspace.sessions.length).padStart(2, "0") + ' NODES</span></button>');
+
+        workspace.sessions.forEach(function (session, sessionIndex) {
+          const angle = -Math.PI / 2 + (Math.PI * 2 * sessionIndex / workspace.sessions.length) + index * .18;
+          const x = g.x + Math.cos(angle) * g.rx;
+          const y = g.y + Math.sin(angle) * g.ry;
+          const current = session.id === state.sessionId;
+          nodes.push('<button class="orbit-node' + (current ? ' current' : '') + '" type="button" data-session="' + session.id + '" data-workspace="' + workspace.id + '" style="left:' + (x / 6) + '%;top:' + (y / 6.2) + '%;--workspace-color:' + workspace.color + '" title="' + escapeHtml(session.title + ' · ' + session.time) + '">' +
+            statusDot(session) + '<span class="orbit-node-title">' + escapeHtml(session.title) + '</span></button>');
+        });
+      });
+
+      svgParts.push('</svg>');
+      const session = currentSession();
+      return '<div class="variant-shell orbit-shell">' +
+        '<header class="orbit-header">' +
+          '<div class="orbit-brand"><small>NEURAL CARTOGRAPHY / LIVE</small><b>ORBITAL SESSION ARRAY</b><span>四个工作区地标 · 十八个可定位会话节点</span></div>' +
+          '<div class="variant-toolbar"><button class="variant-tool" type="button" title="重新居中，仅视觉原型">◎</button><button class="variant-tool" type="button" title="新会话，仅视觉原型">＋</button></div>' +
+        '</header>' +
+        '<div class="orbit-field">' +
+          svgParts.join("") +
+          '<div class="orbit-neo"><img src="' + NEO_SRC + '" alt="Neo 神经核心" /></div>' +
+          '<span class="orbit-neo-label">NEO // CENTRAL ANCHOR</span>' +
+          nodes.join("") +
+        '</div>' +
+        '<footer class="orbit-footer">' +
+          '<div class="orbit-current"><small>CURRENT ORBIT / ' + STATUS[session.status].label + '</small><b>' + escapeHtml(session.title) + '</b></div>' +
+          '<div class="orbit-legend"><span><i style="color:#42ff85"></i>READY</span><span><i style="color:#68e9dd"></i>STREAM</span><span><i style="color:#ffcf4a"></i>THINK</span><span><i style="color:#ff4d57"></i>ERROR</span></div>' +
+        '</footer>' +
+      '</div>';
+    }
+
+    function renderBus() {
+      const lines = WORKSPACES.map(function (workspace, workspaceIndex) {
+        const activeWorkspace = workspace.id === state.workspaceId;
+        const slabs = workspace.sessions.map(function (session, sessionIndex) {
+          const current = session.id === state.sessionId;
+          return '<button class="memory-slab' + (current ? ' current' : '') + '" type="button" data-session="' + session.id + '" data-workspace="' + workspace.id + '" title="' + escapeHtml(session.title) + '">' +
+            '<span class="memory-slab-top"><span>MEM-' + String(sessionIndex + 1).padStart(2, "0") + '</span><span>' + STATUS[session.status].label + '</span></span>' +
+            '<span class="memory-slab-title">' + escapeHtml(session.title) + '</span>' +
+            '<span class="memory-slab-foot"><span>' + escapeHtml(session.time) + '</span><span class="memory-ports"><i></i><i></i><i></i></span></span>' +
+          '</button>';
+        }).join("");
+        return '<section class="bus-line' + (activeWorkspace ? ' active' : '') + '" style="--workspace-color:' + workspace.color + '">' +
+          '<button class="bus-station" type="button" data-workspace-core="' + workspace.id + '" aria-label="聚焦工作区 ' + escapeHtml(workspace.name) + '">' +
+            '<span class="bus-station-code">STATION // ' + workspace.code + '</span>' +
+            '<b>' + escapeHtml(workspace.name) + '</b>' +
+            '<span class="bus-station-meta"><span>' + String(workspace.sessions.length).padStart(2, "0") + ' SLOTS</span><i aria-hidden="true"></i></span>' +
+          '</button>' +
+          '<div class="bus-track-wrap">' +
+            '<div class="bus-track" id="track-' + workspace.id + '">' + slabs + '</div>' +
+            '<div class="bus-track-controls"><span>MEMORY BUS / ' + String(workspaceIndex + 1).padStart(2, "0") + '</span><button type="button" data-track="' + workspace.id + '" data-direction="-1" aria-label="向左滚动 ' + escapeHtml(workspace.name) + '">‹</button><button type="button" data-track="' + workspace.id + '" data-direction="1" aria-label="向右滚动 ' + escapeHtml(workspace.name) + '">›</button></div>' +
+          '</div>' +
+        '</section>';
+      }).join("");
+      const session = currentSession();
+      return '<div class="variant-shell bus-shell">' +
+        '<header class="bus-header">' +
+          '<div class="bus-brand"><small>IRON CITY / DATA MARSHAL YARD</small><b>MEMORY BUS<br />CONTROL</b><span>工作区是接口站 · 会话是可抽换记忆片</span></div>' +
+          '<div class="bus-neo"><img src="' + NEO_SRC + '" alt="Neo 总线操作员" /></div>' +
+        '</header>' +
+        '<div class="bus-field">' + lines + '</div>' +
+        '<footer class="bus-footer">' +
+          '<div class="bus-current"><small>ROUTED MEMORY / ' + STATUS[session.status].label + '</small><b>' + escapeHtml(session.title) + '</b></div>' +
+          '<div class="bus-meter" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>' +
+        '</footer>' +
+      '</div>';
+    }
+
+    function selectWorkspace(workspaceId) {
+      const workspace = WORKSPACES.find(function (item) { return item.id === workspaceId; });
+      if (!workspace) return;
+      state.workspaceId = workspace.id;
+      if (!workspace.sessions.some(function (session) { return session.id === state.sessionId; })) {
+        state.sessionId = workspace.sessions[0].id;
+      }
+      render();
+    }
+
+    function selectSession(workspaceId, sessionId) {
+      state.workspaceId = workspaceId;
+      state.sessionId = sessionId;
+      render();
+    }
+
+    function stepWall(direction) {
+      const index = WORKSPACES.findIndex(function (item) { return item.id === state.workspaceId; });
+      const next = WORKSPACES[(index + direction + WORKSPACES.length) % WORKSPACES.length];
+      state.workspaceId = next.id;
+      state.sessionId = next.sessions[0].id;
+      render();
+    }
+
+    function bindVariantActions() {
+      document.querySelectorAll("[data-session]").forEach(function (button) {
+        button.addEventListener("click", function (event) {
+          event.stopPropagation();
+          selectSession(button.dataset.workspace, button.dataset.session);
+        });
+      });
+      document.querySelectorAll("[data-workspace-panel]").forEach(function (panel) {
+        panel.addEventListener("click", function () {
+          if (panel.dataset.workspacePanel !== state.workspaceId) selectWorkspace(panel.dataset.workspacePanel);
+        });
+      });
+      document.querySelectorAll("[data-workspace-core]").forEach(function (button) {
+        button.addEventListener("click", function () { selectWorkspace(button.dataset.workspaceCore); });
+      });
+      document.querySelectorAll("[data-wall-step]").forEach(function (button) {
+        button.addEventListener("click", function () { stepWall(Number(button.dataset.wallStep)); });
+      });
+      document.querySelectorAll("[data-track]").forEach(function (button) {
+        button.addEventListener("click", function () {
+          const track = document.querySelector("#track-" + CSS.escape(button.dataset.track));
+          if (!track) return;
+          track.scrollBy({ left: Number(button.dataset.direction) * 310, behavior: state.experience === "reduced" ? "auto" : "smooth" });
+        });
+      });
+    }
+
+    function updateContext() {
+      const variant = currentVariant();
+      const workspace = currentWorkspace();
+      const session = currentSession();
+      const meta = STATUS[session.status];
+      document.querySelector("#context-workspace").textContent = "WORKSPACE / " + workspace.name.toUpperCase();
+      document.querySelector("#context-title").textContent = session.title;
+      const status = document.querySelector("#context-status");
+      status.innerHTML = meta.label + "<br />NEURAL LINK";
+      status.style.setProperty("--status-color", meta.color);
+      document.querySelector("#ledger-variant").textContent = variant.short + " / " + variant.name;
+      document.querySelector("#ledger-workspace").textContent = workspace.name;
+      document.querySelector("#ledger-session").textContent = session.title;
+      document.querySelector("#ledger-experience").textContent = state.experience.toUpperCase();
+      document.querySelector("#switcher-label").textContent = variant.short + " — " + variant.name;
+      document.title = "ZION · " + variant.short + " · " + variant.name;
+    }
+
+    function render() {
+      const root = document.querySelector("#variant-root");
+      const renderers = { wall: renderWall, orbit: renderOrbit, bus: renderBus };
+      root.innerHTML = renderers[state.variant]();
+      document.querySelector("#prototype-surface").dataset.variant = state.variant;
+      bindVariantActions();
+      updateContext();
+    }
+
+    function setVariant(key) {
+      state.variant = normalizeVariant(key);
+      const url = new URL(location.href);
+      url.searchParams.set("variant", state.variant);
+      history.replaceState(null, "", url);
+      render();
+    }
+
+    function cycleVariant(direction) {
+      const index = VARIANTS.findIndex(function (item) { return item.key === state.variant; });
+      setVariant(VARIANTS[(index + direction + VARIANTS.length) % VARIANTS.length].key);
+    }
+
+    document.querySelector("#variant-prev").addEventListener("click", function () { cycleVariant(-1); });
+    document.querySelector("#variant-next").addEventListener("click", function () { cycleVariant(1); });
+    document.querySelectorAll("[data-experience]").forEach(function (button) {
+      button.addEventListener("click", function () {
+        state.experience = button.dataset.experience;
+        document.body.dataset.experience = state.experience;
+        document.querySelectorAll("[data-experience]").forEach(function (item) {
+          item.classList.toggle("active", item.dataset.experience === state.experience);
+        });
+        updateContext();
+      });
+    });
+    document.addEventListener("keydown", function (event) {
+      if (event.target.matches("input, textarea, [contenteditable]")) return;
+      if (event.key === "ArrowLeft") cycleVariant(-1);
+      if (event.key === "ArrowRight") cycleVariant(1);
+    });
+
+    function updateClock() {
+      document.querySelector("#clock").textContent = new Date().toLocaleTimeString("zh-CN", { hour12: false });
+    }
+    updateClock();
+    setInterval(updateClock, 1000);
+    render();
+  </script>
+</body>
+</html>
