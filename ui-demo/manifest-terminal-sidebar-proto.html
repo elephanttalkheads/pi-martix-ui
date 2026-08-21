@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<!--
+  PROTOTYPE — throwaway, do not ship.
+  方向 A「舱单终端」(MU/TH/UR Manifest) 侧边会话栏，三个结构性变体，
+  ?variant=a1|a2|a3 切换 + 底部浮动切换条（← → 键同效）。
+  基底：research/sidebar-scifi-inspiration.md 第六章 + 方向 A；
+  尺寸基线：docs/matrix-drive-vault-sidebar-measurements.md（330px / 34+32N）。
+-->
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>PROTOTYPE · 舱单终端侧栏 A1/A2/A3</title>
+<style>
+/* ============ 字体（沿用生产资产，相对路径） ============ */
+@font-face {
+  font-family: 'Share Tech Mono';
+  src: url('../src/renderer/src/assets/fonts/ShareTechMono-Regular.woff2') format('woff2');
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Sarasa Term SC';
+  src: url('../src/renderer/src/assets/fonts/SarasaTermSC-Regular.subset.woff2') format('woff2');
+  font-display: swap;
+}
+
+/* ============ 令牌 ============ */
+:root {
+  --energy: #00ff41;
+  --energy-dim: rgba(0, 255, 65, .55);
+  --energy-faint: rgba(0, 255, 65, .28);
+  --hairline: rgba(0, 255, 65, .18);
+  --bg: #050805;
+  --ink: #c9ffd6;
+  --ink-dim: rgba(201, 255, 214, .5);
+  --mono: 'Share Tech Mono', 'Sarasa Term SC', monospace;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body { height: 100%; }
+body {
+  background: #020302;
+  display: grid;
+  place-items: center;
+  font-family: var(--mono);
+  overflow: hidden;
+}
+
+/* ============ 侧栏画布：330×870 固定 ============ */
+.sidebar {
+  width: 330px;
+  height: 870px;
+  max-height: 100vh;
+  background: var(--bg);
+  color: var(--ink);
+  display: flex;
+  flex-direction: column;
+  padding: 6px 12px 0;
+  position: relative;
+  border-left: 1px solid var(--hairline);
+  border-right: 1px solid var(--hairline);
+  user-select: none;
+}
+
+/* ============================================================
+   公共：工作区 / 会话数据由 JS 渲染，各变体只换 render 函数
+   ============================================================ */
+
+/* ---------- A1 货单正典：hairline + 三列网格 + 整行反白 ---------- */
+.v-a1 .brand {
+  padding: 18px 4px 14px;
+  border-bottom: 1px solid var(--energy-dim);
+}
+.v-a1 .brand h1 { font-size: 20px; letter-spacing: .22em; font-weight: 400; color: var(--energy); }
+.v-a1 .brand .reg { margin-top: 6px; font-size: 10px; letter-spacing: .14em; color: var(--ink-dim); }
+.v-a1 .brand .reg b { color: var(--ink); font-weight: 400; }
+
+.v-a1 .toolbar {
+  display: flex; gap: 6px;
+  padding: 10px 4px;
+  border-bottom: 1px solid var(--hairline);
+}
+.v-a1 .toolbar button {
+  flex: 1; height: 24px;
+  background: none; border: 1px solid var(--hairline);
+  color: var(--ink-dim); font: inherit; font-size: 10px; letter-spacing: .18em;
+  cursor: pointer;
+}
+.v-a1 .toolbar button:hover { border-color: var(--energy-dim); color: var(--ink); }
+
+.v-a1 .scroll { flex: 1; overflow-y: auto; padding: 4px 4px 16px; }
+.v-a1 .scroll::-webkit-scrollbar { width: 4px; }
+.v-a1 .scroll::-webkit-scrollbar-thumb { background: var(--hairline); }
+
+.v-a1 .bay { margin-top: 14px; }
+.v-a1 .bay-head {
+  display: flex; align-items: baseline; gap: 8px;
+  height: 34px; padding: 0 2px;
+  border-top: 1px solid var(--energy-dim);
+  border-bottom: 1px solid var(--hairline);
+  font-size: 11px; letter-spacing: .16em;
+}
+.v-a1 .bay-head .no { color: var(--energy); }
+.v-a1 .bay-head .name { color: var(--ink); }
+.v-a1 .bay-head .count { margin-left: auto; color: var(--ink-dim); font-size: 10px; }
+
+.v-a1 .row {
+  display: grid; grid-template-columns: 20px 1fr auto;
+  align-items: center; gap: 8px;
+  height: 32px; padding: 0 4px;
+  border-bottom: 1px solid var(--hairline);
+  cursor: pointer;
+  font-size: 13px;
+}
+.v-a1 .row .sym { width: 16px; height: 16px; color: var(--energy-dim); }
+.v-a1 .row .title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.v-a1 .row .age { font-size: 10px; letter-spacing: .12em; color: var(--ink-dim); }
+.v-a1 .row:hover { background: rgba(0, 255, 65, .07); }
+.v-a1 .row.active { background: var(--energy); color: #000; }
+.v-a1 .row.active .sym, .v-a1 .row.active .age { color: #000; }
+
+.v-a1 .foot {
+  border-top: 1px solid var(--energy-dim);
+  padding: 10px 4px 12px;
+  font-size: 10px; letter-spacing: .14em; color: var(--ink-dim);
+  display: flex; justify-content: space-between;
+}
+
+/* ---------- A2 逐行打字：开机货单，光标行选中 + hover 字形扰动 ---------- */
+.v-a2 .brand {
+  padding: 18px 4px 12px;
+  font-size: 11px; letter-spacing: .1em; color: var(--ink-dim);
+  border-bottom: 1px solid var(--hairline);
+  line-height: 1.9;
+}
+.v-a2 .brand .ok { color: var(--energy); }
+
+.v-a2 .toolbar {
+  padding: 8px 4px;
+  border-bottom: 1px solid var(--hairline);
+  font-size: 11px; color: var(--ink-dim); letter-spacing: .06em;
+  display: flex; gap: 10px; align-items: center;
+}
+.v-a2 .toolbar .prompt { color: var(--energy); }
+.v-a2 .toolbar button {
+  background: none; border: none; color: var(--ink-dim);
+  font: inherit; cursor: pointer; letter-spacing: .06em; padding: 0;
+}
+.v-a2 .toolbar button:hover { color: var(--energy); }
+
+.v-a2 .scroll { flex: 1; overflow-y: auto; padding: 8px 4px 16px; }
+.v-a2 .scroll::-webkit-scrollbar { width: 4px; }
+.v-a2 .scroll::-webkit-scrollbar-thumb { background: var(--hairline); }
+
+/* 进场：逐行打字浮现 */
+.v-a2 .row, .v-a2 .bay-head {
+  opacity: 0;
+  animation: rowin .18s steps(2) forwards;
+  animation-delay: calc(var(--i) * 85ms);
+}
+@keyframes rowin { to { opacity: 1; } }
+
+.v-a2 .bay { margin-top: 10px; }
+.v-a2 .bay-head {
+  height: 34px; display: flex; align-items: center; gap: 8px;
+  font-size: 11px; letter-spacing: .14em; color: var(--energy);
+}
+.v-a2 .bay-head::before { content: '=='; color: var(--energy-dim); }
+.v-a2 .bay-head .count { margin-left: auto; color: var(--ink-dim); font-size: 10px; }
+.v-a2 .bay-head::after { content: ''; flex: 0 0 auto; width: 24px; height: 1px; background: var(--hairline); }
+
+.v-a2 .row {
+  display: grid; grid-template-columns: 14px 20px 1fr auto;
+  align-items: center; gap: 6px;
+  height: 32px; padding: 0 4px;
+  cursor: pointer; font-size: 13px;
+  border-bottom: 1px dotted rgba(0, 255, 65, .12);
+}
+.v-a2 .row .cur { color: transparent; font-size: 12px; }
+.v-a2 .row .sym { width: 16px; height: 16px; color: var(--energy-dim); }
+.v-a2 .row .title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.v-a2 .row .age { font-size: 10px; letter-spacing: .12em; color: var(--ink-dim); }
+.v-a2 .row:hover { background: rgba(0, 255, 65, .06); }
+.v-a2 .row.active .cur { color: var(--energy); }
+.v-a2 .row.active {
+  background: rgba(0, 255, 65, .12);
+  box-shadow: inset 2px 0 0 var(--energy);
+}
+.v-a2 .row.active .title::after {
+  content: '▮'; margin-left: 6px; color: var(--energy);
+  animation: blink 1.1s steps(1) infinite;
+}
+@keyframes blink { 50% { opacity: 0; } }
+
+.v-a2 .foot {
+  border-top: 1px solid var(--hairline);
+  padding: 10px 4px 12px;
+  font-size: 10px; letter-spacing: .12em; color: var(--ink-dim);
+}
+.v-a2 .foot .rot { color: var(--energy-dim); }
+
+/* ---------- A3 符号标准：行号水线 + Cobb 符号版 + BAY 铭牌 ---------- */
+.v-a3 .brand {
+  padding: 16px 4px 12px;
+  display: flex; align-items: center; gap: 10px;
+  border-bottom: 1px solid var(--hairline);
+}
+.v-a3 .brand .mark { width: 28px; height: 28px; color: var(--energy); flex: none; }
+.v-a3 .brand h1 { font-size: 13px; letter-spacing: .2em; font-weight: 400; color: var(--ink); }
+.v-a3 .brand .reg { font-size: 9px; letter-spacing: .14em; color: var(--ink-dim); margin-top: 3px; }
+
+.v-a3 .toolbar {
+  display: flex; gap: 4px; padding: 8px 4px;
+  border-bottom: 1px solid var(--hairline);
+}
+.v-a3 .toolbar button {
+  width: 28px; height: 28px; flex: none;
+  background: none; border: 1px solid var(--hairline); border-radius: 3px;
+  color: var(--ink-dim); cursor: pointer; display: grid; place-items: center;
+}
+.v-a3 .toolbar button svg { width: 14px; height: 14px; }
+.v-a3 .toolbar button:hover { border-color: var(--energy-dim); color: var(--energy); }
+.v-a3 .toolbar .spring { flex: 1; }
+
+.v-a3 .scroll { flex: 1; overflow-y: auto; padding: 6px 4px 16px 0; }
+.v-a3 .scroll::-webkit-scrollbar { width: 4px; }
+.v-a3 .scroll::-webkit-scrollbar-thumb { background: var(--hairline); }
+
+.v-a3 .bay { margin-top: 12px; }
+.v-a3 .bay-head {
+  display: grid; grid-template-columns: 34px 24px 1fr auto;
+  align-items: center; gap: 6px;
+  height: 34px;
+  border-top: 1px solid var(--energy-faint);
+  border-bottom: 1px solid var(--hairline);
+}
+.v-a3 .bay-head .ln { font-size: 9px; color: var(--energy-faint); text-align: right; padding-right: 6px; }
+.v-a3 .bay-head .plate { width: 22px; height: 22px; color: var(--energy); }
+.v-a3 .bay-head .name { font-size: 11px; letter-spacing: .16em; color: var(--ink); }
+.v-a3 .bay-head .name b { color: var(--energy); font-weight: 400; margin-right: 6px; }
+.v-a3 .bay-head .count { font-size: 9px; letter-spacing: .1em; color: var(--ink-dim); }
+
+.v-a3 .row {
+  display: grid; grid-template-columns: 34px 24px 1fr auto;
+  align-items: center; gap: 6px;
+  height: 32px;
+  border-bottom: 1px solid rgba(0, 255, 65, .08);
+  cursor: pointer; font-size: 13px;
+}
+.v-a3 .row .ln { font-size: 9px; color: var(--energy-faint); text-align: right; padding-right: 6px; }
+.v-a3 .row .sym { width: 16px; height: 16px; color: var(--energy-dim); justify-self: center; }
+.v-a3 .row .title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.v-a3 .row .age { font-size: 10px; letter-spacing: .1em; color: var(--ink-dim); }
+.v-a3 .row:hover { background: rgba(0, 255, 65, .05); }
+.v-a3 .row:hover .ln { color: var(--energy-dim); }
+.v-a3 .row.active { background: var(--energy); color: #000; }
+.v-a3 .row.active .ln { background: var(--energy); color: #000; }
+.v-a3 .row.active .sym, .v-a3 .row.active .age { color: #000; }
+
+.v-a3 .foot {
+  border-top: 1px solid var(--energy-faint);
+  padding: 10px 4px 12px;
+  font-size: 9px; letter-spacing: .14em; color: var(--ink-dim);
+  display: flex; justify-content: space-between;
+}
+
+/* ============ 变体切换浮动条（明显不属于被评估设计） ============ */
+.switcher {
+  position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%);
+  display: flex; align-items: center; gap: 12px;
+  background: #111; border: 1px solid #555; border-radius: 999px;
+  padding: 8px 14px;
+  font: 12px/1 system-ui, sans-serif; color: #eee;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, .6);
+  z-index: 99;
+}
+.switcher button {
+  width: 26px; height: 26px; border-radius: 50%;
+  border: 1px solid #666; background: #1c1c1c; color: #eee;
+  cursor: pointer; font-size: 13px; line-height: 1;
+}
+.switcher button:hover { background: #333; }
+.switcher .label { min-width: 190px; text-align: center; letter-spacing: .04em; }
+.switcher .proto { color: #888; font-size: 10px; letter-spacing: .15em; }
+
+@media (prefers-reduced-motion: reduce) {
+  .v-a2 .row, .v-a2 .bay-head { animation: none; opacity: 1; }
+  .v-a2 .row.active .title::after { animation: none; }
+}
+</style>
+</head>
+<body>
+
+<div class="sidebar" id="sidebar"></div>
+
+<div class="switcher">
+  <span class="proto">PROTOTYPE</span>
+  <button id="prev" title="上一个（←）">‹</button>
+  <span class="label" id="label"></span>
+  <button id="next" title="下一个（→）">›</button>
+</div>
+
+<script>
+/* ================= 数据：4 工作区 / 11 会话 ================= */
+const BAYS = [
+  { no: '01', name: 'deepseek-zion', sessions: [
+    { t: '落地 v7 状态条+输入框', age: '2H', st: 'done' },
+    { t: '修复会话恢复 diff 卡丢失', age: '5H', st: 'done' },
+    { t: '拆分 DESIGN.md 极简规范', age: '1D', st: 'done' },
+  ]},
+  { no: '02', name: 'pi-martix-ui', sessions: [
+    { t: '侧边栏机柜 demo 调优', age: '2D', st: 'done', active: true },
+    { t: '雨轨拖尾透明衰减', age: '3D', st: 'run' },
+    { t: '脑机链路脉冲重定时', age: '3D', st: 'done' },
+  ]},
+  { no: '03', name: 'zion-test', sessions: [
+    { t: 'BMI 脚本毒舌改造', age: '4D', st: 'done' },
+    { t: 'NeuralCable 文档同步', age: '4D', st: 'err' },
+  ]},
+  { no: '04', name: 'eccToolkit', sessions: [
+    { t: 'ett-doc-update 索引重建', age: '5D', st: 'done' },
+    { t: '模板清单审计', age: '6D', st: 'done' },
+    { t: '字体子集化流水线', age: '1W', st: 'done' },
+  ]},
+];
+
+/* ================= Cobb 式符号（16×16 粗几何单色） ================= */
+const S = (inner) =>
+  `<svg class="sym" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="square">${inner}</svg>`;
+const SYM = {
+  done: S('<rect x="1.5" y="1.5" width="13" height="13" rx="3"/><path d="M4.5 5.5h7M4.5 8h7M4.5 10.5h4.5"/>'),
+  run:  S('<rect x="1.5" y="1.5" width="13" height="13" rx="3"/><path d="M6 4.8v6.4L11.2 8z" fill="currentColor" stroke="none"/>'),
+  err:  S('<rect x="1.5" y="1.5" width="13" height="13" rx="3"/><path d="M5 5l6 6M11 5l-6 6"/>'),
+};
+const ZION_MARK = `<svg class="mark" viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="2.4"><rect x="2" y="2" width="24" height="24" rx="5"/><path d="M8 9h12l-12 10h12"/></svg>`;
+const TOOL_ICON = {
+  srch: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14"/></svg>',
+  view: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M2.5 5h11M2.5 8h11M2.5 11h7"/></svg>',
+  bay:  '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="12" height="12" rx="3"/><path d="M8 5.5v5M5.5 8h5"/></svg>',
+  new_: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 2.5v11M2.5 8h11"/></svg>',
+};
+
+/* ================= 变体定义 ================= */
+const VARIANTS = {
+  a1: {
+    name: 'A1 — 货单正典 Canonical Manifest',
+    render(root) {
+      let html = `
+        <div class="brand">
+          <h1>DEEPSEEK ZION</h1>
+          <div class="reg">COMMERCIAL AGENT CARRIER · REG <b>180924609</b> · CREW: <b>01</b></div>
+        </div>
+        <div class="toolbar">
+          <button>SRCH</button><button>VIEW</button><button>BAY+</button><button>NEW+</button>
+        </div>
+        <div class="scroll">`;
+      for (const bay of BAYS) {
+        html += `<div class="bay">
+          <div class="bay-head">
+            <span class="no">CARGO BAY ${bay.no}</span>
+            <span class="name">${bay.name}</span>
+            <span class="count">${String(bay.sessions.length).padStart(2, '0')} ITEMS</span>
+          </div>`;
+        for (const s of bay.sessions) {
+          html += `<div class="row${s.active ? ' active' : ''}" data-t="${s.t}">
+            ${SYM[s.st]}<span class="title">${s.t}</span><span class="age">${s.age}</span>
+          </div>`;
+        }
+        html += `</div>`;
+      }
+      html += `</div>
+        <div class="foot"><span>ZION SIDEBAR 330×870</span><span>REV 0.2</span></div>`;
+      root.innerHTML = html;
+    },
+  },
+
+  a2: {
+    name: 'A2 — 逐行打字 Boot Manifest',
+    render(root) {
+      let i = 0;
+      let html = `
+        <div class="brand">
+          MU/TH/UR 6000 INTERFACE · <span class="ok">LINK OK</span><br>
+          REQUEST: <span class="ok">LIST BAYS --ALL</span> · 4 BAYS / 11 ITEMS RETURNED
+        </div>
+        <div class="toolbar">
+          <span class="prompt">ZION&gt;</span>
+          <button>srch</button><button>view</button><button>bay+</button><button>new</button>
+        </div>
+        <div class="scroll">`;
+      for (const bay of BAYS) {
+        html += `<div class="bay">
+          <div class="bay-head" style="--i:${i++}">BAY ${bay.no} · ${bay.name}
+            <span class="count">${String(bay.sessions.length).padStart(2, '0')}</span>
+          </div>`;
+        for (const s of bay.sessions) {
+          html += `<div class="row${s.active ? ' active' : ''}" data-t="${s.t}" style="--i:${i++}">
+            <span class="cur">&gt;</span>${SYM[s.st]}<span class="title">${s.t}</span><span class="age">${s.age}</span>
+          </div>`;
+        }
+        html += `</div>`;
+      }
+      html += `</div>
+        <div class="foot">STATUS <span class="rot" id="rot">NOMINAL</span> · 330×870 · REV 0.2</div>`;
+      root.innerHTML = html;
+      /* hover 字形扰动（片假名一闪，"雨"退到触发层） */
+      const KATA = 'ｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿﾀﾁﾂﾃﾄﾅﾆﾇﾈﾉ';
+      root.querySelectorAll('.row .title').forEach(el => {
+        el.addEventListener('mouseenter', () => {
+          if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+          const orig = el.textContent;
+          let n = 0;
+          const timer = setInterval(() => {
+            el.textContent = orig.split('').map((c, idx) =>
+              idx < n ? c : (c !== ' ' && Math.random() < .5 ? KATA[Math.random() * KATA.length | 0] : c)
+            ).join('');
+            if (++n > orig.length) { clearInterval(timer); el.textContent = orig; }
+          }, 28);
+        });
+      });
+      /* 底部状态轮播 */
+      const rot = root.querySelector('#rot');
+      const seq = ['NOMINAL', 'SCANNING', 'UPLINK 56K', 'RE-SYNC'];
+      let k = 0;
+      setInterval(() => { rot.textContent = seq[++k % seq.length]; }, 2400);
+    },
+  },
+
+  a3: {
+    name: 'A3 — 符号标准 Semiotic Standard',
+    render(root) {
+      let ln = 0;
+      let html = `
+        <div class="brand">${ZION_MARK}
+          <div><h1>DEEPSEEK ZION</h1><div class="reg">REG 180924609 · MANIFEST STD-77</div></div>
+        </div>
+        <div class="toolbar">
+          <button title="搜索">${TOOL_ICON.srch}</button>
+          <button title="视图">${TOOL_ICON.view}</button>
+          <span class="spring"></span>
+          <button title="添加工作区">${TOOL_ICON.bay}</button>
+          <button title="新会话">${TOOL_ICON.new_}</button>
+        </div>
+        <div class="scroll">`;
+      for (const bay of BAYS) {
+        html += `<div class="bay">
+          <div class="bay-head">
+            <span class="ln">${String(++ln).padStart(3, '0')}</span>
+            <svg class="plate" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><rect x="1.5" y="1.5" width="13" height="13" rx="3"/><path d="M4.5 8h7M8 4.5v7"/></svg>
+            <span class="name"><b>BAY ${bay.no}</b>${bay.name}</span>
+            <span class="count">×${String(bay.sessions.length).padStart(2, '0')}</span>
+          </div>`;
+        for (const s of bay.sessions) {
+          html += `<div class="row${s.active ? ' active' : ''}" data-t="${s.t}">
+            <span class="ln">${String(++ln).padStart(3, '0')}</span>
+            ${SYM[s.st]}<span class="title">${s.t}</span><span class="age">${s.age}</span>
+          </div>`;
+        }
+        html += `</div>`;
+      }
+      html += `</div>
+        <div class="foot"><span>ITEMS 011 · BAYS 004</span><span>STD-77 // REV 0.2</span></div>`;
+      root.innerHTML = html;
+    },
+  },
+};
+
+const ORDER = ['a1', 'a2', 'a3'];
+
+/* ================= 切换与交互 ================= */
+const sidebar = document.getElementById('sidebar');
+const label = document.getElementById('label');
+
+function current() {
+  const v = new URLSearchParams(location.search).get('variant');
+  return ORDER.includes(v) ? v : 'a1';
+}
+function render() {
+  const v = current();
+  sidebar.className = 'sidebar v-' + v;
+  VARIANTS[v].render(sidebar);
+  label.textContent = VARIANTS[v].name;
+  bindRows();
+}
+function go(v) {
+  const u = new URL(location.href);
+  u.searchParams.set('variant', v);
+  history.replaceState(null, '', u);
+  render();
+}
+function step(d) {
+  const i = ORDER.indexOf(current());
+  go(ORDER[(i + d + ORDER.length) % ORDER.length]);
+}
+document.getElementById('prev').onclick = () => step(-1);
+document.getElementById('next').onclick = () => step(1);
+addEventListener('keydown', e => {
+  if (/^(INPUT|TEXTAREA)$/.test(document.activeElement?.tagName)) return;
+  if (e.key === 'ArrowLeft') step(-1);
+  if (e.key === 'ArrowRight') step(1);
+});
+
+/* 点击会话行 = 转移 active（表面状态，不持久化） */
+function bindRows() {
+  sidebar.querySelectorAll('.row').forEach(r => {
+    r.addEventListener('click', () => {
+      sidebar.querySelectorAll('.row.active').forEach(x => x.classList.remove('active'));
+      r.classList.add('active');
+    });
+  });
+}
+
+render();
+</script>
+</body>
+</html>
