@@ -20,3 +20,4 @@ dist-main/
 
 # 字体子集化工具链 venv（不入库；原始字体归档在 ui-demo/font/ 已入库）
 .venv-fonts/
+.dsh/
