@@ -204,7 +204,7 @@ selected session      用户真正选中的工作区与会话，驱动 Dock
 关键字段：
 
 - `cameraZ / cameraX`：当前渲染位置；CIN 与 FOCUS 中逐帧平滑逼近目标。
-- `targetZ / targetX`：键盘、滚轮、拖拽或点击工作区后设置的目标位置。
+- `targetZ / targetX`：键盘、滚轮、拖拽或点击工作区后设置的目标位置；进入新工作区时，`targetX` 自动对准该建筑的 `x`。
 - `activeWorkspace`：由 `closestWorkspaceIndex()` 根据相机位置推导，决定建筑上显示哪组 Portal。
 - `selectedWorkspace / selectedSessionId`：用户明确选择的会话，决定 Dock 和 City Index 当前态。
 - `mapOpen`：City Index 是否覆盖空间场景。
@@ -289,20 +289,20 @@ Demo 使用 [`ui-demo/font/Matrix-Code.ttf`](../ui-demo/font/Matrix-Code.ttf)。
 
 | 输入 | 行为 |
 | --- | --- |
-| `W` / `↑` | 相机沿 Z 轴向前移动 `76` 世界单位 |
-| `S` / `↓` | 相机沿 Z 轴后退 `76` 世界单位 |
+| `W` / `↑` | 相机沿 Z 轴向前移动 `76` 世界单位；跨入新工作区时自动水平对准建筑 |
+| `S` / `↓` | 相机沿 Z 轴后退 `76` 世界单位；跨入新工作区时自动水平对准建筑 |
 | `A` / `←` | 相机向左横移 `13` 世界单位 |
 | `D` / `→` | 相机向右横移 `13` 世界单位 |
-| 滚轮 | 将 `deltaY * 0.32` 映射到 Z 轴，单次限制在 `±105` |
+| 滚轮 | 将 `deltaY * 0.32` 映射到 Z 轴，单次限制在 `±105`；跨入新工作区时自动水平对准建筑 |
 | 拖拽空白处 | 水平位移改变 X，垂直位移改变 Z |
-| 点击 District 标牌 | 移动到该工作区前方约 `230` 世界单位 |
+| 点击 District 标牌 | 移动到该工作区前方约 `230` 世界单位，并水平对准建筑 |
 | 点击 Session Portal | 选择会话并更新 Dock / Index |
 | `M` | 打开或关闭 City Index |
 | `Esc` | City Index 打开时关闭并把焦点还给开关 |
 
 相机范围：
 
-- `targetX` 限制在 `-30–30`；
+- `targetX` 限制在当前工作区建筑中心的 `±30` 世界单位内；
 - `targetZ` 从 `-15` 到最后一个工作区 `z - 128`；
 - CIN / FOCUS 通过时间相关 smoothing 逼近目标；
 - REDUCED 直接把当前相机设为目标值。
@@ -424,6 +424,7 @@ City Index 打开时，空间移动被暂停，避免滚轮或方向键同时操
 相关入口是 `moveCamera()`、`navigateToWorkspace()`、`animate()` 和 wheel / pointer 监听器。必须同时保留：
 
 - X/Z clamp；
+- `activeWorkspace` 改变时把 `targetX` 重置为新建筑的 `x`，保证建筑水平居中；
 - Reduced 立即到达终态；
 - City Index 打开时停止背景移动；
 - `activeWorkspace` 随位置同步；

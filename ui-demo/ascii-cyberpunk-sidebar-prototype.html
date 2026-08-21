@@ -1061,6 +1061,7 @@
     const MATRIX_GLYPHS = "アウエオカキケコサシスセソタツテナニヌネハヒホマミムメモヤヨラリワー012345789*+<>:|";
     const ARCH_GLYPHS = "|<>:+*";
     const BUILDING_HEIGHT = 184;
+    const CAMERA_STRAFE_RADIUS = 30;
 
     const canvas = document.querySelector("#city-canvas");
     const context = canvas.getContext("2d", { alpha: false });
@@ -1076,8 +1077,8 @@
     const state = {
       cameraZ: 0,
       targetZ: 0,
-      cameraX: 0,
-      targetX: 0,
+      cameraX: WORKSPACES[0].x,
+      targetX: WORKSPACES[0].x,
       activeWorkspace: 0,
       selectedWorkspace: 0,
       selectedSessionId: "sidebar-redesign",
@@ -1104,6 +1105,19 @@
 
     function mix(a, b, amount) {
       return a + (b - a) * amount;
+    }
+
+    function workspaceCameraBounds(index = state.activeWorkspace) {
+      const center = WORKSPACES[index]?.x ?? 0;
+      return {
+        min: center - CAMERA_STRAFE_RADIUS,
+        max: center + CAMERA_STRAFE_RADIUS
+      };
+    }
+
+    function centerCameraOnWorkspace(index, snap = false) {
+      state.targetX = WORKSPACES[index].x;
+      if (snap) state.cameraX = state.targetX;
     }
 
     function stableGlyph(seed, alphabet = MATRIX_GLYPHS) {
@@ -1497,6 +1511,7 @@
       const next = closestWorkspaceIndex();
       if (next === state.activeWorkspace) return;
       state.activeWorkspace = next;
+      centerCameraOnWorkspace(next, state.experience === "reduced");
       rebuildSessionPortals();
       updateMicroState();
     }
@@ -1505,10 +1520,9 @@
       const workspace = WORKSPACES[index];
       state.activeWorkspace = index;
       state.targetZ = workspace.z - 230;
-      state.targetX = workspace.x * 0.08;
+      centerCameraOnWorkspace(index, state.experience === "reduced");
       if (state.experience === "reduced") {
         state.cameraZ = state.targetZ;
-        state.cameraX = state.targetX;
       }
       if (selectFirst) selectSession(index, workspace.sessions[0].id);
       rebuildSessionPortals();
@@ -1639,7 +1653,10 @@
       if (direction === "left") state.targetX -= 13;
       if (direction === "right") state.targetX += 13;
       state.targetZ = clamp(state.targetZ, -15, WORKSPACES.at(-1).z - 128);
-      state.targetX = clamp(state.targetX, -30, 30);
+      if (direction === "left" || direction === "right") {
+        const bounds = workspaceCameraBounds();
+        state.targetX = clamp(state.targetX, bounds.min, bounds.max);
+      }
       if (state.experience === "reduced") {
         state.cameraZ = state.targetZ;
         state.cameraX = state.targetX;
@@ -1725,7 +1742,8 @@
       const dy = event.clientY - state.pointerY;
       state.pointerX = event.clientX;
       state.pointerY = event.clientY;
-      state.targetX = clamp(state.targetX - dx * 0.23, -30, 30);
+      const bounds = workspaceCameraBounds();
+      state.targetX = clamp(state.targetX - dx * 0.23, bounds.min, bounds.max);
       state.targetZ = clamp(state.targetZ + dy * 0.72, -15, WORKSPACES.at(-1).z - 128);
     });
 
