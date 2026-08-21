@@ -51,6 +51,10 @@ ui-demo/         静态 UI demo（index-v2.html 视觉参考 + canvas 模块来�
 research/        技术调研（壳层 / pi-SDK / pi-RPC）
 ```
 
+## 设计文档
+
+- [ZION ASCII 会话城侧边栏 Demo 设计说明](docs/ascii-cyberpunk-sidebar-design.md)：介绍 280px 可行走 ASCII 城市原型的视觉隐喻、Canvas/DOM 分层、数据与状态模型、透视公式、交互、三档体验、生产接入边界和验证清单。
+
 ## 许可
 
 MIT — 见 [LICENSE](LICENSE)。
