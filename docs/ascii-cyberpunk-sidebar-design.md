@@ -48,8 +48,8 @@ ASCII City 对这些要求的转译如下：
 | Workspace | District / 建筑 | 稳定地标、颜色、X/Z 坐标 | 工作区 ID、名称、会话集合 |
 | Session | Portal / 建筑层 | 建筑立面的发光字形带 | 标题、相对时间、状态、当前态 |
 | Workspace switch | 沿街区前后移动 | 相机 Z 轴变化、近大远小 | 切换当前浏览的工作区 |
-| Session select | 进入 Portal | Portal 高亮、Dock 更新 | 切换真实会话 |
-| Current session | Dock 中的接入目标 | 固定前景、状态色主导 | 当前工作区、会话、状态、时间 |
+| Session select | 进入 Portal | Portal 高亮、Index 当前行游标 | 切换真实会话 |
+| Current session | Portal 高亮 + Index `>` 游标行 | 状态色主导 | 当前工作区、会话、状态、时间 |
 | All sessions | City Index | 覆盖式二维索引 | 完整的工作区与会话树 |
 
 这里的“城市”是信息架构，不只是背景画。建筑之间的距离编码工作区顺序，建筑立面上的 Portal 编码会话归属，Camera 位置编码用户正在浏览的 District。
@@ -67,22 +67,19 @@ ASCII City 对这些要求的转译如下：
 │ City Frame                   │  flex: 1
 │ Canvas + projected DOM       │  min-height: 335px
 │                              │
-│ [WASD]           [CITY INDEX]│
-├──────────────────────────────┤
-│ Selected Session Dock        │  112px
-│ path / title / status / time │
-├──────────────────────────────┤
-│ CIN | FOCUS | RED    01/04   │  49px
+│                  [CITY INDEX]│  22px 终端指令条
 └──────────────────────────────┘
 ```
 
-短窗口（`max-height: 650px`）下，Header 降为 `52px`，Dock 降为 `96px`，但 City Frame 仍承担剩余空间。侧边栏设置 `min-height` 是为了避免关键控制互相覆盖；在正式 Electron 中应由应用外壳决定窗口最小高度。
+Selected Session Dock 与底部体验模式条已移除，空间全部让给 City Frame；体验模式不再提供界面切换，仅跟随系统 `prefers-reduced-motion`。
+
+短窗口（`max-height: 650px`）下，Header 降为 `52px`，City Frame 承担剩余空间。侧边栏设置 `min-height` 是为了避免关键控制互相覆盖；在正式 Electron 中应由应用外壳决定窗口最小高度。
 
 ### 3.2 三类导航入口
 
 1. **空间入口**：点击建筑标牌或建筑立面的会话 Portal。
-2. **移动入口**：W/S/A/D、方向键、滚轮、拖拽和画面内方向按钮。
-3. **完整索引**：按 `M` 或点击 `CITY INDEX`，在二维列表中直接访问所有工作区和全部会话。
+2. **移动入口**：W/S/A/D、方向键、滚轮和拖拽。
+3. **完整索引**：按 `M` 或点击 `CITY INDEX`，在二维列表中直接访问所有工作区和全部会话。索引列表采用舱单货单风格（`== BAY nn · name` 分组头 + `>` 游标行 + Cobb 状态符号，悬停触发片假名扰动）。
 
 空间入口负责体验和空间记忆；City Index 负责效率、可达性和大数据量兜底。两者不是互相替代的两套产品，而是同一份 `WORKSPACES` 数据的两个视图。
 
@@ -104,9 +101,8 @@ WORKSPACES + STATUS
         │     └── session-portal buttons
         │
         └── Fixed semantic DOM
-              ├── header / controls
-              ├── selected-session dock
-              ├── experience modes
+              ├── header
+              ├── CITY INDEX 开关（22px 终端指令条）
               └── complete city index
 ```
 
@@ -135,12 +131,12 @@ Canvas 中没有任何唯一的可点击目标，也不承担会话标题的可�
 
 ### 4.3 Fixed DOM：稳定操作面
 
-Header、WASD、City Index、Dock 和模式切换器不参与相机投影。它们相当于固定在镜头前的 HUD / Ornament，保证用户在移动后仍知道：
+Header 与 CITY INDEX 开关不参与相机投影。它们相当于固定在镜头前的 HUD / Ornament，保证用户在移动后仍知道：
 
 - 自己处于哪个 District；
-- 当前接入哪个 Session；
-- 如何快速移动或回到完整索引；
-- 当前是 CIN、FOCUS 还是 RED 模式。
+- 如何快速移动或回到完整索引。
+
+当前选中会话不再由独立 Dock 面板呈现，而是由 Portal 的 `is-current` 高亮与 City Index 中的 `>` 游标行共同表达。
 
 ## 5. 数据模型与状态语义
 
@@ -198,7 +194,7 @@ Header、WASD、City Index、Dock 和模式切换器不参与相机投影。它�
 ```text
 camera / target       相机当前值与希望到达的位置
 active workspace      离相机目标位置最近、当前显示 Portal 的建筑
-selected session      用户真正选中的工作区与会话，驱动 Dock
+selected session      用户真正选中的工作区与会话，驱动 Portal 高亮与 Index 当前行
 ```
 
 关键字段：
@@ -206,7 +202,7 @@ selected session      用户真正选中的工作区与会话，驱动 Dock
 - `cameraZ / cameraX`：当前渲染位置；CIN 与 FOCUS 中逐帧平滑逼近目标。
 - `targetZ / targetX`：键盘、滚轮、拖拽或点击工作区后设置的目标位置；进入新工作区时，`targetX` 自动对准该建筑的 `x`。
 - `activeWorkspace`：由 `closestWorkspaceIndex()` 根据相机位置推导，决定建筑上显示哪组 Portal。
-- `selectedWorkspace / selectedSessionId`：用户明确选择的会话，决定 Dock 和 City Index 当前态。
+- `selectedWorkspace / selectedSessionId`：用户明确选择的会话，决定 Portal 高亮和 City Index 当前态。
 - `mapOpen`：City Index 是否覆盖空间场景。
 - `experience`：`cinematic / focus / reduced`。
 
@@ -296,7 +292,7 @@ Demo 使用 [`ui-demo/font/Matrix-Code.ttf`](../ui-demo/font/Matrix-Code.ttf)。
 | 滚轮 | 将 `deltaY * 0.32` 映射到 Z 轴，单次限制在 `±105`；跨入新工作区时自动水平对准建筑 |
 | 拖拽空白处 | 水平位移改变 X，垂直位移改变 Z |
 | 点击 District 标牌 | 移动到该工作区前方约 `230` 世界单位，并水平对准建筑 |
-| 点击 Session Portal | 选择会话并更新 Dock / Index |
+| 点击 Session Portal | 选择会话并更新 Portal 高亮 / Index 当前行 |
 | `M` | 打开或关闭 City Index |
 | `Esc` | City Index 打开时关闭并把焦点还给开关 |
 
@@ -307,7 +303,7 @@ Demo 使用 [`ui-demo/font/Matrix-Code.ttf`](../ui-demo/font/Matrix-Code.ttf)。
 - CIN / FOCUS 通过时间相关 smoothing 逼近目标；
 - REDUCED 直接把当前相机设为目标值。
 
-City Index 打开时，空间移动被暂停，避免滚轮或方向键同时操作背景城市。
+City Index 打开时，空间移动被暂停，避免滚轮或方向键同时操作背景城市。URL 带 `?map=1` 时初始即打开索引，便于截图与调试。
 
 ## 9. 三档体验
 
@@ -327,11 +323,11 @@ City Index 打开时，空间移动被暂停，避免滚轮或方向键同时操
 
 ### REDUCED
 
-- 自动响应 `prefers-reduced-motion: reduce`，也可由用户显式选择；
+- 自动响应 `prefers-reduced-motion: reduce`（界面切换器已随底部条移除，不再提供手动入口）；
 - 相机直接跳到终态，不执行持续镜头运动；
 - 数字雨时间固定，Portal 脉冲停止；
 - CSS transition 和呼吸 animation 被关闭或压到近零时长；
-- 完整保留工作区、会话、City Index、Dock 与键盘操作。
+- 完整保留工作区、会话、City Index 与键盘操作。
 
 三档模式不改变数据，也不改变哪个会话可达。
 
@@ -397,7 +393,7 @@ City Index 打开时，空间移动被暂停，避免滚轮或方向键同时操
 1. 在 `WORKSPACES` 追加稳定 `id / code / name / color / x / z / sessions`。
 2. 让 `z` 大于前一个工作区，并保持可预测的间距；当前样例间距约 `340`。
 3. 让 `x` 在街道两侧交替，避免建筑完全重叠。
-4. 检查 `CITY INDEX` 的总数文案与 Footer 的 `01/04`。这两处目前是硬编码，应优先改成从数据派生。
+4. 检查 `CITY INDEX` 按钮上的会话总数文案（`M · 18`）。该处目前是硬编码，应优先改成从数据派生。
 5. 用键盘、滚轮与 Index 分别访问新工作区。
 
 ### 13.2 添加会话或状态
@@ -405,7 +401,7 @@ City Index 打开时，空间移动被暂停，避免滚轮或方向键同时操
 1. 会话必须有稳定 ID、可读标题、相对时间和受支持的 `status`。
 2. 如果工作区超过 6 条会话，检查 `y = 127 - index * 21` 是否仍落在建筑立面内。
 3. 如果新增状态，同步更新 `STATUS` 的文字、颜色和 Matrix 白名单内 glyph。
-4. 确认 Portal、Dock 和 City Index 三处表达一致。
+4. 确认 Portal 和 City Index 两处表达一致。
 
 ### 13.3 调整建筑尺寸
 
@@ -440,9 +436,7 @@ AsciiCitySidebar
 ├── useCityCamera              camera / target / navigation
 ├── AsciiCityCanvas            氛围与建筑点云
 ├── ProjectedWorkspaceLayer    工作区和当前工作区会话按钮
-├── SelectedSessionDock        当前真实会话
-├── CityIndex                  全部工作区和全部会话
-└── ExperienceModeControl      CIN / FOCUS / REDUCED
+└── CityIndex                  全部工作区和全部会话（货单风格列表）
 ```
 
 生产数据接口至少需要：
@@ -471,7 +465,7 @@ type SessionSummary = {
 ## 15. 已知限制
 
 - 数据全部是 mock，未连接 zustand 或 Electron IPC。
-- `CITY INDEX` 中 `ALL 18` 和 Footer 中 `/04` 仍是硬编码。
+- `CITY INDEX` 按钮的 `M · 18` 计数仍是硬编码。
 - 建筑宽与深尚未集中为常量。
 - City Index 具备基础语义和焦点返回，但未完成完整 Tree View 键盘模型。
 - Canvas 每帧重绘全部可见建筑，尚无离屏缓存或可见区空间索引。

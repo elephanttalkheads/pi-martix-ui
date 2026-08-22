@@ -148,10 +148,15 @@
     .head-status,
     .frame-label,
     .frame-coordinate,
+    .dock-path,
+    .dock-meta,
     .key,
     .map-kicker,
+    .map-address,
     .host-field,
-    .map-toggle {
+    .mode-button,
+    .map-toggle,
+    .micro-state {
       font-family: var(--display);
       letter-spacing: 0.08em;
     }
@@ -356,30 +361,32 @@
     }
 
     .session-portal {
-      height: 23px;
-      padding: 3px 20px 3px 8px;
+      height: 19px;
+      padding: 2px 18px 2px 7px;
       overflow: hidden;
       display: block;
-      color: #c4e8cd;
+      color: #a8c8b0;
       border: 0;
+      border-left: 2px solid var(--status-color, var(--matrix));
       background:
-        linear-gradient(90deg, rgba(0, 6, 3, 0.82), color-mix(in srgb, var(--status-color) 7%, rgba(5, 22, 12, 0.6)) 62%, rgba(5, 24, 13, 0.15));
+        linear-gradient(90deg, rgba(0, 4, 2, 0.97), rgba(5, 22, 12, 0.88) 74%, rgba(5, 24, 13, 0.35)),
+        rgba(1, 8, 4, 0.9);
+      box-shadow: inset 0 1px rgba(216, 255, 226, 0.04);
       cursor: pointer;
       text-align: left;
       white-space: nowrap;
       text-overflow: ellipsis;
-      font: 12px/16px var(--body);
-      text-shadow: 0 0 6px color-mix(in srgb, var(--status-color) 55%, transparent);
-      transition: color 110ms ease, background 110ms ease, text-shadow 110ms ease;
+      font: 10px/15px var(--body);
+      transition: color 110ms ease, background 110ms ease, box-shadow 110ms ease;
     }
 
     .session-portal::after {
       content: attr(data-slot);
       position: absolute;
-      top: 4px;
-      right: 6px;
+      top: 3px;
+      right: 5px;
       color: var(--status-color);
-      font: 8px/1 var(--display);
+      font: 7px/1 var(--display);
       opacity: 0.64;
     }
 
@@ -389,13 +396,65 @@
       color: #effff3;
       outline: none;
       background:
-        linear-gradient(90deg, rgba(3, 16, 8, 0.75), color-mix(in srgb, var(--status-color) 18%, rgba(3, 18, 9, 0.5)) 72%, transparent);
-      text-shadow: 0 0 9px color-mix(in srgb, var(--status-color) 80%, transparent);
+        linear-gradient(90deg, rgba(3, 16, 8, 0.98), color-mix(in srgb, var(--status-color) 14%, rgba(3, 18, 9, 0.9)) 78%, transparent);
+      box-shadow:
+        inset 0 0 11px color-mix(in srgb, var(--status-color) 9%, transparent),
+        0 0 9px color-mix(in srgb, var(--status-color) 18%, transparent);
     }
 
     .session-portal.is-current {
-      background:
-        linear-gradient(90deg, color-mix(in srgb, var(--status-color) 16%, rgba(2, 12, 6, 0.8)), color-mix(in srgb, var(--status-color) 10%, transparent) 78%, transparent);
+      border-left-width: 4px;
+    }
+
+    .walk-controls {
+      position: absolute;
+      left: 9px;
+      bottom: 9px;
+      pointer-events: auto;
+      display: grid;
+      grid-template-columns: repeat(3, 22px);
+      grid-template-rows: repeat(2, 19px);
+      gap: 3px;
+      opacity: 0.78;
+    }
+
+    .walk-button {
+      display: grid;
+      place-items: center;
+      padding: 0;
+      border: 1px solid rgba(91, 255, 140, 0.24);
+      background: rgba(3, 13, 7, 0.82);
+      color: #97bfa1;
+      font: 8px/1 var(--display);
+      cursor: pointer;
+    }
+
+    .walk-button:hover,
+    .walk-button:focus-visible {
+      color: var(--matrix-hot);
+      border-color: var(--matrix);
+      outline: none;
+      box-shadow: 0 0 8px rgba(60, 255, 116, 0.22);
+    }
+
+    .walk-button[data-move="forward"] {
+      grid-column: 2;
+      grid-row: 1;
+    }
+
+    .walk-button[data-move="left"] {
+      grid-column: 1;
+      grid-row: 2;
+    }
+
+    .walk-button[data-move="back"] {
+      grid-column: 2;
+      grid-row: 2;
+    }
+
+    .walk-button[data-move="right"] {
+      grid-column: 3;
+      grid-row: 2;
     }
 
     .map-toggle {
@@ -403,32 +462,23 @@
       right: 9px;
       bottom: 9px;
       pointer-events: auto;
-      height: 22px;
-      padding: 0 6px 0 8px;
-      display: flex;
-      align-items: center;
-      gap: 7px;
-      border: 1px solid rgba(104, 233, 221, 0.26);
-      border-left: 2px solid var(--cyan);
+      height: 41px;
+      min-width: 58px;
+      padding: 4px 7px;
+      border: 1px solid rgba(104, 233, 221, 0.35);
       color: var(--cyan);
-      background: rgba(2, 14, 12, 0.78);
+      background: rgba(2, 14, 12, 0.82);
       cursor: pointer;
-      font: 8px/1 var(--display);
-      letter-spacing: 0.14em;
-      text-align: left;
+      font-size: 8px;
+      line-height: 1.15;
+      text-align: right;
     }
 
-    .map-toggle::before {
-      content: ">";
-      color: rgba(104, 233, 221, 0.62);
-    }
-
-    .map-toggle .key-hint {
-      padding: 1px 3px 0;
-      border: 1px solid rgba(104, 233, 221, 0.3);
-      color: rgba(182, 255, 246, 0.55);
-      font-size: 7px;
-      letter-spacing: 0.06em;
+    .map-toggle small {
+      display: block;
+      margin-top: 3px;
+      color: rgba(182, 255, 246, 0.5);
+      font-size: 6px;
     }
 
     .map-toggle:hover,
@@ -436,19 +486,139 @@
       outline: none;
       border-color: var(--cyan);
       color: #e7fffc;
-      box-shadow: 0 0 10px rgba(104, 233, 221, 0.2);
+      box-shadow: 0 0 12px rgba(104, 233, 221, 0.22);
     }
 
-    .map-toggle:hover .key-hint,
-    .map-toggle:focus-visible .key-hint {
-      color: var(--cyan);
-      border-color: var(--cyan);
+    .session-dock {
+      position: relative;
+      z-index: 8;
+      flex: 0 0 112px;
+      min-height: 112px;
+      padding: 10px 12px 8px;
+      overflow: hidden;
+      background:
+        linear-gradient(145deg, rgba(9, 28, 17, 0.98), rgba(2, 9, 5, 0.99) 60%),
+        var(--surface);
+      border-bottom: 1px solid rgba(77, 255, 131, 0.18);
+    }
+
+    .session-dock::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 4px;
+      height: 100%;
+      background: var(--dock-color, var(--matrix));
+      box-shadow: 0 0 18px var(--dock-color, var(--matrix));
+      opacity: 0.78;
+    }
+
+    .dock-path {
+      margin: 0 0 6px;
+      color: var(--dock-color, var(--matrix));
+      font-size: 8px;
+      line-height: 1;
+    }
+
+    .dock-title {
+      margin: 0;
+      min-height: 40px;
+      display: -webkit-box;
+      overflow: hidden;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      color: #effff3;
+      font-size: 14px;
+      line-height: 1.42;
+      font-weight: 500;
+      text-wrap: balance;
+    }
+
+    .dock-meta {
+      margin-top: 7px;
+      display: flex;
+      gap: 7px;
+      align-items: center;
+      color: var(--muted);
+      font-size: 8px;
+      line-height: 1;
+    }
+
+    .dock-status {
+      color: var(--dock-color, var(--matrix));
+    }
+
+    .dock-status::before {
+      content: "";
+      display: inline-block;
+      width: 5px;
+      height: 5px;
+      margin-right: 5px;
+      background: var(--dock-color, var(--matrix));
+      box-shadow: 0 0 7px var(--dock-color, var(--matrix));
+    }
+
+    .sidebar-foot {
+      position: relative;
+      z-index: 8;
+      height: 49px;
+      flex: 0 0 49px;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      align-items: center;
+      gap: 7px;
+      padding: 7px 9px 7px 12px;
+      background: rgba(2, 8, 5, 0.98);
+    }
+
+    .experience-switch {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 3px;
+    }
+
+    .mode-button {
+      min-width: 0;
+      height: 25px;
+      padding: 0 5px;
+      overflow: hidden;
+      border: 1px solid rgba(77, 255, 131, 0.16);
+      background: rgba(8, 21, 13, 0.8);
+      color: #5f7f68;
+      cursor: pointer;
+      font-size: 7px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .mode-button:hover,
+    .mode-button:focus-visible,
+    .mode-button.is-active {
+      outline: none;
+      color: var(--matrix-hot);
+      border-color: rgba(77, 255, 131, 0.48);
+      background: rgba(30, 114, 54, 0.18);
+    }
+
+    .micro-state {
+      min-width: 63px;
+      color: #5f7f68;
+      font-size: 6px;
+      line-height: 1.45;
+      text-align: right;
+    }
+
+    .micro-state strong {
+      display: block;
+      color: var(--matrix);
+      font-weight: 400;
     }
 
     .city-map {
       position: absolute;
       z-index: 30;
-      inset: 58px 0 0;
+      inset: 58px 0 49px;
       display: flex;
       flex-direction: column;
       background:
@@ -517,129 +687,112 @@
       overflow-y: auto;
       scrollbar-width: thin;
       scrollbar-color: var(--matrix-dim) transparent;
-      padding: 8px 10px 16px;
+      padding: 9px 9px 18px;
     }
 
     .map-district {
-      margin-top: 10px;
+      position: relative;
+      margin: 0 0 9px;
+      padding: 7px 6px 6px 12px;
+      border: 1px solid rgba(77, 255, 131, 0.14);
+      background:
+        linear-gradient(90deg, color-mix(in srgb, var(--workspace-color) 7%, transparent), transparent 70%),
+        rgba(4, 14, 8, 0.78);
+    }
+
+    .map-district::before {
+      content: "";
+      position: absolute;
+      left: 4px;
+      top: 9px;
+      bottom: 9px;
+      width: 1px;
+      background: var(--workspace-color);
+      box-shadow: 0 0 8px var(--workspace-color);
+      opacity: 0.65;
     }
 
     .map-district-head {
       width: 100%;
-      height: 34px;
-      padding: 0 4px;
+      padding: 0 0 6px;
       display: flex;
-      align-items: center;
+      justify-content: space-between;
       gap: 8px;
       border: 0;
-      background: none;
-      color: var(--matrix);
+      border-bottom: 1px solid rgba(162, 255, 187, 0.09);
+      color: #d8ffe2;
+      background: transparent;
       cursor: pointer;
       text-align: left;
-      font: 11px/1 var(--display);
-      letter-spacing: 0.14em;
-    }
-
-    .map-district-head::before {
-      content: "==";
-      color: rgba(55, 255, 121, 0.5);
-    }
-
-    .map-district-head::after {
-      content: "";
-      flex: 0 0 auto;
-      width: 24px;
-      height: 1px;
-      background: rgba(77, 255, 131, 0.18);
-    }
-
-    .map-district-head .count {
-      margin-left: auto;
-      color: rgba(215, 255, 224, 0.45);
-      font-size: 10px;
-      letter-spacing: 0.1em;
+      font: 10px/1.2 var(--display);
     }
 
     .map-district-head:hover,
     .map-district-head:focus-visible {
       outline: none;
-      color: var(--matrix-hot);
-      text-shadow: 0 0 8px rgba(55, 255, 121, 0.45);
+      color: var(--workspace-color);
+    }
+
+    .map-address {
+      color: var(--workspace-color);
+      font-size: 8px;
     }
 
     .map-session-list {
-      margin: 0;
+      margin: 5px 0 0;
       padding: 0;
       list-style: none;
     }
 
     .map-session-button {
       width: 100%;
-      height: 30px;
-      padding: 0 4px;
-      display: grid;
-      grid-template-columns: 14px 20px 1fr auto;
-      align-items: center;
-      gap: 6px;
+      min-height: 27px;
+      padding: 4px 40px 4px 8px;
+      position: relative;
+      overflow: hidden;
+      display: block;
       border: 0;
-      border-bottom: 1px dotted rgba(0, 255, 65, 0.12);
+      border-left: 1px solid rgba(141, 255, 173, 0.18);
       color: #9db8a4;
       background: transparent;
       cursor: pointer;
       text-align: left;
-      font: 11px/1 var(--body);
-    }
-
-    .map-session-button .cur {
-      color: transparent;
-      font-size: 12px;
-    }
-
-    .map-session-button .sym {
-      width: 16px;
-      height: 16px;
-      color: var(--status-color);
-      opacity: 0.85;
-    }
-
-    .map-session-button .title {
-      overflow: hidden;
       white-space: nowrap;
       text-overflow: ellipsis;
+      font: 10px/19px var(--body);
     }
 
-    .map-session-button .age {
+    .map-session-button::before {
+      content: attr(data-status-code);
+      position: absolute;
+      left: 0;
+      top: 11px;
+      width: 3px;
+      height: 3px;
+      background: var(--status-color);
+      box-shadow: 0 0 6px var(--status-color);
+      color: transparent;
+    }
+
+    .map-session-button::after {
+      content: attr(data-time);
+      position: absolute;
+      right: 3px;
+      top: 7px;
       color: #506a57;
-      font: 8px/1 var(--display);
-      letter-spacing: 0.12em;
+      font: 7px/1 var(--display);
     }
 
     .map-session-button:hover,
-    .map-session-button:focus-visible {
+    .map-session-button:focus-visible,
+    .map-session-button.is-current {
       outline: none;
       color: #effff3;
-      background: rgba(0, 255, 65, 0.06);
+      background: linear-gradient(90deg, rgba(63, 255, 116, 0.09), transparent);
     }
 
     .map-session-button.is-current {
-      color: #effff3;
-      background: rgba(0, 255, 65, 0.12);
-      box-shadow: inset 2px 0 0 var(--matrix);
-    }
-
-    .map-session-button.is-current .cur {
-      color: var(--matrix);
-    }
-
-    .map-session-button.is-current .title::after {
-      content: "▮";
-      margin-left: 6px;
-      color: var(--matrix);
-      animation: blink 1.1s steps(1) infinite;
-    }
-
-    @keyframes blink {
-      50% { opacity: 0; }
+      border-left-color: var(--status-color);
     }
 
     .host-field {
@@ -731,6 +884,17 @@
         padding-top: 7px;
       }
 
+      .session-dock {
+        min-height: 96px;
+        flex-basis: 96px;
+        padding-top: 8px;
+      }
+
+      .dock-title {
+        min-height: 32px;
+        font-size: 12px;
+      }
+
       .city-map {
         top: 52px;
       }
@@ -772,11 +936,40 @@
       <div class="projection-layer" id="workspace-layer" aria-label="工作区地标"></div>
       <div class="session-layer" id="session-layer" aria-label="当前工作区会话入口"></div>
 
+      <div class="walk-controls" aria-label="城市移动控制">
+        <button class="walk-button" type="button" data-move="forward" aria-label="向前移动">W</button>
+        <button class="walk-button" type="button" data-move="left" aria-label="向左横移">A</button>
+        <button class="walk-button" type="button" data-move="back" aria-label="向后移动">S</button>
+        <button class="walk-button" type="button" data-move="right" aria-label="向右横移">D</button>
+      </div>
+
       <button class="map-toggle" type="button" id="map-toggle" aria-expanded="false" aria-controls="city-map">
         CITY INDEX
-        <span class="key-hint">M · 18</span>
+        <small>M · ALL 18</small>
       </button>
     </section>
+
+    <section class="session-dock" id="session-dock" aria-live="polite">
+      <p class="dock-path" id="dock-path">Z-01 / DEEPSEEK-ZION / 01</p>
+      <h2 class="dock-title" id="dock-title">重新设计多工作区会话栏</h2>
+      <div class="dock-meta">
+        <span class="dock-status" id="dock-status">STREAMING</span>
+        <span id="dock-time">现在</span>
+        <span id="dock-location">DISTRICT 01</span>
+      </div>
+    </section>
+
+    <footer class="sidebar-foot">
+      <div class="experience-switch" aria-label="体验模式">
+        <button class="mode-button is-active" type="button" data-experience="cinematic">CIN</button>
+        <button class="mode-button" type="button" data-experience="focus">FOCUS</button>
+        <button class="mode-button" type="button" data-experience="reduced">RED</button>
+      </div>
+      <div class="micro-state">
+        <span>VIEW STATE</span>
+        <strong id="micro-state">01/04 · CIN</strong>
+      </div>
+    </footer>
 
     <section class="city-map" id="city-map" aria-hidden="true" aria-label="全部工作区与会话索引">
       <header class="map-head">
@@ -864,44 +1057,14 @@
       error: { label: "ERROR", color: "#ff5364", glyph: "<" }
     };
 
-    // Cobb 式符号（16×16 粗几何单色），货单行状态图标
-    const SYM_SVG = (inner) =>
-      `<svg class="sym" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="square" aria-hidden="true">${inner}</svg>`;
-    const SYM = {
-      ready: SYM_SVG('<rect x="1.5" y="1.5" width="13" height="13" rx="3"/><path d="M4.5 5.5h7M4.5 8h7M4.5 10.5h4.5"/>'),
-      thinking: SYM_SVG('<rect x="1.5" y="1.5" width="13" height="13" rx="3"/><circle cx="4.8" cy="8" r="1.2" fill="currentColor" stroke="none"/><circle cx="8" cy="8" r="1.2" fill="currentColor" stroke="none"/><circle cx="11.2" cy="8" r="1.2" fill="currentColor" stroke="none"/>'),
-      streaming: SYM_SVG('<rect x="1.5" y="1.5" width="13" height="13" rx="3"/><path d="M6 4.8v6.4L11.2 8z" fill="currentColor" stroke="none"/>'),
-      tool: SYM_SVG('<rect x="1.5" y="1.5" width="13" height="13" rx="3"/><path d="M5.5 4.8l5 3.2-5 3.2"/>'),
-      error: SYM_SVG('<rect x="1.5" y="1.5" width="13" height="13" rx="3"/><path d="M5 5l6 6M11 5l-6 6"/>')
-    };
-
-    // hover 字形扰动：片假名自左向右解码回原标题
-    const KATAKANA = "ｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿﾀﾁﾂﾃﾄﾅﾆﾇﾈﾉ";
-    function scrambleOnHover(el) {
-      el.addEventListener("mouseenter", () => {
-        if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-        const original = el.textContent;
-        let step = 0;
-        const timer = setInterval(() => {
-          el.textContent = original.split("").map((char, index) =>
-            index < step ? char : (char !== " " && Math.random() < 0.5 ? KATAKANA[Math.random() * KATAKANA.length | 0] : char)
-          ).join("");
-          step += 1;
-          if (step > original.length) {
-            clearInterval(timer);
-            el.textContent = original;
-          }
-        }, 28);
-      });
-    }
-
     // Matrix-Code.ttf only maps this deliberate glyph set. Keep canvas text inside it.
     const MATRIX_GLYPHS = "アウエオカキケコサシスセソタツテナニヌネハヒホマミムメモヤヨラリワー012345789*+<>:|";
-    const ARCH_GLYPHS = "|<>:+*";
     const BUILDING_HEIGHT = 184;
     const CAMERA_STRAFE_RADIUS = 30;
-    // Portal 从建筑立面浮起的世界距离：全息投影光束的锥长
-    const PORTAL_LIFT = 26;
+    // Power Plant 培养舱塔：圆柱半径与电影原版舱灯的红橙色
+    const TOWER_RADIUS = 50;
+    const POD_COLOR = "#ff5a3c";
+    const POD_GLYPHS = ":*+";
 
     const canvas = document.querySelector("#city-canvas");
     const context = canvas.getContext("2d", { alpha: false });
@@ -932,7 +1095,7 @@
       dpr: 1
     };
 
-    const buildingPoints = WORKSPACES.map(createBuildingPoints);
+    const buildingPoints = WORKSPACES.map(createTowerPoints);
     const rainColumns = [];
     const workspaceMarkers = new Map();
     let sessionButtons = [];
@@ -979,58 +1142,76 @@
       return `rgba(${color.r}, ${color.g}, ${color.b}, ${alpha})`;
     }
 
-    function createBuildingPoints(workspace, workspaceIndex) {
+    // Power Plant 塔点云：圆柱面舱环 + 纵向加强肋 + 塔基 roots + 会话舱环。
+    // 圆柱前表面中点（θ=0）落在 workspace.z，与原矩形前面同一平面，DOM 锚点无需改动。
+    function createTowerPoints(workspace, workspaceIndex) {
       const points = [];
-      const width = 100;
+      const R = TOWER_RADIUS;
       const height = BUILDING_HEIGHT;
-      const depth = 74;
-      const xSteps = 13;
-      const ySteps = 22;
+      const thetaMax = (80 * Math.PI) / 180;
+      const ringStep = 9.6;
+      const thetaStep = (13 * Math.PI) / 180;
+      const surfaceZ = (theta) => workspace.z - R * Math.cos(theta) + R;
 
-      for (let yi = 0; yi <= ySteps; yi += 1) {
-        const y = yi * (height / ySteps);
-        for (let xi = 0; xi <= xSteps; xi += 1) {
-          const x = -width / 2 + xi * (width / xSteps);
-          const edge = xi === 0 || xi === xSteps || yi === 0 || yi === ySteps;
-          const windowBand = yi > 2 && yi < ySteps - 2 && yi % 3 !== 0 && xi > 1 && xi < xSteps - 1;
-          if (!edge && !windowBand && (xi + yi) % 4 !== 0) continue;
+      // 环境舱环：红橙舱灯海，顶部/底部渐隐暗示塔身向雾中无限延伸
+      let ringIndex = 0;
+      for (let y = 4; y <= height - 2; y += ringStep, ringIndex += 1) {
+        const fade = clamp(Math.min(y / 26, (height - y) / 30), 0.15, 1);
+        let podIndex = 0;
+        for (let theta = -thetaMax; theta <= thetaMax + 1e-6; theta += thetaStep, podIndex += 1) {
           points.push({
-            x: workspace.x + x,
+            x: workspace.x + R * Math.sin(theta),
             y,
-            z: workspace.z,
-            glyph: edge ? stableGlyph(xi + yi * 3 + workspaceIndex, "|<>+") : stableGlyph(xi * 7 + yi * 11 + workspaceIndex),
-            energy: edge ? 0.92 : (windowBand ? 0.52 : 0.28),
+            z: surfaceZ(theta),
+            glyph: stableGlyph(ringIndex * 31 + podIndex * 7 + workspaceIndex, POD_GLYPHS),
+            energy: (0.3 + ((ringIndex + podIndex) % 3 === 0 ? 0.2 : 0)) * fade,
+            workspaceIndex,
+            podColor: POD_COLOR
+          });
+        }
+      }
+
+      // 纵向加强肋：两条轮廓柱 + 中线，维持塔身结构可读性
+      [-thetaMax, 0, thetaMax].forEach((ribTheta, ribIndex) => {
+        for (let y = 2; y <= height; y += 8) {
+          points.push({
+            x: workspace.x + R * Math.sin(ribTheta),
+            y,
+            z: surfaceZ(ribTheta),
+            glyph: "|",
+            energy: 0.7,
+            workspaceIndex,
+            ribIndex
+          });
+        }
+      });
+
+      // Roots：塔基横向字形链，呼应 Power Plant 底层连接
+      for (let y = 2; y <= 10; y += 4) {
+        for (let xi = -6; xi <= 6; xi += 1) {
+          points.push({
+            x: workspace.x + xi * 8,
+            y,
+            z: workspace.z + 6,
+            glyph: stableGlyph(xi * 13 + y + workspaceIndex, "+|"),
+            energy: 0.25,
             workspaceIndex
           });
         }
       }
 
-      for (let zi = 1; zi <= 8; zi += 1) {
-        const z = workspace.z + zi * (depth / 8);
-        for (let yi = 0; yi <= ySteps; yi += 2) {
-          const y = yi * (height / ySteps);
-          [-width / 2, width / 2].forEach((side, sideIndex) => {
-            points.push({
-              x: workspace.x + side,
-              y,
-              z,
-              glyph: stableGlyph(zi * 17 + yi * 5 + sideIndex + workspaceIndex, ARCH_GLYPHS),
-              energy: 0.42,
-              workspaceIndex
-            });
-          });
-        }
-      }
-
+      // 会话舱环：每条会话一条绕塔环带，中央舱为状态字形，锚点 y 与 DOM Portal 一致
       workspace.sessions.forEach((session, sessionIndex) => {
         const y = 127 - sessionIndex * 21;
         const status = STATUS[session.status];
-        for (let xi = -5; xi <= 5; xi += 1) {
+        const podCount = 11;
+        for (let pi = 0; pi < podCount; pi += 1) {
+          const theta = -thetaMax + (pi / (podCount - 1)) * 2 * thetaMax;
           points.push({
-            x: workspace.x + xi * 7.2,
+            x: workspace.x + R * Math.sin(theta),
             y,
-            z: workspace.z - 0.5,
-            glyph: xi === -5 || xi === 5 ? status.glyph : stableGlyph(sessionIndex * 19 + xi + workspaceIndex),
+            z: surfaceZ(theta) - 0.5,
+            glyph: pi === 5 ? status.glyph : stableGlyph(sessionIndex * 19 + pi + workspaceIndex, POD_GLYPHS),
             energy: 1,
             workspaceIndex,
             sessionIndex,
@@ -1117,6 +1298,13 @@
       haze.addColorStop(1, "rgba(0,0,0,0)");
       context.fillStyle = haze;
       context.fillRect(0, horizon - 100, state.width, 210);
+
+      // 舱灯红橙在雾里的回声
+      const podHaze = context.createRadialGradient(state.width / 2, horizon, 0, state.width / 2, horizon, state.width * 0.8);
+      podHaze.addColorStop(0, "rgba(255,90,60,0.05)");
+      podHaze.addColorStop(1, "rgba(0,0,0,0)");
+      context.fillStyle = podHaze;
+      context.fillRect(0, horizon - 120, state.width, 240);
     }
 
     function drawWorldLine(a, b, color, width = 1) {
@@ -1160,47 +1348,51 @@
       });
     }
 
-    function drawBuildingShell(workspace, workspaceIndex) {
+    // 塔身剪影：两条竖直轮廓线 + 顶/底前弧采样连线，暗示圆柱曲率（圆柱没有侧棱）
+    function drawTowerShell(workspace, workspaceIndex) {
       const active = workspaceIndex === state.activeWorkspace;
-      const width = 100;
+      const R = TOWER_RADIUS;
       const height = BUILDING_HEIGHT;
-      const depth = 74;
-      const front = [
-        project(workspace.x - width / 2, 0, workspace.z),
-        project(workspace.x + width / 2, 0, workspace.z),
-        project(workspace.x + width / 2, height, workspace.z),
-        project(workspace.x - width / 2, height, workspace.z)
-      ];
-      if (front.some((point) => !point)) return;
+      const segments = 10;
+      const thetaMax = (80 * Math.PI) / 180;
+
+      const bottomLeft = project(workspace.x - R, 0, workspace.z);
+      const topLeft = project(workspace.x - R, height, workspace.z);
+      const bottomRight = project(workspace.x + R, 0, workspace.z);
+      const topRight = project(workspace.x + R, height, workspace.z);
+      if (!bottomLeft || !topLeft || !bottomRight || !topRight) return;
+
+      const arcAt = (y) => {
+        const arc = [];
+        for (let i = 0; i <= segments; i += 1) {
+          const theta = -thetaMax + (i / segments) * 2 * thetaMax;
+          const p = project(workspace.x + R * Math.sin(theta), y, workspace.z - R * Math.cos(theta) + R);
+          if (p) arc.push(p);
+        }
+        return arc;
+      };
+      const topArc = arcAt(height);
+      const bottomArc = arcAt(0);
 
       context.beginPath();
-      context.moveTo(front[0].x, front[0].y);
-      front.slice(1).forEach((point) => context.lineTo(point.x, point.y));
+      context.moveTo(bottomLeft.x, bottomLeft.y);
+      context.lineTo(topLeft.x, topLeft.y);
+      topArc.forEach((point) => context.lineTo(point.x, point.y));
+      context.lineTo(bottomRight.x, bottomRight.y);
+      bottomArc.slice().reverse().forEach((point) => context.lineTo(point.x, point.y));
       context.closePath();
-      context.fillStyle = active ? rgba(workspace.color, 0.055) : "rgba(3,14,8,0.09)";
+      context.fillStyle = active ? rgba(workspace.color, 0.045) : "rgba(3,14,8,0.09)";
       context.fill();
       context.strokeStyle = active ? rgba(workspace.color, 0.36) : "rgba(69,181,100,0.12)";
       context.lineWidth = active ? 1 : 0.6;
       context.stroke();
-
-      const side = workspace.x < 0 ? width / 2 : -width / 2;
-      drawWorldLine(
-        { x: workspace.x + side, y: 0, z: workspace.z },
-        { x: workspace.x + side, y: 0, z: workspace.z + depth },
-        rgba(workspace.color, active ? 0.38 : 0.15)
-      );
-      drawWorldLine(
-        { x: workspace.x + side, y: height, z: workspace.z },
-        { x: workspace.x + side, y: height, z: workspace.z + depth },
-        rgba(workspace.color, active ? 0.3 : 0.12)
-      );
     }
 
     function drawBuildings(time) {
       const drawable = [];
 
       WORKSPACES.forEach((workspace, workspaceIndex) => {
-        drawBuildingShell(workspace, workspaceIndex);
+        drawTowerShell(workspace, workspaceIndex);
         buildingPoints[workspaceIndex].forEach((point) => {
           const projected = project(point.x, point.y, point.z);
           if (!projected) return;
@@ -1224,33 +1416,85 @@
         context.font = `${size}px "Matrix Code"`;
         context.fillStyle = point.statusColor
           ? rgba(point.statusColor, alpha)
-          : rgba(workspace.color, alpha);
+          : point.podColor
+            ? rgba(point.podColor, alpha)
+            : rgba(workspace.color, alpha);
         context.fillText(point.glyph, projected.x, projected.y);
       });
     }
 
-    // Portal 投射口：建筑立面会话带中心的一小段高亮横线（Portal 全息投影的发射口）
-    function drawPortalBeams() {
-      const workspace = WORKSPACES[state.activeWorkspace];
-      if (!workspace) return;
-      const buildingDepth = workspace.z - state.cameraZ;
-      if (buildingDepth < 56 || buildingDepth > 510) return;
-      const alphaScale = clamp(1.2 - Math.abs(buildingDepth - 225) / 370, 0.22, 1);
+    // 塔间闪电弧：cinematic 每 4~7s 一次瞬时放电，focus 间隔×3且亮度减半，reduced 关闭
+    const lightning = { nextAt: 3000, strike: null };
 
-      workspace.sessions.forEach((session, sessionIndex) => {
-        const y = 127 - sessionIndex * 21;
-        const back = project(workspace.x, y, workspace.z);
-        if (!back) return;
-        const color = STATUS[session.status].color;
+    function seededRand(seed) {
+      const value = Math.sin(seed * 12.9898) * 43758.5453;
+      return value - Math.floor(value);
+    }
 
-        // 立面投射口：一小段高亮横线
-        context.strokeStyle = rgba(color, 0.5 * alphaScale);
-        context.lineWidth = 1;
-        context.beginPath();
-        context.moveTo(back.x - 6 * back.scale, back.y);
-        context.lineTo(back.x + 6 * back.scale, back.y);
-        context.stroke();
+    function drawLightning(time) {
+      if (state.experience === "reduced") return;
+      const dim = state.experience === "focus" ? 0.5 : 1;
+
+      if (!lightning.strike && time >= lightning.nextAt) {
+        const index = Math.floor(seededRand(time) * (WORKSPACES.length - 1));
+        lightning.strike = {
+          a: WORKSPACES[index],
+          b: WORKSPACES[index + 1],
+          ya: 40 + seededRand(time + 1) * 110,
+          yb: 40 + seededRand(time + 2) * 110,
+          born: time,
+          seed: time
+        };
+        lightning.nextAt = time + (4000 + seededRand(time + 3) * 3000) * (state.experience === "focus" ? 3 : 1);
+      }
+
+      const strike = lightning.strike;
+      if (!strike) return;
+      const life = (time - strike.born) / 140;
+      if (life >= 1) {
+        lightning.strike = null;
+        return;
+      }
+      const pa = project(strike.a.x, strike.ya, strike.a.z);
+      const pb = project(strike.b.x, strike.yb, strike.b.z);
+      if (!pa || !pb) return;
+
+      // 中点位移折线
+      const points = [pa];
+      const segments = 5;
+      for (let k = 1; k < segments; k += 1) {
+        const t = k / segments;
+        points.push({
+          x: pa.x + (pb.x - pa.x) * t,
+          y: pa.y + (pb.y - pa.y) * t + (seededRand(strike.seed + k * 7) - 0.5) * 42
+        });
+      }
+      points.push(pb);
+
+      const alpha = (1 - life) * 0.9 * dim;
+      context.save();
+      context.lineJoin = "round";
+      // 光晕
+      context.beginPath();
+      points.forEach((point, index) => (index === 0 ? context.moveTo(point.x, point.y) : context.lineTo(point.x, point.y)));
+      context.strokeStyle = `rgba(159,180,255,${alpha * 0.35})`;
+      context.lineWidth = 4;
+      context.stroke();
+      // 白紫芯
+      context.beginPath();
+      points.forEach((point, index) => (index === 0 ? context.moveTo(point.x, point.y) : context.lineTo(point.x, point.y)));
+      context.strokeStyle = `rgba(207,214,255,${alpha})`;
+      context.lineWidth = 1.2;
+      context.stroke();
+      // 命中点泛光
+      [pa, pb].forEach((point) => {
+        const glow = context.createRadialGradient(point.x, point.y, 0, point.x, point.y, 18);
+        glow.addColorStop(0, `rgba(207,214,255,${alpha * 0.5})`);
+        glow.addColorStop(1, "rgba(0,0,0,0)");
+        context.fillStyle = glow;
+        context.fillRect(point.x - 18, point.y - 18, 36, 36);
       });
+      context.restore();
     }
 
     function drawDepthFog() {
@@ -1266,7 +1510,7 @@
       drawBackground(time);
       drawStreet(time);
       drawBuildings(time);
-      drawPortalBeams();
+      drawLightning(time);
       drawDepthFog();
     }
 
@@ -1338,31 +1582,20 @@
 
       const workspace = WORKSPACES[state.activeWorkspace];
       const buildingDepth = workspace.z - state.cameraZ;
-      // 穿越时纵向压缩：投影 scale 越大，Portal 的 y 越向建筑中线收拢，屏幕间距近似恒定
-      const centerAnchor = project(workspace.x, BUILDING_HEIGHT / 2, workspace.z - PORTAL_LIFT);
       sessionButtons.forEach((button, sessionIndex) => {
         const y = 127 - sessionIndex * 21;
-        const point = project(workspace.x, y, workspace.z - PORTAL_LIFT);
-        if (!point || buildingDepth < 56 || buildingDepth > 510) {
+        const point = project(workspace.x, y, workspace.z - 1);
+        if (!point || buildingDepth < 105 || buildingDepth > 510 || point.y < 24 || point.y > state.height - 50) {
           button.style.opacity = "0";
           button.style.pointerEvents = "none";
           return;
         }
-        const spread = clamp(1.5 / point.scale, 0.55, 1);
-        const screenY = centerAnchor ? centerAnchor.y + (point.y - centerAnchor.y) * spread : point.y;
-        if (screenY < 24 || screenY > state.height - 50) {
-          button.style.opacity = "0";
-          button.style.pointerEvents = "none";
-          return;
-        }
-        const scale = clamp(point.scale, 0.72, 1.04) * (1 + (state.motion || 0) * 0.1);
-        const width = clamp(130 * scale + 28, 132, 182);
+        const scale = clamp(point.scale, 0.72, 1.04);
+        const width = clamp(130 * scale + 28, 132, 174);
         button.style.width = `${width}px`;
         button.style.left = `${point.x}px`;
-        button.style.top = `${screenY}px`;
-        // 运动中：透明度下限抬到 0.85，深度衰减几乎拉平，Portal 保持醒目
-        const base = clamp(1.2 - Math.abs(buildingDepth - 225) / 370, 0.22, 1);
-        button.style.opacity = String(mix(base, 1, (state.motion || 0) * 0.9));
+        button.style.top = `${point.y}px`;
+        button.style.opacity = String(clamp(1.2 - Math.abs(buildingDepth - 225) / 370, 0.22, 1));
         button.style.transform = `translate(-50%, -50%) scale(${scale})`;
         button.style.pointerEvents = "auto";
       });
@@ -1389,6 +1622,7 @@
       state.activeWorkspace = next;
       centerCameraOnWorkspace(next, state.experience === "reduced");
       rebuildSessionPortals();
+      updateMicroState();
     }
 
     function navigateToWorkspace(index, selectFirst = false) {
@@ -1401,6 +1635,7 @@
       }
       if (selectFirst) selectSession(index, workspace.sessions[0].id);
       rebuildSessionPortals();
+      updateMicroState();
     }
 
     function selectSession(workspaceIndex, sessionId) {
@@ -1410,8 +1645,28 @@
       state.selectedWorkspace = workspaceIndex;
       state.selectedSessionId = session.id;
       if (state.activeWorkspace !== workspaceIndex) navigateToWorkspace(workspaceIndex);
+      updateDock();
       rebuildSessionPortals();
       updateMapSelection();
+    }
+
+    function updateDock() {
+      const workspace = WORKSPACES[state.selectedWorkspace];
+      const sessionIndex = workspace.sessions.findIndex((item) => item.id === state.selectedSessionId);
+      const session = workspace.sessions[sessionIndex] || workspace.sessions[0];
+      const status = STATUS[session.status];
+      const dock = document.querySelector("#session-dock");
+      dock.style.setProperty("--dock-color", status.color);
+      document.querySelector("#dock-path").textContent = `${workspace.code} / ${workspace.name.toUpperCase()} / ${String(sessionIndex + 1).padStart(2, "0")}`;
+      document.querySelector("#dock-title").textContent = session.title;
+      document.querySelector("#dock-status").textContent = status.label;
+      document.querySelector("#dock-time").textContent = session.time;
+      document.querySelector("#dock-location").textContent = `DISTRICT ${String(state.selectedWorkspace + 1).padStart(2, "0")}`;
+    }
+
+    function updateMicroState() {
+      const label = state.experience === "cinematic" ? "CIN" : state.experience === "focus" ? "FOC" : "RED";
+      document.querySelector("#micro-state").textContent = `${String(state.activeWorkspace + 1).padStart(2, "0")}/04 · ${label}`;
     }
 
     function buildMap() {
@@ -1419,18 +1674,14 @@
       WORKSPACES.forEach((workspace, workspaceIndex) => {
         const district = document.createElement("section");
         district.className = "map-district";
+        district.style.setProperty("--workspace-color", workspace.color);
         district.setAttribute("role", "group");
         district.setAttribute("aria-label", workspace.name);
 
         const head = document.createElement("button");
         head.type = "button";
         head.className = "map-district-head";
-        const headLabel = document.createElement("span");
-        headLabel.textContent = `BAY ${String(workspaceIndex + 1).padStart(2, "0")} · ${workspace.name}`;
-        const headCount = document.createElement("span");
-        headCount.className = "count";
-        headCount.textContent = String(workspace.sessions.length).padStart(2, "0");
-        head.append(headLabel, headCount);
+        head.innerHTML = `<span>${workspace.name}</span><span class="map-address">${workspace.code} // ${String(workspace.sessions.length).padStart(2, "0")}</span>`;
         head.addEventListener("click", () => {
           navigateToWorkspace(workspaceIndex);
           closeMap();
@@ -1445,23 +1696,15 @@
           const button = document.createElement("button");
           button.type = "button";
           button.className = "map-session-button";
+          button.textContent = session.title;
           button.dataset.workspaceIndex = String(workspaceIndex);
           button.dataset.sessionId = session.id;
+          button.dataset.statusCode = STATUS[session.status].glyph;
+          button.dataset.time = session.time;
           button.style.setProperty("--status-color", STATUS[session.status].color);
           button.setAttribute("role", "treeitem");
           button.setAttribute("aria-label", `${workspace.name}，${session.title}，${STATUS[session.status].label}，${session.time}`);
           button.title = `${session.title} · ${STATUS[session.status].label} · ${session.time}`;
-          const cursor = document.createElement("span");
-          cursor.className = "cur";
-          cursor.textContent = ">";
-          const title = document.createElement("span");
-          title.className = "title";
-          title.textContent = session.title;
-          const age = document.createElement("span");
-          age.className = "age";
-          age.textContent = session.time;
-          button.append(cursor, document.createRange().createContextualFragment(SYM[session.status]), title, age);
-          scrambleOnHover(title);
           button.addEventListener("click", () => {
             selectSession(workspaceIndex, session.id);
             navigateToWorkspace(workspaceIndex);
@@ -1533,10 +1776,16 @@
     function setExperience(experience) {
       state.experience = experience;
       document.body.dataset.experience = experience;
+      document.querySelectorAll("[data-experience]").forEach((button) => {
+        if (!button.classList.contains("mode-button")) return;
+        button.classList.toggle("is-active", button.dataset.experience === experience);
+        button.setAttribute("aria-pressed", button.dataset.experience === experience ? "true" : "false");
+      });
       if (experience === "reduced") {
         state.cameraZ = state.targetZ;
         state.cameraX = state.targetX;
       }
+      updateMicroState();
     }
 
     function handleKeydown(event) {
@@ -1573,14 +1822,8 @@
       const delta = Math.min(0.05, (time - previousTime) / 1000);
       previousTime = time;
       const smoothing = state.experience === "reduced" ? 1 : 1 - Math.pow(0.001, delta);
-      const prevZ = state.cameraZ;
-      const prevX = state.cameraX;
       state.cameraZ = mix(state.cameraZ, state.targetZ, smoothing);
       state.cameraX = mix(state.cameraX, state.targetX, smoothing);
-      // 相机运动能量：位移速度 → 0..1 平滑值，驱动 Portal 动态凸显
-      const speed = Math.hypot(state.cameraZ - prevZ, state.cameraX - prevX) / Math.max(delta, 0.001);
-      const motionTarget = state.experience === "reduced" ? 0 : clamp(speed / 260, 0, 1);
-      state.motion = mix(state.motion || 0, motionTarget, 1 - Math.pow(0.01, delta));
       syncActiveWorkspaceFromCamera();
       renderCanvas(time);
       updateProjectedDom();
@@ -1618,6 +1861,14 @@
       if (frame.hasPointerCapture(event.pointerId)) frame.releasePointerCapture(event.pointerId);
     });
 
+    document.querySelectorAll("[data-move]").forEach((button) => {
+      button.addEventListener("click", () => moveCamera(button.dataset.move));
+    });
+
+    document.querySelectorAll(".mode-button").forEach((button) => {
+      button.addEventListener("click", () => setExperience(button.dataset.experience));
+    });
+
     mapToggle.addEventListener("click", toggleMap);
     mapClose.addEventListener("click", closeMap);
     document.addEventListener("keydown", handleKeydown);
@@ -1628,9 +1879,9 @@
     createWorkspaceMarkers();
     rebuildSessionPortals();
     buildMap();
+    updateDock();
     setExperience(state.experience);
     resizeCanvas();
-    if (new URLSearchParams(location.search).has("map")) openMap();
 
     document.fonts.load('12px "Matrix Code"').finally(() => {
       requestAnimationFrame(animate);
