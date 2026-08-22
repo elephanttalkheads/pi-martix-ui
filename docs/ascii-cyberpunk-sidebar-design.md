@@ -128,7 +128,7 @@ Canvas 中没有任何唯一的可点击目标，也不承担会话标题的可�
 `#workspace-layer` 和 `#session-layer` 与 Canvas 共用坐标系。每帧调用 `project()` 得到屏幕坐标，再更新 DOM 按钮的 `left / top / transform / opacity`。
 
 - `.district-marker` 是工作区按钮，包含 `code / name / session count`。
-- `.session-portal` 是当前活跃工作区的会话按钮，包含真实中文标题、状态色和层位编号。
+- `.session-portal` 是当前活跃工作区的会话按钮，包含真实中文标题、状态色和层位编号；视觉上从建筑立面浮起（`PORTAL_LIFT` 世界单位），由 Canvas 在立面会话带中心绘制的状态色投射口亮线与建筑关联，呈全息投影感；Portal 本体无边框，标题带状态色文字辉光。
 - DOM 文字始终正视用户，不随建筑斜面发生难以阅读的透视变形。
 
 这是 Demo 最关键的技术决定：空间几何来自 Canvas，交互语义来自 DOM。
@@ -258,7 +258,7 @@ screenY = canvasHeight / 2 - (y - BUILDING_HEIGHT / 2) * scale
 - 绘制前按投影深度从远到近排序，避免近处字符被远处字符覆盖。
 - 建筑字形超出 Canvas `12px` 缓冲边界后跳过。
 - 工作区标牌深度大于 `1500` 时隐藏。
-- 会话 Portal 只在活跃建筑深度处于 `105–510` 时可交互。
+- 会话 Portal 只在活跃建筑深度处于 `56–510` 时可交互（Portal 从立面浮起 `PORTAL_LIFT = 26` 世界单位，相机接近投射口时 Portal 会先触及近距裁切）。
 - Portal 宽度限制在 `132–174px`，防止突破 280px 侧栏。
 
 这些阈值共同构成镜头语言。修改其中一个阈值时，要同时检查“近景裁切、远景可辨、按钮可点、标题可读”四个结果。

@@ -361,32 +361,30 @@
     }
 
     .session-portal {
-      height: 19px;
-      padding: 2px 18px 2px 7px;
+      height: 23px;
+      padding: 3px 20px 3px 8px;
       overflow: hidden;
       display: block;
-      color: #a8c8b0;
+      color: #c4e8cd;
       border: 0;
-      border-left: 2px solid var(--status-color, var(--matrix));
       background:
-        linear-gradient(90deg, rgba(0, 4, 2, 0.97), rgba(5, 22, 12, 0.88) 74%, rgba(5, 24, 13, 0.35)),
-        rgba(1, 8, 4, 0.9);
-      box-shadow: inset 0 1px rgba(216, 255, 226, 0.04);
+        linear-gradient(90deg, rgba(0, 6, 3, 0.82), color-mix(in srgb, var(--status-color) 7%, rgba(5, 22, 12, 0.6)) 62%, rgba(5, 24, 13, 0.15));
       cursor: pointer;
       text-align: left;
       white-space: nowrap;
       text-overflow: ellipsis;
-      font: 10px/15px var(--body);
-      transition: color 110ms ease, background 110ms ease, box-shadow 110ms ease;
+      font: 12px/16px var(--body);
+      text-shadow: 0 0 6px color-mix(in srgb, var(--status-color) 55%, transparent);
+      transition: color 110ms ease, background 110ms ease, text-shadow 110ms ease;
     }
 
     .session-portal::after {
       content: attr(data-slot);
       position: absolute;
-      top: 3px;
-      right: 5px;
+      top: 4px;
+      right: 6px;
       color: var(--status-color);
-      font: 7px/1 var(--display);
+      font: 8px/1 var(--display);
       opacity: 0.64;
     }
 
@@ -396,14 +394,13 @@
       color: #effff3;
       outline: none;
       background:
-        linear-gradient(90deg, rgba(3, 16, 8, 0.98), color-mix(in srgb, var(--status-color) 14%, rgba(3, 18, 9, 0.9)) 78%, transparent);
-      box-shadow:
-        inset 0 0 11px color-mix(in srgb, var(--status-color) 9%, transparent),
-        0 0 9px color-mix(in srgb, var(--status-color) 18%, transparent);
+        linear-gradient(90deg, rgba(3, 16, 8, 0.75), color-mix(in srgb, var(--status-color) 18%, rgba(3, 18, 9, 0.5)) 72%, transparent);
+      text-shadow: 0 0 9px color-mix(in srgb, var(--status-color) 80%, transparent);
     }
 
     .session-portal.is-current {
-      border-left-width: 4px;
+      background:
+        linear-gradient(90deg, color-mix(in srgb, var(--status-color) 16%, rgba(2, 12, 6, 0.8)), color-mix(in srgb, var(--status-color) 10%, transparent) 78%, transparent);
     }
 
     .walk-controls {
@@ -1062,6 +1059,8 @@
     const ARCH_GLYPHS = "|<>:+*";
     const BUILDING_HEIGHT = 184;
     const CAMERA_STRAFE_RADIUS = 30;
+    // Portal 从建筑立面浮起的世界距离：全息投影光束的锥长
+    const PORTAL_LIFT = 26;
 
     const canvas = document.querySelector("#city-canvas");
     const context = canvas.getContext("2d", { alpha: false });
@@ -1389,6 +1388,30 @@
       });
     }
 
+    // Portal 投射口：建筑立面会话带中心的一小段高亮横线（Portal 全息投影的发射口）
+    function drawPortalBeams() {
+      const workspace = WORKSPACES[state.activeWorkspace];
+      if (!workspace) return;
+      const buildingDepth = workspace.z - state.cameraZ;
+      if (buildingDepth < 56 || buildingDepth > 510) return;
+      const alphaScale = clamp(1.2 - Math.abs(buildingDepth - 225) / 370, 0.22, 1);
+
+      workspace.sessions.forEach((session, sessionIndex) => {
+        const y = 127 - sessionIndex * 21;
+        const back = project(workspace.x, y, workspace.z);
+        if (!back) return;
+        const color = STATUS[session.status].color;
+
+        // 立面投射口：一小段高亮横线
+        context.strokeStyle = rgba(color, 0.5 * alphaScale);
+        context.lineWidth = 1;
+        context.beginPath();
+        context.moveTo(back.x - 6 * back.scale, back.y);
+        context.lineTo(back.x + 6 * back.scale, back.y);
+        context.stroke();
+      });
+    }
+
     function drawDepthFog() {
       const fog = context.createLinearGradient(0, 0, 0, state.height);
       fog.addColorStop(0, "rgba(0,3,2,0.18)");
@@ -1402,6 +1425,7 @@
       drawBackground(time);
       drawStreet(time);
       drawBuildings(time);
+      drawPortalBeams();
       drawDepthFog();
     }
 
@@ -1473,20 +1497,31 @@
 
       const workspace = WORKSPACES[state.activeWorkspace];
       const buildingDepth = workspace.z - state.cameraZ;
+      // 穿越时纵向压缩：投影 scale 越大，Portal 的 y 越向建筑中线收拢，屏幕间距近似恒定
+      const centerAnchor = project(workspace.x, BUILDING_HEIGHT / 2, workspace.z - PORTAL_LIFT);
       sessionButtons.forEach((button, sessionIndex) => {
         const y = 127 - sessionIndex * 21;
-        const point = project(workspace.x, y, workspace.z - 1);
-        if (!point || buildingDepth < 105 || buildingDepth > 510 || point.y < 24 || point.y > state.height - 50) {
+        const point = project(workspace.x, y, workspace.z - PORTAL_LIFT);
+        if (!point || buildingDepth < 56 || buildingDepth > 510) {
           button.style.opacity = "0";
           button.style.pointerEvents = "none";
           return;
         }
-        const scale = clamp(point.scale, 0.72, 1.04);
-        const width = clamp(130 * scale + 28, 132, 174);
+        const spread = clamp(1.5 / point.scale, 0.55, 1);
+        const screenY = centerAnchor ? centerAnchor.y + (point.y - centerAnchor.y) * spread : point.y;
+        if (screenY < 24 || screenY > state.height - 50) {
+          button.style.opacity = "0";
+          button.style.pointerEvents = "none";
+          return;
+        }
+        const scale = clamp(point.scale, 0.72, 1.04) * (1 + (state.motion || 0) * 0.1);
+        const width = clamp(130 * scale + 28, 132, 182);
         button.style.width = `${width}px`;
         button.style.left = `${point.x}px`;
-        button.style.top = `${point.y}px`;
-        button.style.opacity = String(clamp(1.2 - Math.abs(buildingDepth - 225) / 370, 0.22, 1));
+        button.style.top = `${screenY}px`;
+        // 运动中：透明度下限抬到 0.85，深度衰减几乎拉平，Portal 保持醒目
+        const base = clamp(1.2 - Math.abs(buildingDepth - 225) / 370, 0.22, 1);
+        button.style.opacity = String(mix(base, 1, (state.motion || 0) * 0.9));
         button.style.transform = `translate(-50%, -50%) scale(${scale})`;
         button.style.pointerEvents = "auto";
       });
@@ -1713,8 +1748,14 @@
       const delta = Math.min(0.05, (time - previousTime) / 1000);
       previousTime = time;
       const smoothing = state.experience === "reduced" ? 1 : 1 - Math.pow(0.001, delta);
+      const prevZ = state.cameraZ;
+      const prevX = state.cameraX;
       state.cameraZ = mix(state.cameraZ, state.targetZ, smoothing);
       state.cameraX = mix(state.cameraX, state.targetX, smoothing);
+      // 相机运动能量：位移速度 → 0..1 平滑值，驱动 Portal 动态凸显
+      const speed = Math.hypot(state.cameraZ - prevZ, state.cameraX - prevX) / Math.max(delta, 0.001);
+      const motionTarget = state.experience === "reduced" ? 0 : clamp(speed / 260, 0, 1);
+      state.motion = mix(state.motion || 0, motionTarget, 1 - Math.pow(0.01, delta));
       syncActiveWorkspaceFromCamera();
       renderCanvas(time);
       updateProjectedDom();
