@@ -1,0 +1,85 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>matrix wavefield demo</title>
+<style>
+  @font-face{font-family:'MatrixCode';src:url('font/Matrix-Code.ttf')}
+  html,body{margin:0;height:100%;background:#020603;overflow:hidden}
+  canvas{display:block;cursor:crosshair}
+  .vig{position:fixed;inset:0;pointer-events:none;
+    background:radial-gradient(ellipse at 50% 42%,transparent 55%,rgba(0,0,0,.55) 100%)}
+  .hud{position:fixed;left:14px;top:12px;color:#2f7d4f;font:12px/1.6 monospace;letter-spacing:.12em;user-select:none}
+  .hud b{color:#ffb454;font-weight:400}
+</style>
+<canvas id="c"></canvas>
+<div class="vig"></div>
+<div class="hud">WAVEFIELD // the field is breathing<br>滚动 = 推波 + 下潜 <b>◆</b> 波峰=信号溢出</div>
+<script>
+const cv=document.getElementById('c'),cx=cv.getContext('2d');
+let W,H;
+function rs(){const d=Math.min(devicePixelRatio||1,2);W=innerWidth;H=innerHeight;
+  cv.width=W*d;cv.height=H*d;cv.style.width=W+'px';cv.style.height=H+'px';cx.setTransform(d,0,0,d,0,0);}
+addEventListener('resize',rs);rs();
+
+// Matrix Code 字体是电影雨字形（拉丁字母形变），直接用它自带的字符域
+const GLYPHS='ZION0123456789ABCDEFHKNPRSTUVXYZ<>*+=:;'.split('');
+const G=GLYPHS.length;
+
+const COLS=72,ROWS=34,SP=34;
+let phase=0,boost=0,dolly=0,dollyV=0;
+
+addEventListener('wheel',e=>{
+  dollyV+=e.deltaY*0.055;
+  boost=Math.min(boost+Math.abs(e.deltaY)*0.0004,0.3);
+},{passive:true});
+
+function wave(x,z,tt){
+  return Math.sin(x*0.045+tt*1.25)*7
+       + Math.sin(z*0.062-tt*0.8)*5.5
+       + Math.sin((x+z)*0.028+tt*0.55)*8.5
+       + Math.sin(x*0.11-z*0.09+tt*1.9)*2.6;
+}
+// 稳定的每格伪随机
+function h2(c,r){let n=c*374761393+r*668265263;n=(n^(n>>13))*1274126177;return((n^(n>>16))>>>0)/4294967295;}
+
+function frame(){
+  phase+=0.012+boost; boost*=0.93;
+  dollyV*=0.92; dolly=Math.max(0,dolly+dollyV);
+
+  cx.fillStyle='#020603';cx.fillRect(0,0,W,H);
+  const horizon=H*0.28,f=H*0.98,camH=48;
+  const off=Math.floor(dolly/SP),frac=dolly-off*SP;
+
+  for(let r=ROWS-1;r>=0;r--){
+    const z=60+r*SP-frac; if(z<16)continue;
+    const wz=(r+off)*SP, s=f/z;
+    const fs=Math.max(4,Math.min(26,s*15));
+    cx.font=fs+'px MatrixCode,monospace';
+    cx.textAlign='center';cx.textBaseline='middle';
+    const depth=1-r/ROWS;                     // 0远 1近
+    for(let c=0;c<COLS;c++){
+      const wx=(c-COLS/2)*SP;
+      const wy=wave(wx,wz,phase);
+      const sx=W/2+wx*s, sy=horizon+(camH-wy)*s;
+      if(sx<-20||sx>W+20)continue;
+      const hr=h2(c,r+off);
+      // 字形闪烁：随时间换字，速度带随机
+      const gi=Math.floor(hr*G+phase*(1+hr*3))%G;
+      const crest=wy>10.5, valley=wy<-6;
+      let a=0.10+depth*0.75;
+      let col;
+      if(crest&&hr>0.55){                     // 波峰信号溢出：亮白绿
+        col='rgba(190,255,210,'+Math.min(1,a+0.2)+')';
+      }else if(crest){                        // 波峰琥珀脉冲（少量）
+        col='rgba(255,180,84,'+a+')';
+      }else{
+        const lum=valley?0.45:0.75+wy/40;     // 波谷压暗
+        col='rgba('+Math.floor(40*lum+20)+','+Math.floor(220*lum+30)+','+Math.floor(120*lum)+','+a+')';
+      }
+      cx.fillStyle=col;
+      cx.fillText(GLYPHS[gi],sx,sy);
+    }
+  }
+  requestAnimationFrame(frame);
+}
+frame();
+</script>
