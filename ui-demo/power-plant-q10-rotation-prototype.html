@@ -1,0 +1,789 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Q10 · Power Plant 三种旋转轴线原型</title>
+  <!--
+    THROWAWAY UI PROTOTYPE
+    Question: Power Plant 工作区层中的会话培育仓，哪一种旋转轴线最适合表达“切换会话”？
+    Three variants, switchable via ?variant=A/B/C in this standalone file.
+    This prototype validates motion and hierarchy only. It does not lock final art, assets or production structure.
+  -->
+  <style>
+    @font-face {
+      font-family: "Matrix Code";
+      src: url("./font/Matrix-Code.ttf") format("truetype");
+      font-display: swap;
+    }
+
+    :root {
+      color-scheme: dark;
+      --void: #020504;
+      --panel: #08100d;
+      --green: #41ff7f;
+      --green-soft: #91ffae;
+      --cyan: #75e9df;
+      --pod: #f14b3f;
+      --pod-hot: #ff9279;
+      --ink: #e2ffe8;
+      --muted: #77917e;
+      --line: rgba(83, 255, 132, 0.22);
+      --slot-step: 60deg;
+    }
+
+    * { box-sizing: border-box; }
+
+    html,
+    body {
+      min-height: 100%;
+      margin: 0;
+      background:
+        radial-gradient(circle at 18% 46%, rgba(36, 255, 105, 0.075), transparent 30%),
+        #010302;
+      color: var(--ink);
+      font-family: "Consolas", "Microsoft YaHei UI", monospace;
+    }
+
+    button { font: inherit; }
+
+    .page {
+      min-height: 100vh;
+      display: grid;
+      grid-template-columns: 280px minmax(320px, 560px);
+      justify-content: center;
+      align-items: stretch;
+      gap: 28px;
+      padding: 22px 24px 92px;
+    }
+
+    .sidebar {
+      position: relative;
+      width: 280px;
+      min-height: min(780px, calc(100vh - 44px));
+      overflow: hidden;
+      border: 1px solid rgba(122, 255, 159, 0.28);
+      background:
+        linear-gradient(90deg, rgba(76, 255, 123, 0.025) 1px, transparent 1px) 0 0 / 17px 17px,
+        linear-gradient(rgba(76, 255, 123, 0.025) 1px, transparent 1px) 0 0 / 17px 17px,
+        linear-gradient(180deg, #08100d, #030706 68%, #010302);
+      box-shadow: 0 0 60px rgba(25, 255, 93, 0.08), inset 0 0 50px rgba(0, 0, 0, 0.76);
+      isolation: isolate;
+    }
+
+    .sidebar::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      z-index: 20;
+      pointer-events: none;
+      opacity: 0.28;
+      mix-blend-mode: screen;
+      background: repeating-linear-gradient(180deg, transparent 0 3px, rgba(130, 255, 164, 0.045) 4px);
+    }
+
+    .masthead {
+      position: relative;
+      z-index: 4;
+      height: 112px;
+      padding: 16px 16px 12px;
+      border-bottom: 1px solid var(--line);
+      background: linear-gradient(180deg, rgba(4, 11, 8, 0.98), rgba(4, 11, 8, 0.84));
+    }
+
+    .eyebrow {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      color: var(--muted);
+      font-size: 9px;
+      letter-spacing: 0.16em;
+    }
+
+    .eyebrow b { color: var(--pod-hot); font-weight: 500; }
+
+    h1 {
+      margin: 10px 0 2px;
+      color: var(--ink);
+      font: 400 16px/1.1 "Consolas", monospace;
+      letter-spacing: 0.09em;
+    }
+
+    .workspace-id {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      margin-top: 10px;
+      color: var(--green-soft);
+      font-size: 10px;
+    }
+
+    .workspace-id i {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 12px var(--green);
+    }
+
+    .machine-stage {
+      position: relative;
+      height: 430px;
+      overflow: hidden;
+      perspective: 640px;
+      perspective-origin: 44% 48%;
+    }
+
+    .matrix-fog,
+    .matrix-fog::before,
+    .matrix-fog::after {
+      position: absolute;
+      inset: 0;
+      content: "ア 0 ナ 1 メ 7 コ 9 ワ + セ 2 ヌ >";
+      color: rgba(75, 255, 126, 0.13);
+      font: 22px/1.7 "Matrix Code", monospace;
+      letter-spacing: 0.32em;
+      word-break: break-all;
+      transform: skewY(-7deg) scale(1.1);
+      filter: blur(0.3px);
+      pointer-events: none;
+    }
+
+    .matrix-fog::before { transform: translate(31px, 84px) scale(0.82); opacity: 0.65; }
+    .matrix-fog::after { transform: translate(-28px, 190px) scale(1.2); opacity: 0.35; }
+
+    .wall {
+      position: absolute;
+      z-index: 2;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 58px;
+      border-right: 2px solid rgba(123, 255, 160, 0.44);
+      background:
+        radial-gradient(circle at 42px 28px, #7cff9a 0 1px, transparent 2px),
+        repeating-linear-gradient(180deg, transparent 0 28px, rgba(81, 255, 127, 0.16) 29px 30px),
+        linear-gradient(90deg, #030705, #16221b 48%, #07100c);
+      box-shadow: 10px 0 34px rgba(0, 0, 0, 0.9), inset -8px 0 15px rgba(0, 0, 0, 0.8);
+    }
+
+    .wall::before,
+    .wall::after {
+      content: "";
+      position: absolute;
+      left: 10px;
+      width: 31px;
+      height: 110px;
+      border: 1px solid rgba(98, 255, 141, 0.18);
+      background: repeating-linear-gradient(135deg, transparent 0 7px, rgba(95, 255, 139, 0.08) 8px 9px);
+    }
+
+    .wall::before { top: 35px; }
+    .wall::after { bottom: 34px; }
+
+    .axle {
+      position: absolute;
+      z-index: 4;
+      left: 45px;
+      top: 50%;
+      width: 26px;
+      height: 26px;
+      transform: translateY(-50%);
+      border: 3px solid #27352d;
+      border-radius: 50%;
+      background: radial-gradient(circle, #a6ffc0 0 7%, #27663c 9% 19%, #08110c 21% 48%, #4cff7d 50% 55%, #09110d 57%);
+      box-shadow: 0 0 18px rgba(64, 255, 121, 0.35), inset 0 0 7px #000;
+    }
+
+    .rig {
+      position: absolute;
+      z-index: 3;
+      inset: 0;
+      transform-style: preserve-3d;
+    }
+
+    .pod {
+      position: absolute;
+      width: 156px;
+      height: 45px;
+      transform-style: preserve-3d;
+      transform-origin: 0 50%;
+      transition:
+        transform 760ms cubic-bezier(0.18, 0.88, 0.24, 1),
+        opacity 500ms ease,
+        filter 500ms ease;
+      will-change: transform;
+    }
+
+    .pod-shell {
+      position: absolute;
+      inset: 0;
+      overflow: hidden;
+      border: 2px solid #55362d;
+      border-radius: 22px 7px 7px 22px;
+      background:
+        linear-gradient(180deg, rgba(255, 231, 208, 0.22), transparent 28%),
+        linear-gradient(90deg, #7f2825, #eb4f3f 22%, #8a2523 74%, #43191a);
+      box-shadow: inset 0 -9px 0 rgba(42, 5, 7, 0.55), inset 0 0 14px rgba(255, 143, 113, 0.36), 0 7px 18px rgba(0, 0, 0, 0.58);
+    }
+
+    .pod-shell::before {
+      content: "";
+      position: absolute;
+      left: 19px;
+      top: 8px;
+      width: 82px;
+      height: 24px;
+      border: 1px solid rgba(255, 206, 182, 0.43);
+      border-radius: 50% 43% 48% 50%;
+      background:
+        radial-gradient(ellipse at 55% 58%, rgba(6, 21, 13, 0.92) 0 16%, transparent 17%),
+        radial-gradient(ellipse at 43% 61%, rgba(16, 35, 23, 0.92) 0 20%, transparent 21%),
+        linear-gradient(180deg, rgba(151, 255, 199, 0.33), rgba(12, 73, 50, 0.55));
+      box-shadow: inset 0 0 10px rgba(87, 255, 147, 0.25);
+    }
+
+    .pod-shell::after {
+      content: "";
+      position: absolute;
+      right: 10px;
+      top: 12px;
+      width: 29px;
+      height: 17px;
+      border: 1px solid rgba(255, 219, 196, 0.23);
+      background: repeating-linear-gradient(90deg, #1c1714 0 3px, #ff8c64 4px 5px);
+    }
+
+    .pod-joint {
+      position: absolute;
+      left: -18px;
+      top: 13px;
+      width: 22px;
+      height: 19px;
+      border: 2px solid #506a59;
+      background: #0a110d;
+      box-shadow: inset 0 0 0 4px #1b2b21, 0 0 8px rgba(67, 255, 122, 0.25);
+    }
+
+    .pod-index {
+      position: absolute;
+      z-index: 3;
+      right: 9px;
+      bottom: 4px;
+      color: #ffe3d9;
+      font-size: 7px;
+      letter-spacing: 0.12em;
+    }
+
+    .variant-a .rig { left: 62px; top: 194px; width: 1px; height: 1px; }
+
+    .variant-a .pod {
+      left: 0;
+      top: -22px;
+      opacity: var(--slot-opacity, 0.2);
+      filter: brightness(var(--slot-light, 0.42)) saturate(var(--slot-sat, 0.55));
+      transform: rotateY(var(--slot-angle)) translateZ(56px);
+    }
+
+    .variant-a .orbit-guide {
+      position: absolute;
+      z-index: 3;
+      left: 26px;
+      top: 164px;
+      width: 74px;
+      height: 76px;
+      border: 1px dashed rgba(105, 255, 149, 0.2);
+      border-radius: 50%;
+      transform: rotateX(72deg);
+    }
+
+    .variant-b .rig { left: 67px; top: 213px; width: 1px; height: 1px; }
+
+    .variant-b .pod {
+      left: 0;
+      top: -22px;
+      opacity: var(--slot-opacity, 0.22);
+      filter: brightness(var(--slot-light, 0.48)) saturate(var(--slot-sat, 0.6));
+      transform: rotateZ(var(--slot-angle)) translateX(64px) rotateZ(calc(-1 * var(--slot-angle)));
+    }
+
+    .variant-b .orbit-guide {
+      position: absolute;
+      z-index: 3;
+      left: 3px;
+      top: 149px;
+      width: 129px;
+      height: 129px;
+      border: 1px dashed rgba(105, 255, 149, 0.2);
+      border-radius: 50%;
+    }
+
+    .variant-c .rig {
+      left: 77px;
+      top: 213px;
+      width: 164px;
+      height: 46px;
+      transform-style: preserve-3d;
+    }
+
+    .variant-c .pod {
+      left: 0;
+      top: 0;
+      width: 164px;
+      transform-origin: 50% 50%;
+      opacity: var(--slot-opacity, 0.22);
+      filter: brightness(var(--slot-light, 0.45)) saturate(var(--slot-sat, 0.55));
+      transform: rotateX(var(--slot-angle)) translateZ(39px);
+    }
+
+    .variant-c .orbit-guide {
+      position: absolute;
+      z-index: 3;
+      left: 65px;
+      top: 166px;
+      width: 178px;
+      height: 94px;
+      border: 1px dashed rgba(105, 255, 149, 0.2);
+      border-radius: 50%;
+      transform: rotateY(76deg);
+    }
+
+    .variant-c .axle {
+      left: 54px;
+      width: 190px;
+      height: 8px;
+      border: 0;
+      border-radius: 5px;
+      background: linear-gradient(180deg, #6f8f7b, #152119 47%, #030604 52%, #496152);
+      box-shadow: 0 0 10px rgba(65, 255, 127, 0.2);
+    }
+
+    .axis-badge {
+      position: absolute;
+      z-index: 6;
+      left: 15px;
+      top: 14px;
+      max-width: 245px;
+      padding: 7px 9px;
+      border-left: 2px solid var(--pod);
+      background: rgba(0, 5, 3, 0.8);
+      color: #a8cbb1;
+      font-size: 9px;
+      line-height: 1.45;
+      letter-spacing: 0.04em;
+    }
+
+    .axis-badge strong {
+      display: block;
+      color: var(--pod-hot);
+      font-size: 10px;
+      font-weight: 500;
+      letter-spacing: 0.12em;
+    }
+
+    .active-readout {
+      position: absolute;
+      z-index: 7;
+      left: 76px;
+      right: 10px;
+      bottom: 18px;
+      min-height: 66px;
+      padding: 9px 10px;
+      border: 1px solid rgba(86, 255, 133, 0.3);
+      background: rgba(2, 9, 5, 0.88);
+      box-shadow: inset 3px 0 0 var(--green), 0 10px 20px rgba(0, 0, 0, 0.35);
+    }
+
+    .active-readout small {
+      display: block;
+      color: var(--muted);
+      font-size: 8px;
+      letter-spacing: 0.16em;
+    }
+
+    .active-readout strong {
+      display: block;
+      overflow: hidden;
+      margin-top: 5px;
+      color: var(--ink);
+      font-size: 11px;
+      font-weight: 500;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .active-readout span {
+      display: block;
+      margin-top: 4px;
+      color: var(--green);
+      font-size: 8px;
+      letter-spacing: 0.11em;
+    }
+
+    .controls {
+      position: relative;
+      z-index: 6;
+      display: grid;
+      grid-template-columns: 44px 1fr 44px;
+      gap: 7px;
+      height: 76px;
+      padding: 13px 15px 15px;
+      border-top: 1px solid var(--line);
+      background: rgba(2, 7, 4, 0.92);
+    }
+
+    .controls button {
+      min-width: 0;
+      border: 1px solid rgba(91, 255, 137, 0.28);
+      background: rgba(18, 36, 24, 0.72);
+      color: var(--green-soft);
+      cursor: pointer;
+    }
+
+    .controls button:hover,
+    .controls button:focus-visible {
+      border-color: var(--green);
+      outline: none;
+      box-shadow: 0 0 14px rgba(65, 255, 127, 0.18);
+    }
+
+    .controls .center-control {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      border: 1px solid rgba(91, 255, 137, 0.13);
+      color: #9fb1a4;
+      font-size: 8px;
+      text-align: center;
+    }
+
+    .controls .center-control b { color: var(--ink); font-size: 10px; font-weight: 500; }
+
+    .notes {
+      align-self: center;
+      padding: 8px 0 72px;
+    }
+
+    .notes .kicker {
+      color: var(--pod-hot);
+      font-size: 10px;
+      letter-spacing: 0.2em;
+    }
+
+    .notes h2 {
+      max-width: 520px;
+      margin: 12px 0 12px;
+      font-size: clamp(22px, 4vw, 46px);
+      font-weight: 400;
+      line-height: 1.03;
+      letter-spacing: -0.045em;
+    }
+
+    .notes > p {
+      max-width: 520px;
+      margin: 0;
+      color: #a7b9ac;
+      font-size: 13px;
+      line-height: 1.8;
+    }
+
+    .verdict-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      margin-top: 24px;
+    }
+
+    .verdict-grid article {
+      min-height: 125px;
+      padding: 11px;
+      border: 1px solid rgba(105, 255, 149, 0.14);
+      background: rgba(6, 15, 10, 0.58);
+    }
+
+    .verdict-grid article.active {
+      border-color: rgba(255, 105, 84, 0.62);
+      background: rgba(42, 14, 11, 0.52);
+    }
+
+    .verdict-grid b {
+      display: block;
+      color: var(--green);
+      font-size: 10px;
+      letter-spacing: 0.1em;
+    }
+
+    .verdict-grid span {
+      display: block;
+      margin-top: 7px;
+      color: #99aa9d;
+      font-size: 10px;
+      line-height: 1.55;
+    }
+
+    .instructions {
+      margin-top: 17px;
+      color: var(--muted);
+      font-size: 10px;
+      line-height: 1.7;
+    }
+
+    .switcher {
+      position: fixed;
+      z-index: 100;
+      left: 50%;
+      bottom: 18px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      min-width: 340px;
+      padding: 5px;
+      transform: translateX(-50%);
+      border: 1px solid rgba(142, 255, 174, 0.42);
+      border-radius: 999px;
+      background: rgba(1, 5, 3, 0.95);
+      box-shadow: 0 10px 40px #000, 0 0 24px rgba(62, 255, 119, 0.13);
+      backdrop-filter: blur(12px);
+    }
+
+    .switcher button {
+      width: 40px;
+      height: 34px;
+      flex: 0 0 40px;
+      border: 0;
+      border-radius: 999px;
+      background: #101b14;
+      color: var(--green-soft);
+      cursor: pointer;
+    }
+
+    .switcher button:hover,
+    .switcher button:focus-visible { outline: 1px solid var(--green); }
+
+    .switcher-output {
+      flex: 1;
+      min-width: 230px;
+      color: #d8ffe2;
+      font-size: 10px;
+      letter-spacing: 0.06em;
+      text-align: center;
+    }
+
+    @media (max-width: 760px) {
+      .page {
+        grid-template-columns: 280px;
+        justify-content: center;
+        padding-inline: 10px;
+      }
+
+      .notes { padding-bottom: 20px; }
+      .notes h2 { font-size: 28px; }
+      .switcher { min-width: min(340px, calc(100vw - 20px)); }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .pod { transition-duration: 1ms; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <section class="sidebar" aria-label="Q10 旋转方式原型">
+      <header class="masthead">
+        <div class="eyebrow"><span>POWER PLANT / MOTION TEST</span><b>Q10</b></div>
+        <h1 id="variantTitle">轴线载入中</h1>
+        <div class="workspace-id"><i></i><span>WS-01 / DEEPSEEK-ZION</span></div>
+      </header>
+
+      <section class="machine-stage" id="machineStage" tabindex="0" aria-label="滚轮、W/S 或按钮切换会话">
+        <div class="matrix-fog" aria-hidden="true"></div>
+        <div class="wall" aria-hidden="true"></div>
+        <div class="orbit-guide" aria-hidden="true"></div>
+        <div class="axle" aria-hidden="true"></div>
+        <div class="rig" id="rig"></div>
+        <div class="axis-badge"><strong id="axisName"></strong><span id="axisDescription"></span></div>
+        <div class="active-readout" aria-live="polite">
+          <small>ACTIVE SESSION / <span id="slotReadout">01 / 06</span></small>
+          <strong id="sessionName"></strong>
+          <span id="angleReadout"></span>
+        </div>
+      </section>
+
+      <div class="controls">
+        <button id="previousSession" type="button" aria-label="上一个会话">↑</button>
+        <div class="center-control"><b>切换会话</b><span>W / S · 滚轮</span></div>
+        <button id="nextSession" type="button" aria-label="下一个会话">↓</button>
+      </div>
+    </section>
+
+    <aside class="notes">
+      <div class="kicker">THROWAWAY MOTION PROTOTYPE</div>
+      <h2>只比较旋转，暂不决定最终造型。</h2>
+      <p id="variantSummary"></p>
+      <div class="verdict-grid">
+        <article data-note="A"><b>A · 墙内竖轴</b><span>培育仓围绕 Power Plant 内的竖直主轴作水平深度旋转。</span></article>
+        <article data-note="B"><b>B · 屏幕法线轴</b><span>培育仓像摩天轮一样在可见平面内上下扫过。</span></article>
+        <article data-note="C"><b>C · 培育仓纵轴</b><span>多个会话面组成滚筒，围绕横向培育仓自身翻页。</span></article>
+      </div>
+      <div class="instructions">操作：滚轮 / W / S 切换会话；← / → 切换 A/B/C 方案；下方浮条也可点击。URL 会同步为 <code>?variant=A</code> 等。</div>
+    </aside>
+  </main>
+
+  <nav class="switcher" aria-label="原型方案切换">
+    <button id="previousVariant" type="button" aria-label="上一个旋转方案">←</button>
+    <output class="switcher-output" id="switcherOutput"></output>
+    <button id="nextVariant" type="button" aria-label="下一个旋转方案">→</button>
+  </nav>
+
+  <script>
+    const variants = {
+      A: {
+        title: "A / WALL AXLE CAROUSEL",
+        axis: "墙内竖轴 · 水平深度环",
+        description: "正面仓推出，邻仓退入墙后",
+        summary: "主轴隐藏在 Power Plant 墙体内。每次切换时，整层弹仓绕竖轴旋转一个槽位；目标仓从纵深转到正面，并继续保持横向伸展。它最像“服务器弹仓/左轮弹巢”，也最能保留参考图中墙体在左、培育仓向右延伸的构图。"
+      },
+      B: {
+        title: "B / SCREEN-PLANE FERRIS WHEEL",
+        axis: "屏幕法线轴 · 垂直摩天轮",
+        description: "目标仓从上或下方扫入右侧正位",
+        summary: "轴线垂直于屏幕，培育仓在可见平面内上下环绕。运动轨迹最容易看懂，切换也最戏剧化；代价是上下扫过会占用较多高度，多个工作区紧密堆叠时容易与相邻层碰撞。"
+      },
+      C: {
+        title: "C / LONGITUDINAL DRUM",
+        axis: "培育仓纵轴 · 横向滚筒",
+        description: "同一外壳原位翻转会话面",
+        summary: "旋转轴沿培育仓的横向长轴延伸，多个会话面包在同一个滚筒上。它最节省垂直空间，也最像机械磁带库；但每个会话不再拥有清晰独立的培育仓实体，工作区与会话的空间层级会更抽象。"
+      }
+    };
+
+    const sessions = [
+      "阅读项目说明文件",
+      "WSL 环境检测确认",
+      "更新到 GitHub 最新提交",
+      "Single number input",
+      "安装 dsh 命令未找到报错",
+      "秋天的夜晚"
+    ];
+
+    const machineStage = document.getElementById("machineStage");
+    const rig = document.getElementById("rig");
+    const variantTitle = document.getElementById("variantTitle");
+    const axisName = document.getElementById("axisName");
+    const axisDescription = document.getElementById("axisDescription");
+    const sessionName = document.getElementById("sessionName");
+    const slotReadout = document.getElementById("slotReadout");
+    const angleReadout = document.getElementById("angleReadout");
+    const variantSummary = document.getElementById("variantSummary");
+    const switcherOutput = document.getElementById("switcherOutput");
+    const variantKeys = Object.keys(variants);
+    let variant = new URLSearchParams(location.search).get("variant")?.toUpperCase() || "A";
+    if (!variants[variant]) variant = "A";
+    let activeSession = 0;
+    let wheelLocked = false;
+
+    function signedDistance(index, active, total) {
+      let distance = index - active;
+      if (distance > total / 2) distance -= total;
+      if (distance < -total / 2) distance += total;
+      return distance;
+    }
+
+    function buildPods() {
+      rig.replaceChildren();
+      sessions.forEach((name, index) => {
+        const pod = document.createElement("div");
+        pod.className = "pod";
+        pod.dataset.index = String(index);
+        pod.title = name;
+        pod.innerHTML = `
+          <div class="pod-joint"></div>
+          <div class="pod-shell"></div>
+          <span class="pod-index">S-${String(index + 1).padStart(2, "0")}</span>
+        `;
+        pod.addEventListener("click", () => {
+          activeSession = index;
+          renderMotion();
+        });
+        rig.appendChild(pod);
+      });
+    }
+
+    function renderMotion() {
+      const step = 360 / sessions.length;
+      rig.querySelectorAll(".pod").forEach((pod) => {
+        const index = Number(pod.dataset.index);
+        const distance = signedDistance(index, activeSession, sessions.length);
+        const angle = distance * step;
+        const proximity = Math.max(0, 1 - Math.abs(distance) / 3);
+        pod.style.setProperty("--slot-angle", `${angle}deg`);
+        pod.style.setProperty("--slot-opacity", String(0.14 + proximity * 0.86));
+        pod.style.setProperty("--slot-light", String(0.38 + proximity * 0.72));
+        pod.style.setProperty("--slot-sat", String(0.45 + proximity * 0.72));
+        pod.style.zIndex = String(20 - Math.abs(distance));
+        pod.setAttribute("aria-hidden", distance === 0 ? "false" : "true");
+      });
+
+      sessionName.textContent = sessions[activeSession];
+      slotReadout.textContent = `${String(activeSession + 1).padStart(2, "0")} / ${String(sessions.length).padStart(2, "0")}`;
+      angleReadout.textContent = `SNAP ${Math.round(activeSession * step)}° · SLOT LOCKED`;
+    }
+
+    function renderVariant({ updateUrl = true } = {}) {
+      const config = variants[variant];
+      machineStage.className = `machine-stage variant-${variant.toLowerCase()}`;
+      variantTitle.textContent = config.title;
+      axisName.textContent = config.axis;
+      axisDescription.textContent = config.description;
+      variantSummary.textContent = config.summary;
+      switcherOutput.textContent = `${variant} — ${config.axis}`;
+      document.querySelectorAll("[data-note]").forEach((node) => {
+        node.classList.toggle("active", node.dataset.note === variant);
+      });
+      if (updateUrl) {
+        const url = new URL(location.href);
+        url.searchParams.set("variant", variant);
+        history.replaceState(null, "", url);
+      }
+      renderMotion();
+    }
+
+    function moveSession(delta) {
+      activeSession = (activeSession + delta + sessions.length) % sessions.length;
+      renderMotion();
+    }
+
+    function moveVariant(delta) {
+      const index = variantKeys.indexOf(variant);
+      variant = variantKeys[(index + delta + variantKeys.length) % variantKeys.length];
+      renderVariant();
+    }
+
+    document.getElementById("previousSession").addEventListener("click", () => moveSession(-1));
+    document.getElementById("nextSession").addEventListener("click", () => moveSession(1));
+    document.getElementById("previousVariant").addEventListener("click", () => moveVariant(-1));
+    document.getElementById("nextVariant").addEventListener("click", () => moveVariant(1));
+
+    machineStage.addEventListener("wheel", (event) => {
+      event.preventDefault();
+      if (wheelLocked || Math.abs(event.deltaY) < 3) return;
+      wheelLocked = true;
+      moveSession(event.deltaY > 0 ? 1 : -1);
+      window.setTimeout(() => { wheelLocked = false; }, 480);
+    }, { passive: false });
+
+    window.addEventListener("keydown", (event) => {
+      if (["INPUT", "TEXTAREA"].includes(document.activeElement?.tagName) || document.activeElement?.isContentEditable) return;
+      if (event.key === "w" || event.key === "W") moveSession(-1);
+      if (event.key === "s" || event.key === "S") moveSession(1);
+      if (event.key === "ArrowLeft") moveVariant(-1);
+      if (event.key === "ArrowRight") moveVariant(1);
+    });
+
+    buildPods();
+    renderVariant({ updateUrl: false });
+  </script>
+</body>
+</html>

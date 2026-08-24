@@ -1,0 +1,1355 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ZION · Power Plant Carousel Sidebar Prototype</title>
+  <!--
+    PROTOTYPE / ELECTRON-COMPATIBLE / DEMO DATA ONLY
+    Design question: Can a 280px sidebar feel like an infinite human Power Plant while
+    keeping workspace and session navigation legible, reversible and keyboard accessible?
+
+    Mapping:
+    - Power Plant layer = workspace
+    - Human pod = session
+    - W/S or vertical wheel = workspace layer
+    - A/D or horizontal wheel = session ring, 10 degrees per step
+  -->
+  <style>
+    @font-face {
+      font-family: "Matrix Code";
+      src: url("./font/Matrix-Code.ttf") format("truetype");
+      font-display: swap;
+    }
+
+    @font-face {
+      font-family: "Share Tech Mono";
+      src: url("./assets/sidebar-spatial-layout/ShareTechMono-Regular.woff2") format("woff2");
+      font-display: swap;
+    }
+
+    @font-face {
+      font-family: "Sarasa Term SC";
+      src: url("./assets/sidebar-spatial-layout/SarasaTermSC-Regular.subset.woff2") format("woff2");
+      font-display: swap;
+    }
+
+    :root {
+      color-scheme: dark;
+      --void: #010302;
+      --machine-black: #030706;
+      --machine-green: #14251d;
+      --phosphor: #48ff86;
+      --phosphor-hot: #d9ffe2;
+      --cyan: #72e6db;
+      --pod-red: #ec493e;
+      --pod-pink: #ff8f7d;
+      --amber: #ffc75a;
+      --error: #ff5b76;
+      --archived: #526159;
+      --muted: #6f8978;
+      --line: rgba(91, 255, 139, 0.2);
+      --sidebar-width: 280px;
+      --layer-gap: 198px;
+    }
+
+    * { box-sizing: border-box; }
+
+    html,
+    body {
+      min-height: 100%;
+      margin: 0;
+      overflow-x: hidden;
+      background:
+        radial-gradient(circle at 21% 50%, rgba(49, 255, 111, 0.055), transparent 30%),
+        #010302;
+      color: #d9f4df;
+      font-family: "Sarasa Term SC", monospace;
+    }
+
+    button { font: inherit; }
+
+    .lab {
+      min-height: 100vh;
+      display: grid;
+      grid-template-columns: var(--sidebar-width) minmax(340px, 560px);
+      justify-content: center;
+      gap: clamp(28px, 7vw, 92px);
+      padding: 0 28px;
+    }
+
+    .power-sidebar {
+      position: relative;
+      width: var(--sidebar-width);
+      height: 100vh;
+      min-height: 620px;
+      overflow: hidden;
+      border-inline: 1px solid rgba(100, 255, 145, 0.2);
+      background: #020504;
+      box-shadow:
+        0 0 80px rgba(37, 255, 101, 0.07),
+        inset 0 0 60px rgba(0, 0, 0, 0.75);
+      isolation: isolate;
+    }
+
+    .power-sidebar::after {
+      content: "";
+      position: absolute;
+      z-index: 50;
+      inset: 0;
+      pointer-events: none;
+      opacity: 0.23;
+      mix-blend-mode: screen;
+      background:
+        repeating-linear-gradient(180deg, transparent 0 3px, rgba(150, 255, 179, 0.045) 4px),
+        linear-gradient(90deg, rgba(255, 56, 46, 0.025), transparent 30%, rgba(44, 255, 112, 0.018));
+    }
+
+    .top-console {
+      position: absolute;
+      z-index: 60;
+      inset: 0 0 auto;
+      height: 66px;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      align-items: center;
+      padding: 10px 10px 9px 12px;
+      border-bottom: 1px solid rgba(98, 255, 143, 0.2);
+      background:
+        linear-gradient(180deg, rgba(1, 5, 3, 0.98), rgba(2, 8, 5, 0.84)),
+        #020504;
+      box-shadow: 0 12px 28px rgba(0, 0, 0, 0.54);
+      backdrop-filter: blur(8px);
+    }
+
+    .brand-line {
+      min-width: 0;
+    }
+
+    .brand-line small {
+      display: block;
+      color: var(--pod-pink);
+      font: 8px/1.1 "Share Tech Mono", monospace;
+      letter-spacing: 0.18em;
+    }
+
+    .brand-line strong {
+      display: block;
+      margin-top: 5px;
+      color: #e8ffed;
+      font: 400 12px/1 "Share Tech Mono", monospace;
+      letter-spacing: 0.1em;
+    }
+
+    .brand-line span {
+      display: block;
+      margin-top: 5px;
+      color: #627d6a;
+      font: 7px/1 "Share Tech Mono", monospace;
+      letter-spacing: 0.14em;
+    }
+
+    .console-actions {
+      display: grid;
+      grid-template-columns: 52px 32px;
+      gap: 4px;
+    }
+
+    .console-actions button {
+      height: 31px;
+      border: 1px solid rgba(99, 255, 143, 0.2);
+      border-radius: 2px;
+      background: rgba(13, 31, 20, 0.72);
+      color: #9dcaaa;
+      font: 7px/1 "Share Tech Mono", monospace;
+      letter-spacing: 0.06em;
+      cursor: pointer;
+    }
+
+    .console-actions button:hover,
+    .console-actions button:focus-visible {
+      border-color: var(--phosphor);
+      color: var(--phosphor-hot);
+      outline: none;
+      box-shadow: 0 0 14px rgba(72, 255, 134, 0.16);
+    }
+
+    .console-actions button[aria-pressed="true"] {
+      color: var(--pod-pink);
+      border-color: rgba(255, 109, 91, 0.46);
+    }
+
+    .plant-world {
+      position: absolute;
+      z-index: 1;
+      inset: 66px 0 43px;
+      overflow: hidden;
+      perspective: 520px;
+      perspective-origin: 24% 48%;
+      background:
+        radial-gradient(ellipse at 42% 49%, rgba(22, 100, 57, 0.11), transparent 42%),
+        linear-gradient(90deg, #07100c 0 15%, #020504 38%, #000 100%);
+      outline: none;
+      touch-action: none;
+    }
+
+    .plant-world:focus-visible {
+      box-shadow: inset 0 0 0 1px rgba(173, 255, 196, 0.56);
+    }
+
+    .plant-world::before {
+      content: "";
+      position: absolute;
+      z-index: 25;
+      inset: 0;
+      pointer-events: none;
+      background:
+        linear-gradient(180deg, #010302 0, transparent 11%, transparent 88%, #010302 100%),
+        linear-gradient(90deg, transparent 0 75%, rgba(0, 0, 0, 0.76) 100%);
+    }
+
+    .power-wall {
+      position: absolute;
+      z-index: 2;
+      inset: -30% auto -30% 0;
+      width: 106px;
+      background-image:
+        linear-gradient(90deg, rgba(0, 0, 0, 0.16), transparent 66%, rgba(0, 0, 0, 0.48)),
+        url("./assets/power-plant-carousel/power-wall-ink.png");
+      background-repeat: repeat-y, repeat-y;
+      background-position: 0 0, center 0;
+      background-size: 100% 100%, 106px auto;
+      filter: brightness(0.72) contrast(1.16) saturate(0.8);
+      box-shadow: 20px 0 38px rgba(0, 0, 0, 0.88);
+      transition: background-position 760ms cubic-bezier(0.18, 0.76, 0.18, 1);
+    }
+
+    .power-wall::after {
+      content: "";
+      position: absolute;
+      inset: 0 -34px 0 auto;
+      width: 42px;
+      background: linear-gradient(90deg, rgba(5, 12, 8, 0.92), transparent);
+      filter: blur(3px);
+    }
+
+    #atmosphere {
+      position: absolute;
+      z-index: 3;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+    }
+
+    .matrix-depth {
+      position: absolute;
+      z-index: 1;
+      inset: 0 0 0 80px;
+      overflow: hidden;
+      color: rgba(59, 255, 119, 0.09);
+      font: 22px/1.6 "Matrix Code", monospace;
+      letter-spacing: 0.42em;
+      word-break: break-all;
+      transform: skewY(-5deg) scale(1.08);
+      transform-origin: center;
+      filter: blur(0.35px);
+      pointer-events: none;
+      user-select: none;
+    }
+
+    .layer-field {
+      position: absolute;
+      z-index: 8;
+      inset: 0;
+      transform-style: preserve-3d;
+    }
+
+    .power-layer {
+      position: absolute;
+      left: 0;
+      top: 50%;
+      width: 280px;
+      height: 180px;
+      margin-top: -90px;
+      transform-style: preserve-3d;
+      transition:
+        transform 760ms cubic-bezier(0.18, 0.76, 0.18, 1),
+        opacity 520ms ease,
+        filter 520ms ease;
+      will-change: transform, opacity, filter;
+    }
+
+    .power-layer::before {
+      content: "";
+      position: absolute;
+      z-index: 0;
+      left: 18px;
+      right: 7px;
+      top: 21px;
+      height: 126px;
+      border-block: 1px solid rgba(74, 255, 126, 0.08);
+      background: linear-gradient(90deg, rgba(20, 64, 36, 0.12), transparent 42%);
+      clip-path: polygon(0 0, 100% 8%, 96% 92%, 0 100%);
+    }
+
+    .power-layer.is-current::before {
+      border-color: rgba(79, 255, 131, 0.22);
+      background: linear-gradient(90deg, rgba(29, 95, 51, 0.2), rgba(0, 0, 0, 0.03) 72%);
+    }
+
+    .workspace-stencil {
+      position: absolute;
+      z-index: 18;
+      left: 4px;
+      top: 22px;
+      width: 80px;
+      padding: 5px 5px 6px 7px;
+      border-left: 2px solid var(--stencil-color, #465f50);
+      background: linear-gradient(90deg, rgba(0, 4, 2, 0.94), rgba(0, 4, 2, 0.34) 78%, transparent);
+      color: #6f8e78;
+      font: 7px/1.25 "Share Tech Mono", monospace;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      transition: color 360ms ease, border-color 360ms ease;
+    }
+
+    .workspace-stencil b {
+      display: block;
+      overflow: hidden;
+      color: inherit;
+      font-weight: 400;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .workspace-stencil small {
+      display: block;
+      margin-top: 3px;
+      color: #4e6756;
+      font-size: 6px;
+      letter-spacing: 0.14em;
+    }
+
+    .is-current .workspace-stencil {
+      --stencil-color: var(--phosphor);
+      color: #c7fbd2;
+      text-shadow: 0 0 8px rgba(72, 255, 134, 0.22);
+    }
+
+    .pod-ring {
+      position: absolute;
+      z-index: 10;
+      left: 52px;
+      top: 43px;
+      width: 1px;
+      height: 1px;
+      transform-style: preserve-3d;
+    }
+
+    .pod-bay {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 220px;
+      height: 76px;
+      padding: 0;
+      border: 0;
+      background: transparent;
+      color: inherit;
+      transform-origin: 0 50%;
+      transform-style: preserve-3d;
+      backface-visibility: hidden;
+      cursor: default;
+      transition:
+        transform 620ms cubic-bezier(0.16, 0.82, 0.24, 1),
+        opacity 520ms ease,
+        filter 520ms ease;
+      will-change: transform, opacity, filter;
+    }
+
+    .pod-bay[data-interactive="true"] { cursor: pointer; }
+
+    .pod-bay[data-interactive="true"]:focus-visible {
+      outline: none;
+    }
+
+    .pod-bay[data-interactive="true"]:focus-visible .pod-visual {
+      filter: drop-shadow(0 0 2px #fff) drop-shadow(0 0 12px var(--phosphor));
+    }
+
+    .pod-visual {
+      position: absolute;
+      inset: 0;
+      width: 220px;
+      height: auto;
+      transform-origin: 0 50%;
+      pointer-events: none;
+      user-select: none;
+      transition: transform 170ms ease, filter 360ms ease;
+    }
+
+    .pod-bay.is-front .pod-visual {
+      transform: translateX(9px) scale(1.015);
+      filter:
+        brightness(1.2)
+        saturate(1.08)
+        drop-shadow(0 7px 8px rgba(0, 0, 0, 0.78))
+        drop-shadow(0 0 8px rgba(232, 72, 58, 0.24));
+    }
+
+    .power-layer.is-rotating .pod-bay.is-front .pod-visual {
+      transform: translateX(-1px) scale(0.985);
+      filter: brightness(0.74) drop-shadow(0 4px 7px rgba(0, 0, 0, 0.8));
+    }
+
+    .pod-bay.is-neighbor .pod-visual {
+      filter: brightness(0.7) saturate(0.78) contrast(1.08);
+    }
+
+    .pod-bay.is-dormant .pod-visual {
+      filter: brightness(0.29) saturate(0.46) contrast(1.15);
+    }
+
+    .pod-bay[data-status="archived"] .pod-visual {
+      filter: brightness(0.34) grayscale(0.72) saturate(0.34);
+    }
+
+    .pod-bay[data-status="error"] .pod-visual {
+      filter: contrast(1.12) saturate(0.72) hue-rotate(309deg);
+    }
+
+    .status-lamp {
+      position: absolute;
+      z-index: 4;
+      left: 21px;
+      top: 33px;
+      width: 6px;
+      height: 6px;
+      border: 1px solid #050806;
+      border-radius: 50%;
+      background: var(--status-color, #3b493f);
+      box-shadow: 0 0 8px var(--status-color, transparent);
+      pointer-events: none;
+    }
+
+    .pod-bay[data-status="thinking"] .status-lamp,
+    .pod-bay[data-status="streaming"] .status-lamp {
+      animation: life-pulse 1.1s ease-in-out infinite;
+    }
+
+    .pod-bay[data-status="error"] .status-lamp {
+      border-radius: 0;
+      transform: rotate(45deg);
+      animation: error-pulse 0.74s steps(2, end) infinite;
+    }
+
+    .slot-mark {
+      position: absolute;
+      z-index: 5;
+      right: 17px;
+      bottom: 12px;
+      padding: 2px 4px;
+      background: rgba(0, 0, 0, 0.72);
+      color: #7c9482;
+      font: 6px/1 "Share Tech Mono", monospace;
+      letter-spacing: 0.12em;
+      pointer-events: none;
+    }
+
+    .is-front .slot-mark {
+      color: #ffd0c7;
+      background: rgba(63, 12, 11, 0.82);
+    }
+
+    .session-plaque {
+      position: absolute;
+      z-index: 23;
+      left: 89px;
+      top: 117px;
+      width: 178px;
+      min-height: 45px;
+      padding: 7px 9px 6px 11px;
+      border: 1px solid rgba(81, 255, 131, 0.3);
+      background:
+        linear-gradient(90deg, rgba(6, 20, 12, 0.96), rgba(2, 8, 5, 0.9)),
+        #020604;
+      box-shadow:
+        inset 3px 0 0 var(--status-color, var(--phosphor)),
+        0 7px 16px rgba(0, 0, 0, 0.58);
+      clip-path: polygon(0 0, calc(100% - 9px) 0, 100% 9px, 100% 100%, 0 100%);
+      transition:
+        transform 210ms ease,
+        opacity 190ms ease,
+        filter 190ms ease;
+    }
+
+    .session-plaque::before {
+      content: "";
+      position: absolute;
+      left: -14px;
+      top: 13px;
+      width: 14px;
+      height: 2px;
+      background: var(--status-color, var(--phosphor));
+      box-shadow: 0 0 8px var(--status-color, var(--phosphor));
+    }
+
+    .power-layer.is-rotating .session-plaque {
+      opacity: 0.18;
+      transform: translateX(-13px) scaleX(0.92);
+      filter: blur(1px);
+    }
+
+    .power-layer:not(.is-current) .workspace-stencil,
+    .power-layer:not(.is-current) .session-plaque {
+      opacity: 0.1;
+      pointer-events: none;
+    }
+
+    .session-plaque small {
+      display: flex;
+      justify-content: space-between;
+      color: #5e7966;
+      font: 6px/1 "Share Tech Mono", monospace;
+      letter-spacing: 0.12em;
+    }
+
+    .session-plaque strong {
+      display: block;
+      overflow: hidden;
+      margin-top: 5px;
+      color: #e0f8e6;
+      font-size: 9px;
+      font-weight: 400;
+      line-height: 1.2;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .session-plaque span {
+      display: block;
+      margin-top: 4px;
+      color: var(--status-color, var(--phosphor));
+      font: 6px/1 "Share Tech Mono", monospace;
+      letter-spacing: 0.09em;
+    }
+
+    .bottom-console {
+      position: absolute;
+      z-index: 60;
+      inset: auto 0 0;
+      height: 43px;
+      display: grid;
+      grid-template-columns: 68px 1fr 68px;
+      align-items: stretch;
+      border-top: 1px solid rgba(91, 255, 139, 0.22);
+      background: rgba(1, 5, 3, 0.96);
+      box-shadow: 0 -14px 28px rgba(0, 0, 0, 0.62);
+    }
+
+    .bottom-console button {
+      border: 0;
+      background: rgba(14, 32, 20, 0.46);
+      color: #8fb39a;
+      font: 7px/1 "Share Tech Mono", monospace;
+      letter-spacing: 0.08em;
+      cursor: pointer;
+    }
+
+    .bottom-console button:hover,
+    .bottom-console button:focus-visible {
+      color: var(--phosphor-hot);
+      outline: none;
+      background: rgba(29, 74, 43, 0.52);
+    }
+
+    .layer-readout {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      border-inline: 1px solid rgba(86, 255, 133, 0.13);
+      color: #56705f;
+      font: 6px/1 "Share Tech Mono", monospace;
+      letter-spacing: 0.13em;
+    }
+
+    .layer-readout b {
+      margin-top: 4px;
+      color: #b7d9c0;
+      font-size: 7px;
+      font-weight: 400;
+    }
+
+    .edge-flash {
+      position: absolute;
+      z-index: 49;
+      inset: 0;
+      border: 1px solid transparent;
+      pointer-events: none;
+    }
+
+    .edge-flash.is-blocked {
+      animation: blocked-flash 320ms ease-out;
+    }
+
+    .power-sidebar[data-mode="focus"] .matrix-depth,
+    .power-sidebar[data-mode="focus"] .power-layer:not(.is-current) {
+      opacity: 0.12 !important;
+    }
+
+    .power-sidebar[data-mode="focus"] .power-wall {
+      filter: brightness(0.52) contrast(1.18) saturate(0.5);
+    }
+
+    .power-sidebar[data-mode="focus"] .session-plaque {
+      background: #020604;
+      box-shadow: inset 3px 0 0 var(--status-color, var(--phosphor));
+    }
+
+    .power-sidebar[data-mode="reduced"] *,
+    .power-sidebar[data-mode="reduced"] *::before,
+    .power-sidebar[data-mode="reduced"] *::after {
+      scroll-behavior: auto !important;
+      animation-duration: 1ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 1ms !important;
+    }
+
+    .power-sidebar[data-mode="reduced"] .matrix-depth { opacity: 0.025; }
+
+    .brief {
+      align-self: center;
+      padding: 54px 0;
+    }
+
+    .brief-kicker {
+      color: var(--pod-pink);
+      font: 9px/1 "Share Tech Mono", monospace;
+      letter-spacing: 0.22em;
+    }
+
+    .brief h1 {
+      max-width: 540px;
+      margin: 17px 0 14px;
+      color: #e9ffef;
+      font-size: clamp(30px, 5vw, 62px);
+      font-weight: 400;
+      line-height: 0.98;
+      letter-spacing: -0.055em;
+    }
+
+    .brief > p {
+      max-width: 520px;
+      margin: 0;
+      color: #94aa9a;
+      font-size: 12px;
+      line-height: 1.9;
+    }
+
+    .control-map {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 7px;
+      max-width: 520px;
+      margin-top: 24px;
+    }
+
+    .control-map article {
+      min-height: 90px;
+      padding: 12px;
+      border: 1px solid rgba(89, 255, 138, 0.14);
+      background: rgba(5, 15, 9, 0.54);
+    }
+
+    .control-map b {
+      display: block;
+      color: var(--phosphor);
+      font: 9px/1.2 "Share Tech Mono", monospace;
+      letter-spacing: 0.1em;
+    }
+
+    .control-map span {
+      display: block;
+      margin-top: 7px;
+      color: #839689;
+      font-size: 10px;
+      line-height: 1.55;
+    }
+
+    .live-inspector {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 1px;
+      max-width: 520px;
+      margin-top: 9px;
+      border: 1px solid rgba(89, 255, 138, 0.14);
+      background: rgba(89, 255, 138, 0.14);
+    }
+
+    .live-inspector div {
+      min-width: 0;
+      padding: 9px;
+      background: #030806;
+    }
+
+    .live-inspector small {
+      display: block;
+      color: #4e6b57;
+      font: 6px/1 "Share Tech Mono", monospace;
+      letter-spacing: 0.1em;
+    }
+
+    .live-inspector output {
+      display: block;
+      overflow: hidden;
+      margin-top: 6px;
+      color: #c1dfc8;
+      font: 8px/1.15 "Share Tech Mono", monospace;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .scale-note {
+      max-width: 520px;
+      margin-top: 14px;
+      padding-left: 11px;
+      border-left: 2px solid rgba(255, 94, 75, 0.7);
+      color: #62796a;
+      font: 8px/1.7 "Share Tech Mono", monospace;
+      letter-spacing: 0.04em;
+    }
+
+    @keyframes life-pulse {
+      0%, 100% { opacity: 0.42; transform: scale(0.78); }
+      50% { opacity: 1; transform: scale(1.18); }
+    }
+
+    @keyframes error-pulse {
+      0%, 45% { opacity: 1; }
+      46%, 100% { opacity: 0.18; }
+    }
+
+    @keyframes blocked-flash {
+      0% { border-color: var(--pod-pink); box-shadow: inset 0 0 22px rgba(255, 93, 75, 0.2); }
+      100% { border-color: transparent; box-shadow: none; }
+    }
+
+    @media (max-width: 760px) {
+      .lab {
+        grid-template-columns: var(--sidebar-width);
+        justify-content: center;
+        padding: 0;
+      }
+
+      .brief { display: none; }
+    }
+
+    @media (max-width: 300px) {
+      :root { --sidebar-width: 100vw; }
+      .power-sidebar { border: 0; }
+    }
+  </style>
+</head>
+<body>
+  <main class="lab">
+    <section class="power-sidebar" id="powerSidebar" data-mode="cinematic" aria-label="Power Plant 工作区与会话侧边栏原型">
+      <header class="top-console">
+        <div class="brand-line">
+          <small>ZION // HUMAN POWER PLANT</small>
+          <strong>36-BAY NEURAL STACK</strong>
+          <span>DEMO DATA · ORIGINAL FUSION ASSET</span>
+        </div>
+        <div class="console-actions">
+          <button id="modeButton" type="button" title="切换体验模式">CINEMA</button>
+          <button id="soundButton" type="button" aria-pressed="false" title="切换机械声">SND</button>
+        </div>
+      </header>
+
+      <section class="plant-world" id="plantWorld" tabindex="0" aria-describedby="controlHelp">
+        <div class="matrix-depth" aria-hidden="true">アウエオカキケコサシスセソタツテナニヌネハヒホマミムメモヤヨラリワー012345789*+&lt;&gt;:|アウエオカキケコサシスセソタツテナニヌネハヒホマミムメモヤヨラリワー012345789*+&lt;&gt;:|</div>
+        <div class="power-wall" id="powerWall" aria-hidden="true"></div>
+        <canvas id="atmosphere" aria-hidden="true"></canvas>
+        <div class="layer-field" id="layerField"></div>
+        <div class="edge-flash" id="edgeFlash" aria-hidden="true"></div>
+      </section>
+
+      <footer class="bottom-console">
+        <button id="previousWorkspace" type="button" title="上一个工作区">W / ↑</button>
+        <div class="layer-readout"><span>WORKSPACE LAYER</span><b id="layerCounter">000 / ∞</b></div>
+        <button id="nextWorkspace" type="button" title="下一个工作区">S / ↓</button>
+      </footer>
+    </section>
+
+    <aside class="brief">
+      <div class="brief-kicker">POWER PLANT / INTERACTION PROTOTYPE</div>
+      <h1>一座建筑，而不是六槽弹仓。</h1>
+      <p>每个工作区是一层横向人类培育仓环带。用户一次只移动 10°，仓体沿墙内竖轴进入或离开纵深，径向朝向与透视压缩共同暗示这一圈拥有 36 个盘位；数据结束后，世界仍以休眠基础设施继续向下。</p>
+
+      <div class="control-map" id="controlHelp">
+        <article><b>W / S · 纵向滚轮</b><span>让整面 Power Plant 墙体上下移动，逐层切换工作区。</span></article>
+        <article><b>A / D · 横向滚动</b><span>令当前层环带旋转 10°，停止输入后机械锁定会话。</span></article>
+        <article><b>点击相邻培育仓</b><span>直接把上一个或下一个真实会话旋转到正面。</span></article>
+        <article><b>CINEMA / FOCUS / REDUCED</b><span>比较完整氛围、阅读模式与减少动态终态。</span></article>
+      </div>
+
+      <div class="live-inspector" aria-label="当前原型状态">
+        <div><small>LAYER</small><output id="inspectLayer">000</output></div>
+        <div><small>WORKSPACE</small><output id="inspectWorkspace">deepseek-zion</output></div>
+        <div><small>SESSION</small><output id="inspectSession">01 / 07</output></div>
+        <div><small>RING</small><output id="inspectAngle">0°</output></div>
+      </div>
+
+      <div class="scale-note">36 个盘位是固定建筑尺度，不等于 36 条伪造会话。只有带铭牌与状态灯的仓映射真实 Demo 会话；其余是休眠结构。生产接入后只替换数据层，不改变空间语法。</div>
+    </aside>
+  </main>
+
+  <script>
+    const POD_ASSET = "./assets/power-plant-carousel/human-pod-ink.png";
+    const LAYER_GAP = 198;
+    const BAY_COUNT = 36;
+    const BAY_STEP = 10;
+    const ORBIT_RADIUS = 88;
+    const MODES = ["cinematic", "focus", "reduced"];
+    const STATUS_COLORS = {
+      ready: "#48ff86",
+      thinking: "#ffc75a",
+      streaming: "#72e6db",
+      error: "#ff5b76",
+      archived: "#526159",
+      dormant: "#26342b"
+    };
+
+    const fixedWorkspaces = [
+      {
+        name: "deepseek-zion",
+        sessions: [
+          ["阅读项目说明文件", "ready", "15 MIN"],
+          ["WSL 环境检测确认", "thinking", "21 H"],
+          ["更新到 GitHub 最新提交", "streaming", "2 D"],
+          ["Power Plant 侧栏设计", "ready", "NOW"],
+          ["Single number input", "archived", "1 D"],
+          ["安装 dsh 命令未找到报错", "error", "2 H"],
+          ["秋天的夜晚", "ready", "3 D"]
+        ]
+      },
+      {
+        name: "claude-code-toolkit",
+        sessions: Array.from({ length: 18 }, (_, index) => [
+          ["Hooks 规则核对", "Launcher 环境变量", "更新到 GitHub 最新提交", "终端连接状态", "安全边界复查"][index % 5] + ` / ${String(index + 1).padStart(2, "0")}`,
+          ["ready", "thinking", "streaming", "ready", "archived"][index % 5],
+          `${index + 1} H`
+        ])
+      },
+      {
+        name: "skills-guide",
+        sessions: Array.from({ length: 42 }, (_, index) => [
+          ["技能索引校验", "文档来源追踪", "命令示例复核", "中文指南生成"][index % 4] + ` / SECTOR ${String(index + 1).padStart(2, "0")}`,
+          ["streaming", "ready", "thinking", "archived", "ready", "error"][index % 6],
+          `${1 + (index % 9)} D`
+        ])
+      },
+      {
+        name: "未分组",
+        sessions: [
+          ["你好", "ready", "1 D"],
+          ["秋天的夜晚", "archived", "2 D"],
+          ["电厂远景实验", "streaming", "NOW"]
+        ]
+      }
+    ];
+
+    const workspaceCache = new Map();
+    const layerElements = new Map();
+    let currentWorkspace = 0;
+    let workspaceMotionTimer = 0;
+    let wheelWorkspaceLocked = false;
+    let wheelSessionLocked = false;
+    let pointerStart = null;
+    let soundEnabled = false;
+    let audioContext = null;
+
+    const powerSidebar = document.getElementById("powerSidebar");
+    const plantWorld = document.getElementById("plantWorld");
+    const layerField = document.getElementById("layerField");
+    const powerWall = document.getElementById("powerWall");
+    const edgeFlash = document.getElementById("edgeFlash");
+    const modeButton = document.getElementById("modeButton");
+    const soundButton = document.getElementById("soundButton");
+    const layerCounter = document.getElementById("layerCounter");
+    const inspectLayer = document.getElementById("inspectLayer");
+    const inspectWorkspace = document.getElementById("inspectWorkspace");
+    const inspectSession = document.getElementById("inspectSession");
+    const inspectAngle = document.getElementById("inspectAngle");
+
+    function stableRand(seed) {
+      return Math.abs(Math.sin(seed * 12.9898 + 78.233) * 43758.5453) % 1;
+    }
+
+    function wrap(value, count) {
+      return ((value % count) + count) % count;
+    }
+
+    function normalizeAngle(value) {
+      return ((value + 180) % 360 + 360) % 360 - 180;
+    }
+
+    function circularDistance(slot, frontSlot) {
+      let distance = slot - frontSlot;
+      if (distance > BAY_COUNT / 2) distance -= BAY_COUNT;
+      if (distance < -BAY_COUNT / 2) distance += BAY_COUNT;
+      return distance;
+    }
+
+    function createProceduralWorkspace(index) {
+      const count = 8 + ((index * 17) % 45);
+      const states = ["ready", "thinking", "streaming", "ready", "archived", "ready", "error"];
+      const subjects = ["NEURAL ROUTE", "POD PRESSURE", "CODEX RELAY", "MEMORY TRACE", "ZION UPLINK", "TOOL WRITE"];
+      return {
+        name: `DEMO-STACK-${String(index).padStart(3, "0")}`,
+        sessions: Array.from({ length: count }, (_, sessionIndex) => [
+          `${subjects[(index + sessionIndex) % subjects.length]} / ${String(sessionIndex + 1).padStart(2, "0")}`,
+          states[(index * 3 + sessionIndex) % states.length],
+          `${1 + ((index + sessionIndex) % 23)} H`
+        ])
+      };
+    }
+
+    function getWorkspace(index) {
+      if (!workspaceCache.has(index)) {
+        const source = fixedWorkspaces[index] || createProceduralWorkspace(index);
+        workspaceCache.set(index, {
+          ...source,
+          index,
+          sessionIndex: 0,
+          displaySessionIndex: 0,
+          rotation: 0,
+          settleTimer: 0
+        });
+      }
+      return workspaceCache.get(index);
+    }
+
+    function sessionAt(workspace, index) {
+      return workspace.sessions[wrap(index, workspace.sessions.length)];
+    }
+
+    function createLayer(index) {
+      const workspace = getWorkspace(index);
+      const layer = document.createElement("article");
+      layer.className = "power-layer";
+      layer.dataset.index = String(index);
+      layer.setAttribute("aria-label", `工作区 ${workspace.name}`);
+      layer.innerHTML = `
+        <div class="workspace-stencil">
+          <b>${workspace.name}</b>
+          <small>LAYER ${String(index).padStart(3, "0")} · ${workspace.sessions.length} PODS</small>
+        </div>
+        <div class="pod-ring"></div>
+        <div class="session-plaque" aria-live="polite"></div>
+      `;
+
+      const ring = layer.querySelector(".pod-ring");
+      for (let slot = 0; slot < BAY_COUNT; slot += 1) {
+        const bay = document.createElement("button");
+        bay.className = "pod-bay is-dormant";
+        bay.type = "button";
+        bay.dataset.slot = String(slot);
+        bay.dataset.status = "dormant";
+        bay.dataset.interactive = "false";
+        bay.tabIndex = -1;
+        bay.innerHTML = `
+          <img class="pod-visual" src="${POD_ASSET}" alt="" draggable="false" />
+          <i class="status-lamp" aria-hidden="true"></i>
+          <span class="slot-mark">BAY ${String(slot + 1).padStart(2, "0")}</span>
+        `;
+        bay.addEventListener("click", () => {
+          if (index !== currentWorkspace) return;
+          const delta = Number(bay.dataset.sessionDelta || 0);
+          if (Math.abs(delta) === 1) moveSession(delta);
+        });
+        ring.appendChild(bay);
+      }
+
+      layerField.appendChild(layer);
+      layerElements.set(index, layer);
+      updateLayer(layer, workspace, index === currentWorkspace);
+      return layer;
+    }
+
+    function ensureLayers() {
+      const minimum = Math.max(0, currentWorkspace - 3);
+      const maximum = currentWorkspace + 3;
+      for (let index = minimum; index <= maximum; index += 1) {
+        if (!layerElements.has(index)) createLayer(index);
+      }
+      window.setTimeout(() => {
+        const activeMinimum = Math.max(0, currentWorkspace - 3);
+        const activeMaximum = currentWorkspace + 3;
+        layerElements.forEach((layer, index) => {
+          if (index < activeMinimum || index > activeMaximum) {
+            layer.remove();
+            layerElements.delete(index);
+          }
+        });
+      }, 820);
+    }
+
+    function updateLayer(layer, workspace, isCurrent) {
+      const frontSlot = wrap(Math.round(-workspace.rotation / BAY_STEP), BAY_COUNT);
+      const plaqueSession = sessionAt(workspace, workspace.displaySessionIndex);
+      const [plaqueName, plaqueStatus, plaqueTime] = plaqueSession;
+      layer.classList.toggle("is-current", isCurrent);
+      layer.style.setProperty("--status-color", STATUS_COLORS[plaqueStatus]);
+
+      const plaque = layer.querySelector(".session-plaque");
+      plaque.innerHTML = `
+        <small><span>${plaqueStatus.toUpperCase()}</span><span>${plaqueTime}</span></small>
+        <strong>${plaqueName}</strong>
+        <span>SESSION ${String(workspace.displaySessionIndex + 1).padStart(2, "0")} / ${String(workspace.sessions.length).padStart(2, "0")} · RING ${workspace.rotation}°</span>
+      `;
+
+      layer.querySelectorAll(".pod-bay").forEach((bay) => {
+        const slot = Number(bay.dataset.slot);
+        const angle = normalizeAngle(slot * BAY_STEP + workspace.rotation);
+        const distance = circularDistance(slot, frontSlot);
+        const absAngle = Math.abs(angle);
+        const visible = absAngle <= 92;
+        const radians = angle * Math.PI / 180;
+        const depth = Math.cos(radians);
+        const opacity = visible ? Math.max(0.055, 0.96 - absAngle * 0.0092) : 0;
+        bay.style.transform = `rotateY(${angle.toFixed(2)}deg) translateZ(${ORBIT_RADIUS}px)`;
+        bay.style.opacity = String(opacity);
+        bay.style.zIndex = String(Math.round((depth + 1) * 100));
+        bay.style.pointerEvents = visible && isCurrent && Math.abs(distance) <= 1 ? "auto" : "none";
+
+        const mapsRealSession = Math.abs(distance) <= 1;
+        const sessionDelta = distance;
+        const mappedSession = mapsRealSession ? sessionAt(workspace, workspace.sessionIndex + sessionDelta) : null;
+        const status = mappedSession ? mappedSession[1] : "dormant";
+        const isFront = distance === 0;
+        const isNeighbor = Math.abs(distance) === 1;
+
+        bay.classList.toggle("is-front", isFront);
+        bay.classList.toggle("is-neighbor", isNeighbor);
+        bay.classList.toggle("is-dormant", !mapsRealSession);
+        bay.dataset.status = status;
+        bay.dataset.sessionDelta = String(sessionDelta);
+        bay.dataset.interactive = String(isCurrent && isNeighbor);
+        bay.style.setProperty("--status-color", STATUS_COLORS[status]);
+        bay.tabIndex = isCurrent && isNeighbor ? 0 : -1;
+        bay.setAttribute("aria-label", mappedSession ? `${sessionDelta < 0 ? "上一个" : sessionDelta > 0 ? "下一个" : "当前"}会话：${mappedSession[0]}，状态 ${mappedSession[1]}` : "休眠培育仓盘位");
+      });
+    }
+
+    function updateScene() {
+      ensureLayers();
+      layerElements.forEach((layer, index) => {
+        const distance = index - currentWorkspace;
+        const absolute = Math.abs(distance);
+        const y = distance * LAYER_GAP;
+        const scale = Math.max(0.76, 1 - absolute * 0.075);
+        layer.style.transform = `translate3d(0, ${y}px, ${-absolute * 34}px) scale(${scale})`;
+        layer.style.opacity = String(Math.max(0.06, 1 - absolute * 0.31));
+        layer.style.filter = `brightness(${Math.max(0.22, 1 - absolute * 0.28)}) saturate(${Math.max(0.35, 1 - absolute * 0.2)})`;
+        updateLayer(layer, getWorkspace(index), index === currentWorkspace);
+      });
+      powerWall.style.backgroundPosition = `0 0, center ${-currentWorkspace * 113}px`;
+      updateInspector();
+    }
+
+    function updateInspector() {
+      const workspace = getWorkspace(currentWorkspace);
+      layerCounter.textContent = `${String(currentWorkspace).padStart(3, "0")} / ∞`;
+      inspectLayer.textContent = String(currentWorkspace).padStart(3, "0");
+      inspectWorkspace.textContent = workspace.name;
+      inspectSession.textContent = `${String(workspace.sessionIndex + 1).padStart(2, "0")} / ${String(workspace.sessions.length).padStart(2, "0")}`;
+      inspectAngle.textContent = `${workspace.rotation}°`;
+    }
+
+    function currentLayer() {
+      return layerElements.get(currentWorkspace);
+    }
+
+    function settleSession(workspace, layer) {
+      workspace.displaySessionIndex = workspace.sessionIndex;
+      layer.classList.remove("is-rotating");
+      updateLayer(layer, workspace, true);
+      updateInspector();
+      emitPulse("session");
+      playLock();
+    }
+
+    function moveSession(delta) {
+      const workspace = getWorkspace(currentWorkspace);
+      const layer = currentLayer();
+      if (!layer || workspace.sessions.length < 2) return;
+      workspace.sessionIndex = wrap(workspace.sessionIndex + delta, workspace.sessions.length);
+      workspace.rotation -= delta * BAY_STEP;
+      layer.classList.add("is-rotating");
+      updateLayer(layer, workspace, true);
+      updateInspector();
+      playServo("session");
+      window.clearTimeout(workspace.settleTimer);
+      if (powerSidebar.dataset.mode === "reduced") {
+        settleSession(workspace, layer);
+      } else {
+        workspace.settleTimer = window.setTimeout(() => settleSession(workspace, layer), 620);
+      }
+    }
+
+    function flashBlockedEdge() {
+      edgeFlash.classList.remove("is-blocked");
+      void edgeFlash.offsetWidth;
+      edgeFlash.classList.add("is-blocked");
+    }
+
+    function moveWorkspace(delta) {
+      const target = Math.max(0, currentWorkspace + delta);
+      if (target === currentWorkspace) {
+        flashBlockedEdge();
+        return;
+      }
+      const oldLayer = currentLayer();
+      oldLayer?.classList.add("is-rotating");
+      currentWorkspace = target;
+      updateScene();
+      playServo("building");
+      emitPulse("workspace");
+      window.clearTimeout(workspaceMotionTimer);
+      workspaceMotionTimer = window.setTimeout(() => {
+        layerElements.forEach((layer, index) => layer.classList.toggle("is-rotating", false));
+        const workspace = getWorkspace(currentWorkspace);
+        workspace.displaySessionIndex = workspace.sessionIndex;
+        const layer = currentLayer();
+        if (layer) updateLayer(layer, workspace, true);
+        playLock();
+      }, powerSidebar.dataset.mode === "reduced" ? 0 : 760);
+    }
+
+    function setMode(mode) {
+      powerSidebar.dataset.mode = mode;
+      modeButton.textContent = mode === "cinematic" ? "CINEMA" : mode.toUpperCase();
+      if (mode === "reduced") drawAtmosphere(performance.now(), true);
+      try { sessionStorage.setItem("power-plant-mode", mode); } catch {}
+    }
+
+    function cycleMode() {
+      const current = MODES.indexOf(powerSidebar.dataset.mode);
+      setMode(MODES[(current + 1) % MODES.length]);
+    }
+
+    function ensureAudio() {
+      if (!audioContext) audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      if (audioContext.state === "suspended") audioContext.resume();
+      return audioContext;
+    }
+
+    function playServo(kind) {
+      if (!soundEnabled) return;
+      const context = ensureAudio();
+      const oscillator = context.createOscillator();
+      const gain = context.createGain();
+      const now = context.currentTime;
+      const duration = kind === "building" ? 0.58 : 0.34;
+      oscillator.type = "sawtooth";
+      oscillator.frequency.setValueAtTime(kind === "building" ? 34 : 58, now);
+      oscillator.frequency.exponentialRampToValueAtTime(kind === "building" ? 46 : 38, now + duration);
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.exponentialRampToValueAtTime(kind === "building" ? 0.035 : 0.022, now + 0.035);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+      oscillator.connect(gain).connect(context.destination);
+      oscillator.start(now);
+      oscillator.stop(now + duration + 0.02);
+    }
+
+    function playLock() {
+      if (!soundEnabled) return;
+      const context = ensureAudio();
+      const oscillator = context.createOscillator();
+      const gain = context.createGain();
+      const now = context.currentTime;
+      oscillator.type = "square";
+      oscillator.frequency.setValueAtTime(92, now);
+      oscillator.frequency.exponentialRampToValueAtTime(38, now + 0.09);
+      gain.gain.setValueAtTime(0.032, now);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.12);
+      oscillator.connect(gain).connect(context.destination);
+      oscillator.start(now);
+      oscillator.stop(now + 0.14);
+    }
+
+    function toggleSound() {
+      soundEnabled = !soundEnabled;
+      soundButton.setAttribute("aria-pressed", String(soundEnabled));
+      soundButton.textContent = soundEnabled ? "ON" : "SND";
+      if (soundEnabled) {
+        ensureAudio();
+        playLock();
+      }
+    }
+
+    modeButton.addEventListener("click", cycleMode);
+    soundButton.addEventListener("click", toggleSound);
+    document.getElementById("previousWorkspace").addEventListener("click", () => moveWorkspace(-1));
+    document.getElementById("nextWorkspace").addEventListener("click", () => moveWorkspace(1));
+
+    plantWorld.addEventListener("wheel", (event) => {
+      event.preventDefault();
+      const horizontalIntent = event.shiftKey || Math.abs(event.deltaX) > Math.abs(event.deltaY);
+      if (horizontalIntent) {
+        const delta = event.shiftKey ? event.deltaY : event.deltaX;
+        if (wheelSessionLocked || Math.abs(delta) < 2) return;
+        wheelSessionLocked = true;
+        moveSession(delta > 0 ? 1 : -1);
+        window.setTimeout(() => { wheelSessionLocked = false; }, 145);
+      } else {
+        if (wheelWorkspaceLocked || Math.abs(event.deltaY) < 2) return;
+        wheelWorkspaceLocked = true;
+        moveWorkspace(event.deltaY > 0 ? 1 : -1);
+        window.setTimeout(() => { wheelWorkspaceLocked = false; }, 210);
+      }
+    }, { passive: false });
+
+    plantWorld.addEventListener("pointerdown", (event) => {
+      pointerStart = { x: event.clientX, y: event.clientY };
+      plantWorld.setPointerCapture?.(event.pointerId);
+    });
+
+    plantWorld.addEventListener("pointerup", (event) => {
+      if (!pointerStart) return;
+      const dx = event.clientX - pointerStart.x;
+      const dy = event.clientY - pointerStart.y;
+      pointerStart = null;
+      if (Math.max(Math.abs(dx), Math.abs(dy)) < 26) return;
+      if (Math.abs(dx) > Math.abs(dy)) moveSession(dx < 0 ? 1 : -1);
+      else moveWorkspace(dy < 0 ? 1 : -1);
+    });
+
+    window.addEventListener("keydown", (event) => {
+      if (["INPUT", "TEXTAREA"].includes(document.activeElement?.tagName) || document.activeElement?.isContentEditable) return;
+      if (event.key === "w" || event.key === "W" || event.key === "ArrowUp") {
+        event.preventDefault();
+        moveWorkspace(-1);
+      }
+      if (event.key === "s" || event.key === "S" || event.key === "ArrowDown") {
+        event.preventDefault();
+        moveWorkspace(1);
+      }
+      if (event.key === "a" || event.key === "A" || event.key === "ArrowLeft") {
+        event.preventDefault();
+        moveSession(-1);
+      }
+      if (event.key === "d" || event.key === "D" || event.key === "ArrowRight") {
+        event.preventDefault();
+        moveSession(1);
+      }
+    });
+
+    const canvas = document.getElementById("atmosphere");
+    const context = canvas.getContext("2d");
+    const motes = Array.from({ length: 30 }, (_, index) => ({
+      x: 0.22 + stableRand(index * 2.7) * 0.77,
+      y: stableRand(index * 5.9),
+      speed: 0.000018 + stableRand(index * 8.2) * 0.000045,
+      size: 0.5 + stableRand(index * 4.4) * 1.4,
+      phase: stableRand(index * 7.1) * Math.PI * 2
+    }));
+    const pulses = [];
+    let canvasWidth = 0;
+    let canvasHeight = 0;
+    let dpr = 1;
+
+    function resizeCanvas() {
+      const rect = plantWorld.getBoundingClientRect();
+      dpr = Math.min(2, window.devicePixelRatio || 1);
+      canvasWidth = Math.max(1, Math.round(rect.width));
+      canvasHeight = Math.max(1, Math.round(rect.height));
+      canvas.width = Math.round(canvasWidth * dpr);
+      canvas.height = Math.round(canvasHeight * dpr);
+      canvas.style.width = `${canvasWidth}px`;
+      canvas.style.height = `${canvasHeight}px`;
+      context.setTransform(dpr, 0, 0, dpr, 0, 0);
+      drawAtmosphere(performance.now(), true);
+    }
+
+    function emitPulse(type) {
+      pulses.push({ type, born: performance.now() });
+    }
+
+    function drawAtmosphere(now, force = false) {
+      if (!canvasWidth || !canvasHeight) return;
+      const mode = powerSidebar.dataset.mode;
+      context.clearRect(0, 0, canvasWidth, canvasHeight);
+
+      const voidGradient = context.createLinearGradient(76, 0, canvasWidth, 0);
+      voidGradient.addColorStop(0, "rgba(24, 92, 50, 0.08)");
+      voidGradient.addColorStop(0.52, "rgba(1, 9, 4, 0.02)");
+      voidGradient.addColorStop(1, "rgba(0, 0, 0, 0.66)");
+      context.fillStyle = voidGradient;
+      context.fillRect(70, 0, canvasWidth - 70, canvasHeight);
+
+      const moteCount = mode === "cinematic" ? motes.length : mode === "focus" ? 10 : 0;
+      for (let index = 0; index < moteCount; index += 1) {
+        const mote = motes[index];
+        const y = ((mote.y + now * mote.speed) % 1) * canvasHeight;
+        const shimmer = 0.24 + (Math.sin(now * 0.0014 + mote.phase) + 1) * 0.15;
+        context.fillStyle = `rgba(82, 255, 133, ${shimmer})`;
+        context.fillRect(mote.x * canvasWidth, y, mote.size, mote.size * 2.6);
+      }
+
+      for (let index = pulses.length - 1; index >= 0; index -= 1) {
+        const pulse = pulses[index];
+        const age = now - pulse.born;
+        const duration = pulse.type === "workspace" ? 760 : 540;
+        const progress = Math.min(1, age / duration);
+        if (progress >= 1 || mode === "reduced") {
+          pulses.splice(index, 1);
+          continue;
+        }
+        context.save();
+        if (pulse.type === "session") {
+          const x = 62 + progress * 205;
+          const y = canvasHeight * 0.5 + Math.sin(progress * Math.PI) * -9;
+          const gradient = context.createLinearGradient(x - 35, y, x + 10, y);
+          gradient.addColorStop(0, "rgba(72,255,134,0)");
+          gradient.addColorStop(0.75, `rgba(72,255,134,${0.42 * (1 - progress)})`);
+          gradient.addColorStop(1, `rgba(220,255,229,${0.9 * (1 - progress)})`);
+          context.strokeStyle = gradient;
+          context.lineWidth = 2.2;
+          context.beginPath();
+          context.moveTo(58, y);
+          context.bezierCurveTo(106, y - 8, 182, y + 7, x, y);
+          context.stroke();
+        } else {
+          const y = progress * canvasHeight;
+          context.strokeStyle = `rgba(107,255,151,${0.32 * (1 - progress)})`;
+          context.lineWidth = 1;
+          context.beginPath();
+          context.moveTo(0, y);
+          context.lineTo(108, y);
+          context.stroke();
+        }
+        context.restore();
+      }
+
+      if (!force && !document.hidden && mode !== "reduced") requestAnimationFrame(drawAtmosphere);
+    }
+
+    new ResizeObserver(resizeCanvas).observe(plantWorld);
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden && powerSidebar.dataset.mode !== "reduced") requestAnimationFrame(drawAtmosphere);
+    });
+
+    const systemReduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    let storedMode = null;
+    try { storedMode = sessionStorage.getItem("power-plant-mode"); } catch {}
+    setMode(MODES.includes(storedMode) ? storedMode : systemReduced ? "reduced" : "cinematic");
+    getWorkspace(0);
+    updateScene();
+    resizeCanvas();
+    if (powerSidebar.dataset.mode !== "reduced") requestAnimationFrame(drawAtmosphere);
+  </script>
+</body>
+</html>
