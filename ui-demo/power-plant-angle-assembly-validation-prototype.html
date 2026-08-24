@@ -1,0 +1,832 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Power Plant 三角度装配校验台</title>
+  <!--
+    THROWAWAY UI PROTOTYPE
+    问题：−30° / 0° / +30° 三套墙段、接口与培育仓素材，能否在 280px 侧边栏中
+    保持接缝、显示高度、整体轮廓与切换连续性？
+    三种校验视图通过 ?variant=A|B|C 切换。
+  -->
+  <style>
+    @font-face {
+      font-family: "Share Tech Mono Local";
+      src: url("../src/renderer/src/assets/fonts/ShareTechMono-Regular.woff2") format("woff2");
+      font-display: swap;
+    }
+
+    @font-face {
+      font-family: "Matrix Code Local";
+      src: url("../src/renderer/src/assets/fonts/Matrix-Code.ttf") format("truetype");
+      font-display: swap;
+    }
+
+    :root {
+      color-scheme: dark;
+      --void: #010302;
+      --surface: #06100b;
+      --surface-2: #0a1710;
+      --phosphor: #48ff81;
+      --phosphor-hot: #d8ffe1;
+      --phosphor-dim: #277345;
+      --oxide: #ff5c43;
+      --oxide-hot: #ffb09c;
+      --steel: #83988a;
+      --muted: #63766a;
+      --line: rgb(77 255 132 / 21%);
+      --slot-width: 232px;
+      --slot-height: 68px;
+      --wall-x: -9px;
+      --wall-w: 43px;
+      --connector-x: 27px;
+      --connector-w: 31px;
+      --pod-x: 51px;
+      --pod-w: 178px;
+    }
+
+    * { box-sizing: border-box; }
+
+    html,
+    body { min-height: 100%; }
+
+    body {
+      margin: 0;
+      overflow-x: hidden;
+      background:
+        radial-gradient(circle at 21% 28%, rgb(50 255 117 / 7%), transparent 24rem),
+        linear-gradient(90deg, transparent 0 279px, rgb(72 255 129 / 15%) 280px, transparent 281px),
+        #010302;
+      color: #b4c9ba;
+      font: 12px/1.45 "Share Tech Mono Local", "Microsoft YaHei UI", monospace;
+    }
+
+    body::before {
+      content: "アキサテナメヨリ012345789";
+      position: fixed;
+      inset: 0;
+      z-index: -1;
+      overflow: hidden;
+      color: rgb(46 255 112 / 3%);
+      font: 52px/1.7 "Matrix Code Local", monospace;
+      letter-spacing: 0.3em;
+      word-break: break-all;
+      pointer-events: none;
+    }
+
+    button { font: inherit; }
+
+    .lab-shell {
+      min-height: 100vh;
+      display: grid;
+      grid-template-columns: 280px minmax(420px, 1fr);
+    }
+
+    .sidebar-rig {
+      position: relative;
+      width: 280px;
+      min-height: 100vh;
+      overflow: hidden;
+      border-right: 1px solid rgb(74 255 126 / 28%);
+      background:
+        linear-gradient(180deg, rgb(72 255 129 / 4%), transparent 120px),
+        #020604;
+      box-shadow: 12px 0 42px rgb(0 0 0 / 78%);
+    }
+
+    .rig-header {
+      height: 90px;
+      padding: 17px 14px 12px;
+      border-bottom: 1px solid var(--line);
+      background: linear-gradient(180deg, rgb(5 18 11 / 98%), rgb(2 7 4 / 92%));
+    }
+
+    .rig-kicker,
+    .panel-kicker {
+      display: block;
+      color: var(--phosphor);
+      font-size: 8px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+    }
+
+    h1,
+    h2,
+    p { margin: 0; }
+
+    h1 {
+      margin-top: 5px;
+      color: #d5e8d9;
+      font-size: 20px;
+      font-weight: 500;
+    }
+
+    .rig-header p {
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 8px;
+      letter-spacing: 0.08em;
+    }
+
+    .variant-view { display: none; }
+    body[data-variant="A"] [data-view="A"],
+    body[data-variant="B"] [data-view="B"],
+    body[data-variant="C"] [data-view="C"] { display: block; }
+
+    .angle-stack { padding: 8px 10px 80px; }
+
+    .angle-card {
+      position: relative;
+      margin-bottom: 8px;
+      border: 1px solid rgb(76 255 130 / 17%);
+      background: linear-gradient(180deg, rgb(8 22 14 / 92%), rgb(1 4 2 / 96%));
+    }
+
+    .angle-card header,
+    .natural-card header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 30px;
+      padding: 0 8px;
+      border-bottom: 1px solid rgb(75 255 128 / 12%);
+      color: #92a999;
+      font-size: 8px;
+      letter-spacing: 0.12em;
+    }
+
+    .angle-card header strong,
+    .natural-card header strong {
+      color: var(--phosphor-hot);
+      font-weight: 500;
+    }
+
+    .locked-stage {
+      position: relative;
+      height: 98px;
+      overflow: hidden;
+      background:
+        linear-gradient(90deg, transparent 17px, rgb(73 255 129 / 7%) 18px, transparent 19px),
+        repeating-linear-gradient(90deg, transparent 0 11px, rgb(74 255 128 / 3%) 12px),
+        #010503;
+    }
+
+    .assembly {
+      position: absolute;
+      left: 14px;
+      top: 15px;
+      width: var(--slot-width);
+      height: var(--slot-height);
+      isolation: isolate;
+    }
+
+    .assembly img {
+      position: absolute;
+      display: block;
+      object-fit: fill;
+      pointer-events: none;
+      user-select: none;
+      -webkit-user-drag: none;
+    }
+
+    .assembly img.wall {
+      z-index: 1;
+      left: var(--wall-x);
+      top: 0;
+      width: var(--wall-w);
+      height: 68px;
+    }
+
+    .assembly img.connector {
+      z-index: 3;
+      left: var(--connector-x);
+      top: 5px;
+      width: var(--connector-w);
+      height: 58px;
+    }
+
+    .assembly img.pod {
+      z-index: 2;
+      left: var(--pod-x);
+      top: 5px;
+      width: var(--pod-w);
+      height: 58px;
+    }
+
+    .seam {
+      position: absolute;
+      z-index: 8;
+      top: -3px;
+      bottom: -3px;
+      width: 1px;
+      border-left: 1px dashed rgb(89 255 143 / 72%);
+      pointer-events: none;
+    }
+
+    .seam.wall { left: 34px; }
+    .seam.pod { left: 58px; border-color: rgb(255 120 92 / 76%); }
+
+    .probe-label {
+      position: absolute;
+      z-index: 9;
+      top: -10px;
+      padding: 0 2px;
+      background: #010403;
+      color: var(--phosphor);
+      font-size: 6px;
+    }
+
+    .probe-label.wall { left: 22px; }
+    .probe-label.pod { left: 50px; color: var(--oxide-hot); }
+
+    .card-readout {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1px;
+      border-top: 1px solid rgb(74 255 128 / 12%);
+      background: rgb(74 255 128 / 10%);
+    }
+
+    .card-readout span {
+      padding: 5px 4px;
+      background: #020805;
+      color: var(--muted);
+      font-size: 7px;
+      text-align: center;
+    }
+
+    .natural-stack { padding: 9px 10px 90px; }
+
+    .natural-card {
+      margin-bottom: 9px;
+      border: 1px solid rgb(255 176 156 / 18%);
+      background: #020604;
+    }
+
+    .natural-viewport {
+      position: relative;
+      height: 102px;
+      overflow-x: auto;
+      overflow-y: hidden;
+      scrollbar-width: thin;
+      scrollbar-color: #31533d #020604;
+      background:
+        linear-gradient(90deg, transparent 231px, rgb(255 92 67 / 52%) 232px, transparent 233px),
+        repeating-linear-gradient(90deg, transparent 0 11px, rgb(75 255 130 / 4%) 12px),
+        #010403;
+    }
+
+    .natural-assembly {
+      position: absolute;
+      left: 10px;
+      top: 17px;
+      display: flex;
+      align-items: center;
+      width: max-content;
+      min-width: 232px;
+      height: 68px;
+    }
+
+    .natural-assembly img { display: block; object-fit: contain; flex: none; }
+    .natural-assembly .wall { height: 68px; }
+    .natural-assembly .connector { z-index: 3; height: 58px; margin-left: -7px; }
+    .natural-assembly .pod { z-index: 2; height: 58px; margin-left: -7px; }
+
+    .natural-readout {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 6px 8px;
+      border-top: 1px solid rgb(255 176 156 / 12%);
+      color: var(--muted);
+      font-size: 7px;
+    }
+
+    .status-pass { color: var(--phosphor); }
+    .status-fail { color: var(--oxide-hot); }
+
+    .transition-console { padding: 10px 10px 90px; }
+
+    .transition-stage {
+      position: relative;
+      height: 286px;
+      overflow: hidden;
+      border: 1px solid rgb(75 255 130 / 19%);
+      background:
+        radial-gradient(circle at 48px 141px, rgb(74 255 130 / 8%), transparent 86px),
+        repeating-linear-gradient(0deg, transparent 0 11px, rgb(75 255 130 / 4%) 12px),
+        #010403;
+    }
+
+    .transition-stage::before {
+      content: "CAMERA / FRONT LOCK";
+      position: absolute;
+      left: 8px;
+      top: 7px;
+      color: rgb(74 255 130 / 42%);
+      font-size: 7px;
+      letter-spacing: 0.12em;
+    }
+
+    .transition-stage .assembly {
+      left: 14px;
+      top: 96px;
+      opacity: 0;
+      transform: translateX(0) scale(1);
+      transform-origin: 28px 50%;
+      transition: opacity 300ms ease, filter 300ms ease, transform 420ms cubic-bezier(.2,.8,.2,1);
+    }
+
+    .transition-stage[data-cut="hard"] .assembly { transition: none; }
+    .transition-stage .assembly[data-active="true"] { z-index: 5; opacity: 1; }
+
+    .transition-stage[data-onion="true"] .assembly { opacity: 0.18; filter: grayscale(1) hue-rotate(65deg) brightness(1.2); }
+    .transition-stage[data-onion="true"] .assembly[data-active="true"] { opacity: 0.9; filter: none; }
+    .transition-stage[data-onion="true"] .assembly[data-angle="-30"] { transform: translateX(-5px); }
+    .transition-stage[data-onion="true"] .assembly[data-angle="30"] { transform: translateX(5px); }
+
+    .axis-line {
+      position: absolute;
+      z-index: 12;
+      left: 18px;
+      top: 58px;
+      width: 1px;
+      height: 170px;
+      background: linear-gradient(transparent, var(--phosphor), transparent);
+      box-shadow: 0 0 8px rgb(72 255 129 / 52%);
+      pointer-events: none;
+    }
+
+    .angle-hud {
+      position: absolute;
+      left: 9px;
+      right: 9px;
+      bottom: 10px;
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      padding-top: 8px;
+      border-top: 1px solid rgb(72 255 129 / 18%);
+      pointer-events: none;
+    }
+
+    .angle-hud strong { color: var(--phosphor-hot); font-size: 18px; font-weight: 500; }
+    .angle-hud span { color: var(--muted); font-size: 7px; text-align: right; }
+
+    .control-bank {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 5px;
+      margin-top: 8px;
+    }
+
+    .control-bank button,
+    .mode-bank button,
+    .prototype-switcher button {
+      border: 1px solid #294b35;
+      background: #06100a;
+      color: #849d8b;
+      cursor: pointer;
+    }
+
+    .control-bank button { height: 30px; font-size: 8px; }
+    .control-bank button[aria-pressed="true"] { border-color: var(--phosphor); color: var(--phosphor-hot); box-shadow: inset 0 -2px 0 var(--phosphor); }
+
+    .mode-bank {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 5px;
+      margin-top: 6px;
+    }
+
+    .mode-bank button { height: 28px; font-size: 8px; }
+    .mode-bank button[aria-pressed="true"] { border-color: var(--oxide); color: var(--oxide-hot); }
+
+    .inspector {
+      min-width: 0;
+      padding: 28px 32px 100px;
+      background: linear-gradient(135deg, rgb(4 13 8 / 96%), rgb(1 3 2 / 88%));
+    }
+
+    .inspector-header {
+      max-width: 760px;
+      padding-bottom: 18px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .inspector-header h2 {
+      margin-top: 5px;
+      color: #d5e8d9;
+      font-size: clamp(24px, 4vw, 46px);
+      font-weight: 400;
+      letter-spacing: -0.04em;
+    }
+
+    .inspector-header p {
+      max-width: 640px;
+      margin-top: 10px;
+      color: #799082;
+      font-size: 11px;
+    }
+
+    .variant-copy { display: none; }
+    body[data-variant="A"] .variant-copy[data-copy="A"],
+    body[data-variant="B"] .variant-copy[data-copy="B"],
+    body[data-variant="C"] .variant-copy[data-copy="C"] { display: block; }
+
+    .metric-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(140px, 1fr));
+      gap: 10px;
+      max-width: 760px;
+      margin-top: 20px;
+    }
+
+    .metric {
+      min-height: 92px;
+      padding: 12px;
+      border: 1px solid var(--line);
+      background: rgb(5 15 9 / 76%);
+    }
+
+    .metric small { color: var(--muted); font-size: 8px; letter-spacing: 0.1em; }
+    .metric strong { display: block; margin-top: 8px; color: var(--phosphor-hot); font-size: 21px; font-weight: 500; }
+    .metric em { display: block; margin-top: 3px; color: #6e8375; font-size: 8px; font-style: normal; }
+
+    .measurement-table {
+      width: 100%;
+      max-width: 760px;
+      margin-top: 20px;
+      border-collapse: collapse;
+      font-size: 9px;
+    }
+
+    .measurement-table th,
+    .measurement-table td {
+      padding: 8px 9px;
+      border: 1px solid rgb(73 255 129 / 13%);
+      text-align: right;
+    }
+
+    .measurement-table th:first-child,
+    .measurement-table td:first-child { text-align: left; }
+    .measurement-table th { color: #789082; font-weight: 400; }
+    .measurement-table td { color: #b2c7b7; }
+
+    .state-dump {
+      max-width: 760px;
+      margin-top: 20px;
+      padding: 12px;
+      overflow: auto;
+      border: 1px solid rgb(255 176 156 / 17%);
+      background: #020403;
+      color: #70907a;
+      font: 9px/1.5 "Share Tech Mono Local", monospace;
+      white-space: pre-wrap;
+    }
+
+    .verdict {
+      max-width: 760px;
+      margin-top: 16px;
+      padding: 12px 14px;
+      border-left: 2px solid var(--oxide);
+      background: rgb(61 10 6 / 20%);
+      color: #caa69c;
+      font-size: 10px;
+    }
+
+    .prototype-switcher {
+      position: fixed;
+      z-index: 100;
+      left: 50%;
+      bottom: 18px;
+      display: grid;
+      grid-template-columns: 36px minmax(190px, auto) 36px;
+      align-items: center;
+      min-height: 38px;
+      padding: 4px;
+      border: 1px solid rgb(118 255 157 / 42%);
+      border-radius: 3px;
+      background: rgb(2 7 4 / 96%);
+      box-shadow: 0 14px 38px #000;
+      transform: translateX(-50%);
+    }
+
+    .prototype-switcher button { height: 28px; }
+    .prototype-switcher output { padding: 0 12px; color: #ccdfd0; font-size: 10px; text-align: center; }
+
+    @media (max-width: 760px) {
+      .lab-shell { grid-template-columns: 280px minmax(300px, 1fr); }
+      .inspector { padding-inline: 20px; }
+      .metric-grid { grid-template-columns: 1fr; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0.001ms !important; animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; }
+    }
+  </style>
+</head>
+<body data-variant="A">
+  <div class="lab-shell">
+    <main class="sidebar-rig" aria-label="280px Power Plant 三角度装配校验区">
+      <header class="rig-header">
+        <span class="rig-kicker">ZION / BAY ASSEMBLY QA</span>
+        <h1>三角度装配台</h1>
+        <p>232 × 68 SLOT / −30° · 0° · +30°</p>
+      </header>
+
+      <section class="variant-view angle-stack" data-view="A" aria-label="固定装配盒检查"></section>
+      <section class="variant-view natural-stack" data-view="B" aria-label="自然比例检查"></section>
+
+      <section class="variant-view transition-console" data-view="C" aria-label="角度切换检查">
+        <div class="transition-stage" id="transitionStage" data-cut="crossfade" data-onion="false">
+          <div class="axis-line" aria-hidden="true"></div>
+          <div class="angle-hud"><strong id="angleOutput">0°</strong><span>W / S 切换角度<br />HARD CUT 可暴露跳变</span></div>
+        </div>
+        <div class="control-bank" aria-label="选择角度">
+          <button type="button" data-angle-control="-30">−30°</button>
+          <button type="button" data-angle-control="0" aria-pressed="true">0°</button>
+          <button type="button" data-angle-control="30">+30°</button>
+        </div>
+        <div class="mode-bank">
+          <button type="button" id="cutMode" aria-pressed="false">HARD CUT</button>
+          <button type="button" id="onionMode" aria-pressed="false">轮廓叠影</button>
+        </div>
+      </section>
+    </main>
+
+    <aside class="inspector">
+      <header class="inspector-header">
+        <span class="panel-kicker">THROWAWAY / ANGLE ASSEMBLY VALIDATION</span>
+        <div class="variant-copy" data-copy="A">
+          <h2>固定装配盒</h2>
+          <p>把三个角度强制放进与主 Demo 相同的 232×68 盘位盒。绿色与红色探针分别标记墙段/接口、接口/仓体接缝，用于判断图片压缩后是否仍能形成一个刚体。</p>
+        </div>
+        <div class="variant-copy" data-copy="B">
+          <h2>自然比例溢出</h2>
+          <p>所有组件只统一高度，不拉伸宽度。红色竖线是 232px 侧边栏盘位边界；横向滚动暴露新接口图的真实比例是否过宽。</p>
+        </div>
+        <div class="variant-copy" data-copy="C">
+          <h2>切换与轮廓叠影</h2>
+          <p>在同一相机锁点切换三套装配。HARD CUT 用于观察轮廓突变，轮廓叠影用于比较三个角度的墙体轴心、接口厚度与仓体端盖偏移。</p>
+        </div>
+      </header>
+
+      <div class="metric-grid">
+        <article class="metric"><small>LOCKED SLOT</small><strong>232 × 68</strong><em>主 Demo 的固定盘位边界</em></article>
+        <article class="metric"><small>SEAM OVERLAP</small><strong>7px / 7px</strong><em>墙→接口 / 接口→仓体</em></article>
+        <article class="metric"><small>ACTIVE VIEW</small><strong id="activeVariantMetric">A</strong><em id="activeVariantName">固定装配盒</em></article>
+      </div>
+
+      <table class="measurement-table">
+        <thead><tr><th>角度</th><th>墙段自然宽</th><th>接口自然宽</th><th>仓体自然宽</th><th>自然可见宽</th><th>接口/仓体</th></tr></thead>
+        <tbody id="measurementBody"></tbody>
+      </table>
+
+      <div class="verdict" id="verdict">正在读取图片固有尺寸…</div>
+      <pre class="state-dump" id="stateDump"></pre>
+    </aside>
+  </div>
+
+  <nav class="prototype-switcher" aria-label="原型校验视图切换">
+    <button type="button" id="previousVariant" aria-label="上一个校验视图">←</button>
+    <output id="variantOutput">A — 固定装配盒</output>
+    <button type="button" id="nextVariant" aria-label="下一个校验视图">→</button>
+  </nav>
+
+  <script>
+    const ASSET_ROOT = "assets/power-plant-whole-layer-rotation/";
+    const ANGLES = [-30, 0, 30];
+    const ASSETS = {
+      "-30": {
+        wall: `${ASSET_ROOT}rotor-wall-minus-30-v3.png`,
+        connector: `${ASSET_ROOT}connector-joint-minus-30-production.png`,
+        pod: `${ASSET_ROOT}pod-minus-30-v3.png`
+      },
+      "0": {
+        wall: `${ASSET_ROOT}rotor-wall-face-v2.png`,
+        connector: `${ASSET_ROOT}connector-joint-front-v2.png`,
+        pod: `${ASSET_ROOT}pod-front-v2.png`
+      },
+      "30": {
+        wall: `${ASSET_ROOT}rotor-wall-plus-30-v3.png`,
+        connector: `${ASSET_ROOT}connector-joint-plus-30-production.png`,
+        pod: `${ASSET_ROOT}pod-plus-30-v3.png`
+      }
+    };
+
+    const VARIANTS = {
+      A: { name: "固定装配盒", question: "三角度素材压入生产盒后，接缝能否稳定？" },
+      B: { name: "自然比例溢出", question: "不拉伸素材时，真实比例是否仍能放入 232px？" },
+      C: { name: "切换与轮廓叠影", question: "三套轮廓切换时是否产生不可接受的跳变？" }
+    };
+
+    const state = {
+      variant: new URL(location.href).searchParams.get("variant")?.toUpperCase() || "A",
+      activeAngle: 0,
+      cut: "crossfade",
+      onion: false,
+      metrics: {}
+    };
+    if (!VARIANTS[state.variant]) state.variant = "A";
+
+    const angleLabel = angle => angle > 0 ? `+${angle}°` : `${angle}°`;
+
+    function assemblyMarkup(angle, extraClass = "") {
+      const asset = ASSETS[String(angle)];
+      return `
+        <div class="assembly ${extraClass}" data-angle="${angle}" data-active="${angle === state.activeAngle}">
+          <img class="wall" src="${asset.wall}" alt="" draggable="false" />
+          <img class="connector" src="${asset.connector}" alt="" draggable="false" />
+          <img class="pod" src="${asset.pod}" alt="" draggable="false" />
+          <i class="seam wall"></i><i class="probe-label wall">W/C</i>
+          <i class="seam pod"></i><i class="probe-label pod">C/P</i>
+        </div>`;
+    }
+
+    function renderLockedStack() {
+      document.querySelector('[data-view="A"]').innerHTML = ANGLES.map(angle => `
+        <article class="angle-card">
+          <header><strong>${angleLabel(angle)}</strong><span>LOCKED BOX / 232×68</span></header>
+          <div class="locked-stage">${assemblyMarkup(angle)}</div>
+          <div class="card-readout"><span>W 43×68</span><span>C 31×58</span><span>P 178×58</span></div>
+        </article>`).join("");
+    }
+
+    function renderNaturalStack() {
+      document.querySelector('[data-view="B"]').innerHTML = ANGLES.map(angle => {
+        const asset = ASSETS[String(angle)];
+        return `
+          <article class="natural-card" data-natural-card="${angle}">
+            <header><strong>${angleLabel(angle)}</strong><span>NATURAL ASPECT / SAME HEIGHT</span></header>
+            <div class="natural-viewport">
+              <div class="natural-assembly">
+                <img class="wall" src="${asset.wall}" alt="" draggable="false" />
+                <img class="connector" src="${asset.connector}" alt="" draggable="false" />
+                <img class="pod" src="${asset.pod}" alt="" draggable="false" />
+              </div>
+            </div>
+            <div class="natural-readout"><span data-natural-width="${angle}">LOADING</span><span data-natural-status="${angle}">—</span></div>
+          </article>`;
+      }).join("");
+    }
+
+    function renderTransitionLayers() {
+      const stage = document.getElementById("transitionStage");
+      stage.insertAdjacentHTML("afterbegin", ANGLES.map(angle => assemblyMarkup(angle, "transition-assembly")).join(""));
+    }
+
+    function loadImageMetrics() {
+      return Promise.all(ANGLES.flatMap(angle => Object.entries(ASSETS[String(angle)]).map(([part, src]) => new Promise(resolve => {
+        const image = new Image();
+        image.onload = () => resolve({ angle, part, width: image.naturalWidth, height: image.naturalHeight });
+        image.src = src;
+      })))).then(items => {
+        items.forEach(item => {
+          state.metrics[item.angle] ||= {};
+          state.metrics[item.angle][item.part] = item;
+        });
+        renderMeasurements();
+      });
+    }
+
+    function naturalWidth(item, targetHeight) {
+      return item ? item.width / item.height * targetHeight : 0;
+    }
+
+    function renderMeasurements() {
+      const rows = ANGLES.map(angle => {
+        const metric = state.metrics[angle];
+        const ready = Boolean(metric?.wall && metric?.connector && metric?.pod);
+        const wall = naturalWidth(metric?.wall, 68);
+        const connector = naturalWidth(metric?.connector, 58);
+        const pod = naturalWidth(metric?.pod, 58);
+        // Production geometry starts the wall at x = -9px. Discount the
+        // intentionally clipped strip so the 0deg baseline is not reported as
+        // wider than the visible 232px slot.
+        const total = ready ? wall + connector + pod - 14 - 9 : 0;
+        const ratio = ready ? connector / pod : 0;
+        const pass = ready ? total <= 232 && connector <= 40 : null;
+        const widthNode = document.querySelector(`[data-natural-width="${angle}"]`);
+        const statusNode = document.querySelector(`[data-natural-status="${angle}"]`);
+        if (widthNode) widthNode.textContent = ready ? `TOTAL ${total.toFixed(1)}px / LIMIT 232px` : "LOADING ASSETS";
+        if (statusNode) {
+          statusNode.textContent = ready ? (pass ? "PASS" : "OVERFLOW") : "WAIT";
+          statusNode.className = ready ? (pass ? "status-pass" : "status-fail") : "";
+        }
+        return { angle, wall, connector, pod, total, ratio, pass, ready };
+      });
+
+      document.getElementById("measurementBody").innerHTML = rows.map(row => `
+        <tr>
+          <td>${angleLabel(row.angle)}</td>
+          <td>${row.ready ? `${row.wall.toFixed(1)}px` : "—"}</td>
+          <td class="${row.ready ? (row.connector > 40 ? "status-fail" : "status-pass") : ""}">${row.ready ? `${row.connector.toFixed(1)}px` : "—"}</td>
+          <td>${row.ready ? `${row.pod.toFixed(1)}px` : "—"}</td>
+          <td class="${row.ready ? (row.pass ? "status-pass" : "status-fail") : ""}">${row.ready ? `${row.total.toFixed(1)}px` : "—"}</td>
+          <td>${row.ready ? `${(row.ratio * 100).toFixed(1)}%` : "—"}</td>
+        </tr>`).join("");
+
+      const waiting = rows.some(row => !row.ready);
+      const failing = rows.filter(row => row.ready && !row.pass);
+      document.getElementById("verdict").textContent = waiting
+        ? "正在读取三套透明素材的自然尺寸……"
+        : failing.length
+          ? `当前结论：${failing.map(row => angleLabel(row.angle)).join("、")} 的自然比例无法进入 232px 盘位；主要变量是接口固有宽度。A/C 中的固定盒展示会横向压缩接口，只能用于接缝与切换试验，不能直接作为最终生产尺寸。`
+          : "当前结论：三个角度均可按自然比例进入 232px 盘位，可继续接入主旋转 Demo。";
+      updateStateDump(rows);
+    }
+
+    function selectAngle(angle) {
+      state.activeAngle = angle;
+      document.querySelectorAll(".transition-stage .assembly").forEach(node => node.dataset.active = String(Number(node.dataset.angle) === angle));
+      document.querySelectorAll("[data-angle-control]").forEach(button => button.setAttribute("aria-pressed", String(Number(button.dataset.angleControl) === angle)));
+      document.getElementById("angleOutput").textContent = angleLabel(angle);
+      renderMeasurements();
+    }
+
+    function setVariant(nextVariant, writeUrl = true) {
+      state.variant = VARIANTS[nextVariant] ? nextVariant : "A";
+      document.body.dataset.variant = state.variant;
+      document.getElementById("variantOutput").textContent = `${state.variant} — ${VARIANTS[state.variant].name}`;
+      document.getElementById("activeVariantMetric").textContent = state.variant;
+      document.getElementById("activeVariantName").textContent = VARIANTS[state.variant].name;
+      if (writeUrl) {
+        const url = new URL(location.href);
+        url.searchParams.set("variant", state.variant);
+        history.replaceState({}, "", url);
+      }
+      renderMeasurements();
+    }
+
+    function cycleVariant(direction) {
+      const keys = Object.keys(VARIANTS);
+      const index = keys.indexOf(state.variant);
+      setVariant(keys[(index + direction + keys.length) % keys.length]);
+    }
+
+    function updateStateDump(rows = []) {
+      document.getElementById("stateDump").textContent = JSON.stringify({
+        question: VARIANTS[state.variant].question,
+        variant: state.variant,
+        activeAngle: state.activeAngle,
+        transition: state.cut,
+        onionSkin: state.onion,
+        lockedGeometry: {
+          slot: [232, 68],
+          wall: { x: -9, width: 43, height: 68 },
+          connector: { x: 27, width: 31, height: 58 },
+          pod: { x: 51, width: 178, height: 58 },
+          overlap: { wallConnector: 7, connectorPod: 7 }
+        },
+        naturalMeasurements: rows.map(row => ({
+          angle: row.angle,
+          wallWidth: Number(row.wall.toFixed(1)),
+          connectorWidth: Number(row.connector.toFixed(1)),
+          podWidth: Number(row.pod.toFixed(1)),
+          totalWidth: Number(row.total.toFixed(1)),
+          pass: row.pass
+        }))
+      }, null, 2);
+    }
+
+    renderLockedStack();
+    renderNaturalStack();
+    renderTransitionLayers();
+    const transitionStage = document.getElementById("transitionStage");
+    setVariant(state.variant, false);
+    loadImageMetrics();
+
+    document.getElementById("previousVariant").addEventListener("click", () => cycleVariant(-1));
+    document.getElementById("nextVariant").addEventListener("click", () => cycleVariant(1));
+    document.querySelectorAll("[data-angle-control]").forEach(button => button.addEventListener("click", () => selectAngle(Number(button.dataset.angleControl))));
+
+    document.getElementById("cutMode").addEventListener("click", event => {
+      state.cut = state.cut === "hard" ? "crossfade" : "hard";
+      transitionStage.dataset.cut = state.cut;
+      event.currentTarget.setAttribute("aria-pressed", String(state.cut === "hard"));
+      renderMeasurements();
+    });
+
+    document.getElementById("onionMode").addEventListener("click", event => {
+      state.onion = !state.onion;
+      transitionStage.dataset.onion = String(state.onion);
+      event.currentTarget.setAttribute("aria-pressed", String(state.onion));
+      renderMeasurements();
+    });
+
+    document.addEventListener("keydown", event => {
+      const target = event.target;
+      if (target instanceof HTMLElement && (target.matches("input, textarea, [contenteditable]") || target.isContentEditable)) return;
+      if (event.key === "ArrowLeft") cycleVariant(-1);
+      if (event.key === "ArrowRight") cycleVariant(1);
+      if (event.key.toLowerCase() === "w" || event.key.toLowerCase() === "s") {
+        const current = ANGLES.indexOf(state.activeAngle);
+        const direction = event.key.toLowerCase() === "w" ? -1 : 1;
+        selectAngle(ANGLES[(current + direction + ANGLES.length) % ANGLES.length]);
+      }
+    });
+  </script>
+</body>
+</html>

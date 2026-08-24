@@ -8,7 +8,8 @@
     THROWAWAY UI PROTOTYPE
     问题：墙段、机械接口和培育仓作为同一盘位总成同步旋转时，
     能否让会话切换被读成“一整层 Power Plant 在旋转”？
-    三种观察模式通过 ?variant=A|B|C 切换，验证的是同一个结构模型。
+    三种观察模式通过 ?variant=A|B|C 切换，验证的是同一个结构模型；
+    B 为默认视觉基线，并接入 4× 漫画风墙段、接口与培育仓透明素材。
   -->
   <style>
     @font-face {
@@ -310,6 +311,18 @@
       position: absolute;
       inset: 0;
       transform-style: preserve-3d;
+    }
+
+    .assembly-asset {
+      position: absolute;
+      inset: 0;
+      display: none;
+      width: 100%;
+      height: 100%;
+      object-fit: fill;
+      pointer-events: none;
+      user-select: none;
+      -webkit-user-drag: none;
     }
 
     .rotor-wall-segment {
@@ -642,14 +655,84 @@
       font: inherit;
     }
 
-    /* B：去除大部分装甲遮挡，暴露轴承笼和同步墙段。 */
-    [data-variant="B"] .fixed-core { width: 18px; opacity: 0.74; }
-    [data-variant="B"] .window-lip { width: 9px; background: #07100b; box-shadow: 5px 0 9px #000; }
-    [data-variant="B"] .foreground-shadow { width: 20px; opacity: 0.42; }
+    /* B：默认视觉基线。三张 4× 漫画素材仍属于同一个刚性 slot-assembly。 */
+    [data-variant="B"] .fixed-core { width: 18px; opacity: 0.58; }
+    [data-variant="B"] .window-lip { width: 9px; background: #07100b; box-shadow: 5px 0 9px #000; opacity: 0.76; }
+    [data-variant="B"] .foreground-shadow { width: 20px; opacity: 0.26; }
     [data-variant="B"] .bearing-cap { left: 2px; width: 47px; background: repeating-linear-gradient(90deg, #568064 0 2px, transparent 2px 6px); }
     [data-variant="B"] .axis-svg { opacity: 1; filter: drop-shadow(0 0 4px rgb(70 255 128 / 30%)); }
-    [data-variant="B"] .rotor-wall-segment { background-color: #0a1710; }
     [data-variant="B"] .layer-stage { perspective: 420px; }
+
+    [data-variant="B"] .assembly-asset { display: block; }
+
+    [data-variant="B"] .rotor-wall-segment {
+      border: 0;
+      background: transparent;
+      box-shadow: none;
+    }
+
+    [data-variant="B"] .rotor-wall-segment::before,
+    [data-variant="B"] .rotor-wall-segment::after,
+    [data-variant="B"] .segment-teeth { display: none; }
+
+    [data-variant="B"] .wall-asset {
+      filter: contrast(1.1) saturate(0.9) brightness(1.02) drop-shadow(7px 2px 8px rgb(0 0 0 / 76%));
+    }
+
+    [data-variant="B"] .connector-arm {
+      left: 27px;
+      top: 5px;
+      width: 31px;
+      height: 58px;
+      border: 0;
+      background: transparent;
+      box-shadow: none;
+    }
+
+    [data-variant="B"] .connector-arm::before,
+    [data-variant="B"] .connector-arm::after { display: none; }
+
+    [data-variant="B"] .connector-asset {
+      filter: contrast(1.1) saturate(0.94) brightness(1.05) drop-shadow(2px 2px 5px rgb(0 0 0 / 76%));
+    }
+
+    [data-variant="B"] .slot-frame[data-empty="false"] .pod-shell {
+      overflow: visible;
+      border: 0;
+      background: transparent;
+      box-shadow: none;
+    }
+
+    [data-variant="B"] .slot-frame[data-empty="false"] .pod-shell::before,
+    [data-variant="B"] .slot-frame[data-empty="false"] .pod-shell::after { display: none; }
+
+    [data-variant="B"] .pod-asset {
+      filter: contrast(1.06) saturate(0.98) brightness(0.94) drop-shadow(0 8px 9px rgb(0 0 0 / 72%));
+    }
+
+    [data-variant="B"] .slot-frame[data-empty="true"] .pod-asset { display: none; }
+
+    [data-variant="B"] .pod-label {
+      left: 64px;
+      right: 12px;
+      bottom: 7px;
+      padding: 1px 3px;
+      border-left: 1px solid rgb(255 176 156 / 72%);
+      background: linear-gradient(90deg, rgb(14 2 2 / 82%), rgb(14 2 2 / 18%));
+      color: #ffe2d8;
+    }
+
+    [data-variant="B"] .slot-frame[data-distance="0"] .wall-asset {
+      filter: contrast(1.08) saturate(0.9) brightness(1.03) drop-shadow(0 0 7px rgb(70 255 128 / 34%));
+    }
+
+    [data-variant="B"] .slot-frame[data-distance="0"] .connector-asset {
+      filter: contrast(1.08) saturate(0.94) brightness(1.08) drop-shadow(0 0 6px rgb(70 255 128 / 28%));
+    }
+
+    [data-variant="B"] .slot-frame[data-distance="0"] .pod-asset {
+      filter: contrast(1.06) saturate(1.08) brightness(1.06) drop-shadow(0 6px 11px rgb(255 92 67 / 28%));
+    }
 
     /* C：诊断剖面，静态外壳半透明并显示运动基准线。 */
     [data-variant="C"] .fixed-core,
@@ -850,8 +933,8 @@
       </div>
 
       <div class="variant-cards" aria-label="观察模式说明">
-        <article class="variant-card" data-variant-card="A"><b>A · 装甲窗口</b>接近最终构图，依靠静态窗口遮挡证明墙内旋转。</article>
-        <article class="variant-card" data-variant-card="B"><b>B · 轴承剖面</b>减少外壳遮挡，重点观察墙段、接口和仓体的刚性关系。</article>
+        <article class="variant-card" data-variant-card="A"><b>A · 装甲窗口</b>备选镜头，依靠静态窗口遮挡证明墙内旋转。</article>
+        <article class="variant-card" data-variant-card="B"><b>B · 轴承剖面 / 默认</b>使用漫画风墙段、接口和仓体素材，直接观察刚性总成。</article>
         <article class="variant-card" data-variant-card="C"><b>C · 运动校验</b>半透明主轴与网格基准，用于排查错误的独立变换。</article>
       </div>
     </aside>
@@ -859,7 +942,7 @@
 
   <nav class="prototype-switcher" aria-label="原型观察模式切换">
     <button type="button" id="previousVariant" aria-label="上一个观察模式">←</button>
-    <output id="variantOutput">A — 装甲窗口</output>
+    <output id="variantOutput">B — 轴承剖面</output>
     <button type="button" id="nextVariant" aria-label="下一个观察模式">→</button>
   </nav>
 
@@ -871,7 +954,7 @@
       },
       B: {
         name: "轴承剖面",
-        description: "减少静态外壳和阴影，暴露项目转环的轴承齿、装甲墙段与连接臂。用于确认三部分共享同一个父级旋转，不是三个相似但各自动画的物体。"
+        description: "默认视觉基线。减少静态外壳和阴影，以 4× 漫画风透明素材暴露项目转环的轴承墙段、套筒接口与红色培育仓；三张图片仍共享同一个 slot-assembly 和旋转角。"
       },
       C: {
         name: "运动校验",
@@ -911,7 +994,7 @@
 
     const state = {
       focusedProject: 0,
-      variant: new URL(location.href).searchParams.get("variant")?.toUpperCase() || "A",
+      variant: new URL(location.href).searchParams.get("variant")?.toUpperCase() || "B",
       projects: PROJECTS.map(() => ({
         activeIndex: 0,
         targetIndex: 0,
@@ -922,7 +1005,7 @@
       }))
     };
 
-    if (!VARIANTS[state.variant]) state.variant = "A";
+    if (!VARIANTS[state.variant]) state.variant = "B";
 
     function clearMotionTimers(projectState) {
       projectState.timers.forEach(clearTimeout);
@@ -959,9 +1042,16 @@
       return `
         <div class="slot-frame" data-slot="${slotIndex}" data-empty="${empty}" style="--slot-angle:${slotIndex * SLOT_STEP}deg">
           <div class="slot-assembly">
-            <div class="rotor-wall-segment" data-mark="R-${String(slotIndex + 1).padStart(2, "0")}"><i class="segment-teeth"></i></div>
-            <div class="connector-arm" aria-hidden="true"></div>
-            <div class="pod-shell" role="button" tabindex="${empty ? -1 : 0}" aria-label="${empty ? label : `切换到会话：${label}`}"></div>
+            <div class="rotor-wall-segment" data-mark="R-${String(slotIndex + 1).padStart(2, "0")}">
+              <img class="assembly-asset wall-asset" src="assets/power-plant-whole-layer-rotation/rotor-wall-face-v2.png" alt="" draggable="false" />
+              <i class="segment-teeth"></i>
+            </div>
+            <div class="connector-arm" aria-hidden="true">
+              <img class="assembly-asset connector-asset" src="assets/power-plant-whole-layer-rotation/connector-joint-front-v2.png" alt="" draggable="false" />
+            </div>
+            <div class="pod-shell" role="button" tabindex="${empty ? -1 : 0}" aria-label="${empty ? label : `切换到会话：${label}`}">
+              <img class="assembly-asset pod-asset" src="assets/power-plant-whole-layer-rotation/pod-front-v2.png" alt="" draggable="false" />
+            </div>
             <span class="pod-label">${label}</span>
           </div>
         </div>
