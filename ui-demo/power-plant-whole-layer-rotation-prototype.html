@@ -291,6 +291,12 @@
     }
 
     .slot-frame {
+      --frame-wall-width: 43px;
+      --frame-connector-left: 27px;
+      --frame-connector-width: 31px;
+      --frame-pod-left: 51px;
+      --frame-pod-width: 178px;
+      --sprite-counter-angle: 0deg;
       position: absolute;
       left: 0;
       top: calc(var(--slot-height) / -2);
@@ -311,6 +317,7 @@
       position: absolute;
       inset: 0;
       transform-style: preserve-3d;
+      transform-origin: 0 50%;
     }
 
     .assembly-asset {
@@ -319,7 +326,10 @@
       display: none;
       width: 100%;
       height: 100%;
+      opacity: 0;
       object-fit: fill;
+      backface-visibility: hidden;
+      transition: opacity 90ms linear;
       pointer-events: none;
       user-select: none;
       -webkit-user-drag: none;
@@ -655,7 +665,7 @@
       font: inherit;
     }
 
-    /* B：默认视觉基线。三张 4× 漫画素材仍属于同一个刚性 slot-assembly。 */
+    /* B：默认视觉基线。三角度漫画素材仍属于同一个刚性 slot-assembly。 */
     [data-variant="B"] .fixed-core { width: 18px; opacity: 0.58; }
     [data-variant="B"] .window-lip { width: 9px; background: #07100b; box-shadow: 5px 0 9px #000; opacity: 0.76; }
     [data-variant="B"] .foreground-shadow { width: 20px; opacity: 0.26; }
@@ -663,9 +673,34 @@
     [data-variant="B"] .axis-svg { opacity: 1; filter: drop-shadow(0 0 4px rgb(70 255 128 / 30%)); }
     [data-variant="B"] .layer-stage { perspective: 420px; }
 
+    [data-variant="B"] .slot-assembly {
+      transform: rotateY(var(--sprite-counter-angle));
+      will-change: transform;
+    }
+
+    [data-variant="B"] .slot-frame[data-sprite-angle="minus"] {
+      --frame-wall-width: 36px;
+      --frame-connector-left: 20px;
+      --frame-connector-width: 39.5px;
+      --frame-pod-left: 52.5px;
+      --frame-pod-width: 124px;
+    }
+
+    [data-variant="B"] .slot-frame[data-sprite-angle="plus"] {
+      --frame-wall-width: 35.3px;
+      --frame-connector-left: 19.3px;
+      --frame-connector-width: 38.3px;
+      --frame-pod-left: 50.6px;
+      --frame-pod-width: 157.5px;
+    }
+
     [data-variant="B"] .assembly-asset { display: block; }
+    [data-variant="B"] .slot-frame[data-sprite-angle="minus"] .angle-asset[data-frame="minus"],
+    [data-variant="B"] .slot-frame[data-sprite-angle="front"] .angle-asset[data-frame="front"],
+    [data-variant="B"] .slot-frame[data-sprite-angle="plus"] .angle-asset[data-frame="plus"] { opacity: 1; }
 
     [data-variant="B"] .rotor-wall-segment {
+      width: var(--frame-wall-width);
       border: 0;
       background: transparent;
       box-shadow: none;
@@ -680,9 +715,9 @@
     }
 
     [data-variant="B"] .connector-arm {
-      left: 27px;
+      left: var(--frame-connector-left);
       top: 5px;
-      width: 31px;
+      width: var(--frame-connector-width);
       height: 58px;
       border: 0;
       background: transparent;
@@ -694,6 +729,11 @@
 
     [data-variant="B"] .connector-asset {
       filter: contrast(1.1) saturate(0.94) brightness(1.05) drop-shadow(2px 2px 5px rgb(0 0 0 / 76%));
+    }
+
+    [data-variant="B"] .pod-shell {
+      left: var(--frame-pod-left);
+      width: var(--frame-pod-width);
     }
 
     [data-variant="B"] .slot-frame[data-empty="false"] .pod-shell {
@@ -713,8 +753,9 @@
     [data-variant="B"] .slot-frame[data-empty="true"] .pod-asset { display: none; }
 
     [data-variant="B"] .pod-label {
-      left: 64px;
-      right: 12px;
+      left: calc(var(--frame-pod-left) + 12px);
+      right: auto;
+      width: max(56px, calc(var(--frame-pod-width) - 24px));
       bottom: 7px;
       padding: 1px 3px;
       border-left: 1px solid rgb(255 176 156 / 72%);
@@ -925,16 +966,17 @@
         <div class="diagnostic-cell"><small>MOTION PHASE</small><output id="motionReadout">LOCKED</output></div>
         <div class="diagnostic-cell"><small>RING ROTATION</small><output id="rotationReadout">0.0°</output></div>
         <div class="diagnostic-cell"><small>TARGET BAY</small><output id="bayReadout">01 / 12</output></div>
+        <div class="diagnostic-cell"><small>ANGLE SPRITE</small><output id="spriteReadout">FRONT / 0.0°</output></div>
       </div>
 
       <div class="mechanics-map">
         <b>唯一运动链：</b><br />
-        <code>layer-rotor</code> 接收共享角度 → <code>slot-frame</code> 保留固定 30° 安装角 → 墙段、机械接口和培育仓在同一刚性 DOM 节点内。固定主轴与窗口遮罩不参与旋转。
+        <code>layer-rotor</code> 接收共享角度 → <code>slot-frame</code> 保留固定 30° 安装角 → B 视图按相机夹角选择 −30° / 0° / +30° 素材并反向补偿平面角 → 墙段、机械接口和培育仓仍在同一刚性 DOM 节点内。固定主轴与窗口遮罩不参与旋转。
       </div>
 
       <div class="variant-cards" aria-label="观察模式说明">
         <article class="variant-card" data-variant-card="A"><b>A · 装甲窗口</b>备选镜头，依靠静态窗口遮挡证明墙内旋转。</article>
-        <article class="variant-card" data-variant-card="B"><b>B · 轴承剖面 / 默认</b>使用漫画风墙段、接口和仓体素材，直接观察刚性总成。</article>
+        <article class="variant-card" data-variant-card="B"><b>B · 轴承剖面 / 默认</b>使用三角度漫画素材与相机 billboard，直接观察刚性总成。</article>
         <article class="variant-card" data-variant-card="C"><b>C · 运动校验</b>半透明主轴与网格基准，用于排查错误的独立变换。</article>
       </div>
     </aside>
@@ -954,7 +996,7 @@
       },
       B: {
         name: "轴承剖面",
-        description: "默认视觉基线。减少静态外壳和阴影，以 4× 漫画风透明素材暴露项目转环的轴承墙段、套筒接口与红色培育仓；三张图片仍共享同一个 slot-assembly 和旋转角。"
+        description: "默认视觉基线。减少静态外壳和阴影，以 −30° / 0° / +30° 漫画透明素材暴露项目转环的轴承墙段、套筒接口与红色培育仓；三部分仍共享同一个 slot-assembly 和旋转角。"
       },
       C: {
         name: "运动校验",
@@ -982,6 +1024,24 @@
 
     const SLOT_COUNT = 12;
     const SLOT_STEP = 360 / SLOT_COUNT;
+    const ANGLE_ASSETS = {
+      minus: {
+        wall: "rotor-wall-minus-30-v3.png",
+        connector: "connector-joint-minus-30-production.png",
+        pod: "pod-minus-30-v3.png"
+      },
+      front: {
+        wall: "rotor-wall-face-v2.png",
+        connector: "connector-joint-front-v2.png",
+        pod: "pod-front-v2.png"
+      },
+      plus: {
+        wall: "rotor-wall-plus-30-v3.png",
+        connector: "connector-joint-plus-30-production.png",
+        pod: "pod-plus-30-v3.png"
+      }
+    };
+    const ASSET_ROOT = "assets/power-plant-whole-layer-rotation/";
     const prefersReducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
     const workspaceScroll = document.getElementById("workspaceScroll");
     const sidebarMotion = document.getElementById("sidebarMotion");
@@ -989,6 +1049,7 @@
     const motionReadout = document.getElementById("motionReadout");
     const rotationReadout = document.getElementById("rotationReadout");
     const bayReadout = document.getElementById("bayReadout");
+    const spriteReadout = document.getElementById("spriteReadout");
     const variantOutput = document.getElementById("variantOutput");
     const variantDescription = document.getElementById("variantDescription");
 
@@ -1006,6 +1067,7 @@
     };
 
     if (!VARIANTS[state.variant]) state.variant = "B";
+    let spriteSyncFrame = 0;
 
     function clearMotionTimers(projectState) {
       projectState.timers.forEach(clearTimeout);
@@ -1035,22 +1097,92 @@
       return target;
     }
 
+    function normalizeSignedAngle(angle) {
+      return ((angle + 180) % 360 + 360) % 360 - 180;
+    }
+
+    function spriteFrameForAngle(angle) {
+      if (angle <= -15) return "minus";
+      if (angle >= 15) return "plus";
+      return "front";
+    }
+
+    function assetSetMarkup(part, className) {
+      return Object.entries(ANGLE_ASSETS).map(([frame, assets]) =>
+        `<img class="assembly-asset angle-asset ${className}" data-frame="${frame}" src="${ASSET_ROOT}${assets[part]}" alt="" draggable="false" />`
+      ).join("");
+    }
+
+    function computedRotorAngle(rotor, fallback) {
+      const transform = getComputedStyle(rotor).transform;
+      if (!transform || transform === "none") return fallback;
+      const match = transform.match(/^matrix3d\((.+)\)$/);
+      if (!match) return fallback;
+      const values = match[1].split(",").map(Number);
+      if (values.length !== 16 || values.some((value) => !Number.isFinite(value))) return fallback;
+      const angle = -Math.atan2(values[2], values[0]) * 180 / Math.PI;
+      return Number.isFinite(angle) ? angle : fallback;
+    }
+
+    function syncProjectSpriteAngles(projectIndex, explicitRingAngle = null) {
+      const layer = document.querySelector(`[data-project="${projectIndex}"]`);
+      const rotor = layer?.querySelector(".layer-rotor");
+      if (!layer || !rotor) return;
+      const fallback = state.projects[projectIndex].rotation;
+      const ringAngle = explicitRingAngle ?? computedRotorAngle(rotor, fallback);
+
+      layer.querySelectorAll(".slot-frame").forEach((slot) => {
+        const slotIndex = Number(slot.dataset.slot);
+        const viewAngle = normalizeSignedAngle(slotIndex * SLOT_STEP + ringAngle);
+        const frame = spriteFrameForAngle(viewAngle);
+        if (slot.dataset.spriteAngle !== frame) slot.dataset.spriteAngle = frame;
+        slot.dataset.viewAngle = viewAngle.toFixed(1);
+        slot.style.setProperty("--sprite-counter-angle", `${-viewAngle}deg`);
+      });
+    }
+
+    function syncAllSpriteAngles() {
+      state.projects.forEach((_, index) => syncProjectSpriteAngles(index));
+    }
+
+    function startSpriteSync() {
+      if (spriteSyncFrame) return;
+      const tick = () => {
+        syncAllSpriteAngles();
+        updateSpriteReadout();
+        if (state.projects.some((project) => project.motion !== "locked")) {
+          spriteSyncFrame = requestAnimationFrame(tick);
+        } else {
+          spriteSyncFrame = 0;
+        }
+      };
+      spriteSyncFrame = requestAnimationFrame(tick);
+    }
+
+    function updateSpriteReadout() {
+      const projectState = state.projects[state.focusedProject];
+      const slot = document.querySelector(`[data-project="${state.focusedProject}"] .slot-frame[data-slot="${projectState.targetIndex}"]`);
+      if (!slot) return;
+      const label = slot.dataset.spriteAngle?.toUpperCase() || "FRONT";
+      spriteReadout.textContent = `${label} / ${slot.dataset.viewAngle || "0.0"}°`;
+    }
+
     function slotMarkup(project, slotIndex) {
       const sessionName = project.sessions[slotIndex];
       const empty = !sessionName;
       const label = empty ? `EMPTY BAY ${String(slotIndex + 1).padStart(2, "0")}` : sessionName;
       return `
-        <div class="slot-frame" data-slot="${slotIndex}" data-empty="${empty}" style="--slot-angle:${slotIndex * SLOT_STEP}deg">
+        <div class="slot-frame" data-slot="${slotIndex}" data-empty="${empty}" data-sprite-angle="front" style="--slot-angle:${slotIndex * SLOT_STEP}deg">
           <div class="slot-assembly">
             <div class="rotor-wall-segment" data-mark="R-${String(slotIndex + 1).padStart(2, "0")}">
-              <img class="assembly-asset wall-asset" src="assets/power-plant-whole-layer-rotation/rotor-wall-face-v2.png" alt="" draggable="false" />
+              ${assetSetMarkup("wall", "wall-asset")}
               <i class="segment-teeth"></i>
             </div>
             <div class="connector-arm" aria-hidden="true">
-              <img class="assembly-asset connector-asset" src="assets/power-plant-whole-layer-rotation/connector-joint-front-v2.png" alt="" draggable="false" />
+              ${assetSetMarkup("connector", "connector-asset")}
             </div>
             <div class="pod-shell" role="button" tabindex="${empty ? -1 : 0}" aria-label="${empty ? label : `切换到会话：${label}`}">
-              <img class="assembly-asset pod-asset" src="assets/power-plant-whole-layer-rotation/pod-front-v2.png" alt="" draggable="false" />
+              ${assetSetMarkup("pod", "pod-asset")}
             </div>
             <span class="pod-label">${label}</span>
           </div>
@@ -1208,6 +1340,7 @@
     function setRotorAngle(projectIndex, angle) {
       const rotor = document.querySelector(`[data-project="${projectIndex}"] .layer-rotor`);
       rotor?.style.setProperty("--ring-rotation", `${angle}deg`);
+      startSpriteSync();
     }
 
     function renderProject(projectIndex, { preserveTransform = false } = {}) {
@@ -1231,6 +1364,10 @@
         slot.style.setProperty("--slot-saturation", String(0.42 + proximity * 0.72));
       });
 
+      if (projectState.motion === "locked") {
+        syncProjectSpriteAngles(projectIndex, projectState.rotation);
+      }
+
       const title = layer.querySelector(`[data-session-title="${projectIndex}"]`);
       const angle = layer.querySelector(`[data-angle-label="${projectIndex}"]`);
       title.textContent = project.sessions[projectState.targetIndex];
@@ -1251,6 +1388,7 @@
         ? `${projectState.rotation.toFixed(1)}°`
         : `${projectState.rotation.toFixed(1)}° → ${projectState.targetRotation.toFixed(1)}°`;
       bayReadout.textContent = `${String(projectState.targetIndex + 1).padStart(2, "0")} / ${SLOT_COUNT}`;
+      updateSpriteReadout();
     }
 
     function renderVariant({ updateUrl = true } = {}) {
@@ -1260,6 +1398,7 @@
       document.querySelectorAll("[data-variant-card]").forEach((card) => {
         card.classList.toggle("active", card.dataset.variantCard === state.variant);
       });
+      syncAllSpriteAngles();
       if (updateUrl) {
         const url = new URL(location.href);
         url.searchParams.set("variant", state.variant);
