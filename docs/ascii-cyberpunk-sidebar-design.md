@@ -8,7 +8,7 @@
 >
 > 概念研究：[`research/sidebar-session-redesign-inspiration.md`](../research/sidebar-session-redesign-inspiration.md)
 >
-> 最后同步：2026-08-22
+> 最后同步：2026-08-28
 
 ## 1. 给后续 AI 的一分钟摘要
 
@@ -79,7 +79,7 @@ Selected Session Dock 与底部体验模式条已移除，空间全部让给 Cit
 
 1. **空间入口**：点击建筑标牌或建筑立面的会话 Portal。
 2. **移动入口**：W/S/A/D、方向键、滚轮和拖拽。
-3. **完整索引**：按 `M` 或点击 `CITY INDEX`，在二维列表中直接访问所有工作区和全部会话。索引列表采用舱单货单风格（`== BAY nn · name` 分组头 + `>` 游标行 + Cobb 状态符号，悬停触发片假名扰动）。
+3. **完整索引**：按 `M` 或点击 `CITY INDEX`，在二维列表中直接访问所有工作区和全部会话。索引为 Matrix DVD 菜单风格（亮绿磷光字 + 数字雨背景），顶部靠右的「分组/平铺」按钮切换两种列表样式（详见 §4.4）。
 
 空间入口负责体验和空间记忆；City Index 负责效率、可达性和大数据量兜底。两者不是互相替代的两套产品，而是同一份 `WORKSPACES` 数据的两个视图。
 
@@ -139,6 +139,17 @@ Header 与 CITY INDEX 开关不参与相机投影。它们相当于固定在镜�
 当前选中会话不再由独立 Dock 面板呈现，而是由 Portal 的 `is-current` 高亮与 City Index 中的 `>` 游标行共同表达。
 
 侧栏宽度可通过右缘 8px 拖拽热区在 **280–420px** 间调整（`--sidebar-width` CSS 变量驱动，`clamp` 钳制）。城市视觉不变形：Canvas 由 `ResizeObserver` 触发 `resizeCanvas()`，`project()` 每帧按 `state.width/2` 居中且 focal 只与高度相关——调宽只扩展横向视野；Portal 与 marker 每帧重投影自动跟随。右侧竖排 `.horizon-tag` 与 host 区占位文案实时显示当前宽度。
+
+### 4.4 City Index：DVD 菜单索引（2026-08-28 重构）
+
+以 Matrix DVD 菜单屏为原型（参考 `research/citymap-list-design-inspiration.md` 与变体 demo `ui-demo/city-map-dvd-menu-proto.html`）：
+
+- **顶部 stylebar**：左侧 kicker 随模式切换文案（`SCENE SELECTIONS // 4 DISTRICTS` ↔ `SESSION PORTALS // ALL DISTRICTS`），右侧「分组/平铺」按钮切换列表样式（`state.mapStyle`，调试参数 `?mapstyle=flat`）。原 `map-head`（标题 + × 关闭钮）已删除，关闭由 `Esc` / `M` / `CITY INDEX` 按钮承担。
+- **分组样式**：`BAY 01 · 工作区名` 章标题（55% 明度 + 渐隐分隔线，点击跳转工作区），会话项缩进；**平铺样式**：不分组，全局序号列 01-18。明度阶梯纪律：标题 100% / 章节 55% / 时间与序号 38%，单一绿色相内分层。
+- **选中框（两种样式同款）**：中绿条 `rgb(48,152,88)` + 低对比绿横纹 `rgba(32,144,72,0.9)`（CRT 质感但不遮字）+ 亮绿细边，文字深绿近黑 `rgb(2,24,4)`——色值全部像素采样自目标参考图。
+- **hover 分层**：hover 只给 4% 浅底（120ms linear），选中行 hover 保持选中框；`focus-visible` 1px 内描边保键盘可达性。
+- **数字雨背景**：`.map-rain` canvas 垫底层（FS=14、95ms 节流、拖尾 `#4e9e57`、10% 亮头磷光、×0.55 压缩），`openMap` 启动 / `closeMap` 停止 rAF，拖拽调宽时 `ResizeObserver` 重铺，reduced 只画一帧静态雨幕；`.map-body` 文字区左强右弱暗色衬底（82%→62%→30%）保证可读性。
+- **已移除**：货单风格（`== BAY` 头、Cobb SYM 状态符号列）、hover 片假名扰动（`scrambleOnHover` 及其 `KATAKANA` 常量随调用方一并删除）。
 
 ## 5. 数据模型与状态语义
 
@@ -438,7 +449,7 @@ AsciiCitySidebar
 ├── useCityCamera              camera / target / navigation
 ├── AsciiCityCanvas            氛围与建筑点云
 ├── ProjectedWorkspaceLayer    工作区和当前工作区会话按钮
-└── CityIndex                  全部工作区和全部会话（货单风格列表）
+└── CityIndex                  全部工作区和全部会话（DVD 菜单列表，分组/平铺双样式）
 ```
 
 生产数据接口至少需要：
