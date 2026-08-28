@@ -111,7 +111,7 @@ WORKSPACES + STATUS
 `#city-canvas` 设置 `aria-hidden="true"`。它绘制：
 
 - 深黑到绿黑的城市背景；
-- 按列运行的 Matrix 字符雨；
+- **3D 世界锚定代码雨**（`drawRain3D`，移植自 `matrix-rain-flythrough-demo`）：两侧各 40 根雨柱（x ∈ ±[55, 260]，z 世界锚定 1400 循环回卷），相机行走 = 穿越雨幕；每柱 2-3 颗雨点持续下落（基准 5 格/秒）、坠底回顶重生；亮度场 → 24 档绿色 LUT（拖尾主体 #4e9e57，顶端 15% 渐浅至亮头 #a7e6b0 + shadowBlur 辉光）；整柱 ×0.55 横向压缩对齐生产 `GLYPH_SX`；行走时 `state.motion` 加速全场雨势（对齐生产 `FX_BUSY` 语义）；reduced 冻结、focus 压暗至 0.3；深度 >500 隔格、>900 只留亮串控制 fillText 量；
 - 透视道路、车道点和纵深线；
 - 建筑外壳、侧面深度和建筑字形点；
 - 会话所在楼层的状态色字形带；

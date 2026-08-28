@@ -933,11 +933,63 @@
     };
 
     const buildingPoints = WORKSPACES.map(createBuildingPoints);
-    const rainColumns = [];
     const workspaceMarkers = new Map();
     let sessionButtons = [];
     let previousTime = performance.now();
     let lastActiveWorkspace = -1;
+
+    // ── 3D 世界锚定代码雨（移植自 matrix-rain-flythrough-demo）──
+    // 雨柱分布在街道两侧世界坐标，相机行走 = 穿越雨幕；雨点持续下落循环，
+    // 亮度场 → 绿色 LUT（拖尾 #4e9e57，亮头亮绿），行走加速雨势（对齐生产 FX_BUSY）。
+    const RAIN_LUT = [];
+    for (let i = 0; i < 24; i++) {
+      const b = i / 23;
+      let r, g, bl;
+      if (b < 0.85) {      // 暗部 #0e2f1a → 拖尾主体 #4e9e57
+        const k = b / 0.85;
+        r = 14 + (78 - 14) * k; g = 47 + (158 - 47) * k; bl = 26 + (87 - 26) * k;
+      } else {              // 顶端 15% → 亮头 #a7e6b0
+        const k = (b - 0.85) / 0.15;
+        r = 78 + (167 - 78) * k; g = 158 + (230 - 158) * k; bl = 87 + (176 - 87) * k;
+      }
+      RAIN_LUT.push(`rgb(${r | 0},${g | 0},${bl | 0})`);
+    }
+    const rainColorAt = (b) => RAIN_LUT[Math.min(23, Math.max(0, Math.round(b * 23)))];
+
+    function mulberry32(seed) {
+      return function () {
+        seed |= 0; seed = (seed + 0x6D2B79F5) | 0;
+        let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+      };
+    }
+
+    const RAIN_ZRANGE = 1400, RAIN_CELL_H = 9, RAIN_GLYPH_SX = 0.55;
+    const rainCols3d = [];
+    (function buildRain() {
+      const rand = mulberry32(20260828);
+      [-1, 1].forEach((side) => {
+        for (let i = 0; i < 40; i++) {
+          const cells = 24 + Math.floor(rand() * 20); // 216~396 世界单位高
+          const height = cells * RAIN_CELL_H;
+          const drops = [];
+          const dropCount = 2 + Math.floor(rand() * 2);
+          for (let d = 0; d < dropCount; d++) {
+            drops.push({ y: rand() * height, speed: RAIN_CELL_H * 5, trail: 70 + rand() * 70 });
+          }
+          rainCols3d.push({
+            x: side * (55 + rand() * 205),
+            y0: -40 + rand() * 200, // 雨帘基部高度错落，覆盖视线上方区域
+            z: rand() * RAIN_ZRANGE,
+            cells, height, drops,
+            speedK: 0.85 + rand() * 0.3,
+            seed: rand() * 1000
+          });
+        }
+      });
+    })();
+    let rainPrev = 0;
 
     function clamp(value, min, max) {
       return Math.min(max, Math.max(min, value));
@@ -1065,21 +1117,6 @@
       canvas.style.width = `${state.width}px`;
       canvas.style.height = `${state.height}px`;
       context.setTransform(state.dpr, 0, 0, state.dpr, 0, 0);
-      initRain();
-    }
-
-    function initRain() {
-      rainColumns.length = 0;
-      const step = 10;
-      for (let x = 4; x < state.width; x += step) {
-        rainColumns.push({
-          x,
-          offset: (x * 19.3) % Math.max(1, state.height),
-          speed: 15 + ((x * 7) % 29),
-          length: 5 + (x % 7),
-          seed: x * 0.31
-        });
-      }
     }
 
     function drawBackground(time) {
@@ -1090,26 +1127,6 @@
       context.fillStyle = gradient;
       context.fillRect(0, 0, state.width, state.height);
 
-      const focusFactor = state.experience === "focus" ? 0.3 : 1;
-      const reducedTime = state.experience === "reduced" ? 0 : time;
-      context.font = '10px "Matrix Code"';
-      context.textAlign = "center";
-      context.textBaseline = "middle";
-
-      rainColumns.forEach((column, columnIndex) => {
-        const head = (column.offset + reducedTime * 0.001 * column.speed) % (state.height + 120) - 60;
-        for (let trail = 0; trail < column.length; trail += 1) {
-          const y = head - trail * 11;
-          if (y < -12 || y > state.height + 12) continue;
-          const energy = (1 - trail / column.length) * 0.23 * focusFactor;
-          const glyph = stableGlyph(column.seed + trail * 13 + Math.floor(reducedTime / 760) + columnIndex);
-          context.fillStyle = trail === 0
-            ? `rgba(220, 255, 229, ${0.32 * focusFactor})`
-            : `rgba(47, 255, 105, ${energy})`;
-          context.fillText(glyph, column.x, y);
-        }
-      });
-
       const horizon = state.height / 2;
       const haze = context.createRadialGradient(state.width / 2, horizon, 0, state.width / 2, horizon, state.width * 0.72);
       haze.addColorStop(0, "rgba(68,255,123,0.12)");
@@ -1117,6 +1134,77 @@
       haze.addColorStop(1, "rgba(0,0,0,0)");
       context.fillStyle = haze;
       context.fillRect(0, horizon - 100, state.width, 210);
+    }
+
+    // 3D 世界锚定代码雨：雨点持续下落，行走（state.motion）加速雨势；
+    // 亮度场 → RAIN_LUT，整柱 ×0.55 横向压缩；reduced 冻结、focus 压暗
+    function drawRain3D(time) {
+      const dt = Math.min(0.05, (time - rainPrev) / 1000);
+      rainPrev = time;
+      const reduced = state.experience === "reduced";
+      const focusFactor = state.experience === "focus" ? 0.3 : 1;
+      const rainK = reduced ? 0 : 1 + (state.motion || 0) * 0.8;
+
+      const visible = [];
+      for (const col of rainCols3d) {
+        if (!reduced) {
+          for (const d of col.drops) {
+            d.y -= d.speed * col.speedK * rainK * dt;
+            if (d.y < 0) { d.y = col.height + Math.random() * 30; d.speed = RAIN_CELL_H * 5; }
+          }
+        }
+        const depth = ((col.z - state.cameraZ) % RAIN_ZRANGE + RAIN_ZRANGE) % RAIN_ZRANGE + 20;
+        const point = project(col.x, 0, state.cameraZ + depth);
+        if (!point) continue;
+        if (point.x < -30 || point.x > state.width + 30) continue;
+        visible.push({ col, depth, point });
+      }
+      visible.sort((a, b) => b.depth - a.depth);
+
+      context.textAlign = "center";
+      context.textBaseline = "middle";
+      let lastSize = 0;
+      for (const { col, depth, point } of visible) {
+        const s = point.scale;
+        const size = Math.max(3, Math.min(20, Math.round(s * RAIN_CELL_H)));
+        if (size !== lastSize) {
+          context.font = `${size}px "Matrix Code"`;
+          lastSize = size;
+        }
+        const fade = clamp(1 - depth / 1500, 0.08, 1);
+        const camEyeY = BUILDING_HEIGHT / 2;
+
+        context.save();
+        context.translate(point.x, 0);
+        context.scale(RAIN_GLYPH_SX, 1);
+        for (let ci = 0; ci < col.cells; ci++) {
+          if (depth > 500 && (ci & 1)) continue;
+          const y = ci * RAIN_CELL_H;
+          let b = 0.08;
+          for (const d of col.drops) {
+            const dy = y - d.y;
+            if (dy >= 0 && dy < d.trail) b = Math.max(b, 1 - dy / d.trail);
+          }
+          if (depth > 900 && b < 0.3) continue; // 远处只留亮串，省 fillText
+          const sy = state.height / 2 - (col.y0 + y - camEyeY) * s;
+          if (sy < -16 || sy > state.height + 16) continue;
+          const bright = b * fade * focusFactor;
+          const glyph = stableGlyph(col.seed + ci * 7 + Math.floor((reduced ? 0 : time) * 0.001 * (0.5 + bright * 1.5)));
+          if (b > 0.8) {
+            context.shadowColor = "rgba(140,230,160,0.8)";
+            context.shadowBlur = 8;
+            context.fillStyle = rainColorAt(Math.max(0.85, bright));
+            context.fillText(glyph, 0, sy);
+            context.shadowBlur = 0;
+          } else {
+            context.globalAlpha = Math.min(1, bright * 1.15);
+            context.fillStyle = rainColorAt(bright);
+            context.fillText(glyph, 0, sy);
+            context.globalAlpha = 1;
+          }
+        }
+        context.restore();
+      }
     }
 
     function drawWorldLine(a, b, color, width = 1) {
@@ -1264,6 +1352,7 @@
 
     function renderCanvas(time) {
       drawBackground(time);
+      drawRain3D(time);
       drawStreet(time);
       drawBuildings(time);
       drawPortalBeams();
