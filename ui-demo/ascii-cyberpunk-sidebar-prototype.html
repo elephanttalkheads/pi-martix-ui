@@ -736,6 +736,39 @@
       }
     }
 
+    .width-handle {
+      position: absolute;
+      top: 0;
+      right: -3px;
+      bottom: 0;
+      width: 8px;
+      z-index: 30;
+      cursor: ew-resize;
+      touch-action: none;
+    }
+
+    .width-handle::after {
+      content: "";
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: 3px;
+      width: 2px;
+      background: transparent;
+      transition: background 140ms ease, box-shadow 140ms ease;
+    }
+
+    .width-handle:hover::after,
+    body.resizing-width .width-handle::after {
+      background: var(--matrix);
+      box-shadow: 0 0 10px var(--matrix), 0 0 22px rgba(55, 255, 121, 0.45);
+    }
+
+    body.resizing-width {
+      cursor: ew-resize;
+      user-select: none;
+    }
+
     @media (prefers-reduced-motion: reduce) {
       *,
       *::before,
@@ -766,7 +799,7 @@
           <span class="frame-coordinate" id="frame-coordinate">Z:0000</span>
         </div>
         <div class="crosshair"></div>
-        <div class="horizon-tag">280PX // HARD LIMIT</div>
+        <div class="horizon-tag" id="horizon-tag">280PX // HARD LIMIT</div>
       </div>
 
       <div class="projection-layer" id="workspace-layer" aria-label="工作区地标"></div>
@@ -788,10 +821,13 @@
       </header>
       <div class="map-body" id="map-body" role="tree"></div>
     </section>
+
+    <div class="width-handle" id="width-handle" role="separator" aria-orientation="vertical"
+      aria-label="拖拽调整侧栏宽度" title="拖拽调整宽度 (280-420px)"></div>
   </aside>
 
   <main class="host-field" aria-hidden="true">
-    <span><strong>280 PX</strong>SIDEBAR PROTOTYPE BOUNDARY<br />HOST APPLICATION INTENTIONALLY EMPTY</span>
+    <span><strong id="host-width-label">280 PX</strong>SIDEBAR PROTOTYPE BOUNDARY<br />HOST APPLICATION INTENTIONALLY EMPTY</span>
   </main>
 
   <script>
@@ -913,6 +949,35 @@
     const mapToggle = document.querySelector("#map-toggle");
     const mapClose = document.querySelector("#map-close");
     const mapBody = document.querySelector("#map-body");
+    const widthHandle = document.querySelector("#width-handle");
+    const horizonTag = document.querySelector("#horizon-tag");
+    const hostWidthLabel = document.querySelector("#host-width-label");
+
+    // ── 侧栏拖拽调宽（280-420px）：Canvas ResizeObserver + 每帧重投影保证城市不变形 ──
+    const SIDEBAR_MIN_W = 280, SIDEBAR_MAX_W = 420;
+    function setSidebarWidth(px) {
+      const w = Math.round(clamp(px, SIDEBAR_MIN_W, SIDEBAR_MAX_W));
+      document.documentElement.style.setProperty("--sidebar-width", `${w}px`);
+      horizonTag.textContent = `${w}PX // HARD LIMIT`;
+      hostWidthLabel.textContent = `${w} PX`;
+    }
+
+    widthHandle.addEventListener("pointerdown", (event) => {
+      event.stopPropagation(); // 热区内不触发城市行走拖拽
+      event.preventDefault();
+      const startX = event.clientX;
+      const startW = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--sidebar-width")) || SIDEBAR_MIN_W;
+      document.body.classList.add("resizing-width");
+      widthHandle.setPointerCapture(event.pointerId);
+      const move = (e) => setSidebarWidth(startW + e.clientX - startX);
+      const up = () => {
+        document.body.classList.remove("resizing-width");
+        widthHandle.removeEventListener("pointermove", move);
+        widthHandle.removeEventListener("pointerup", up);
+      };
+      widthHandle.addEventListener("pointermove", move);
+      widthHandle.addEventListener("pointerup", up);
+    });
 
     const state = {
       cameraZ: 0,
@@ -1189,7 +1254,7 @@
           const sy = state.height / 2 - (col.y0 + y - camEyeY) * s;
           if (sy < -16 || sy > state.height + 16) continue;
           const bright = b * fade * focusFactor;
-          const glyph = stableGlyph(col.seed + ci * 7 + Math.floor((reduced ? 0 : time) * 0.001 * (0.5 + bright * 1.5)));
+          const glyph = stableGlyph(col.seed + ci * 7 + Math.floor((reduced ? 0 : time) * 0.001 * (0.15 + bright * 0.45)));
           if (b > 0.8) {
             context.shadowColor = "rgba(140,230,160,0.8)";
             context.shadowBlur = 8;
@@ -1720,6 +1785,14 @@
     setExperience(state.experience);
     resizeCanvas();
     if (new URLSearchParams(location.search).has("map")) openMap();
+    // ?z=<number> 调试参数：定格相机纵深；?w=<280..420> 定格侧栏初始宽度（截图验证用）
+    const debugZ = parseFloat(new URLSearchParams(location.search).get("z"));
+    if (!Number.isNaN(debugZ)) {
+      state.cameraZ = debugZ;
+      state.targetZ = debugZ;
+    }
+    const debugW = parseFloat(new URLSearchParams(location.search).get("w"));
+    if (!Number.isNaN(debugW)) setSidebarWidth(debugW);
 
     document.fonts.load('12px "Matrix Code"').finally(() => {
       requestAnimationFrame(animate);

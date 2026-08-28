@@ -138,6 +138,8 @@ Header 与 CITY INDEX 开关不参与相机投影。它们相当于固定在镜�
 
 当前选中会话不再由独立 Dock 面板呈现，而是由 Portal 的 `is-current` 高亮与 City Index 中的 `>` 游标行共同表达。
 
+侧栏宽度可通过右缘 8px 拖拽热区在 **280–420px** 间调整（`--sidebar-width` CSS 变量驱动，`clamp` 钳制）。城市视觉不变形：Canvas 由 `ResizeObserver` 触发 `resizeCanvas()`，`project()` 每帧按 `state.width/2` 居中且 focal 只与高度相关——调宽只扩展横向视野；Portal 与 marker 每帧重投影自动跟随。右侧竖排 `.horizon-tag` 与 host 区占位文案实时显示当前宽度。
+
 ## 5. 数据模型与状态语义
 
 ### 5.1 工作区与会话数据
